@@ -365,7 +365,10 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
   bool _showEpisodesDirectly = false;
   MediaItem? _fullMetadata;
   MediaItem? _onDeckEpisode;
-  bool _isLoadingMetadata = true;
+  // The navigated item already contains enough data to paint the detail
+  // screen. Full metadata enriches it in the background instead of blocking
+  // the route behind a full-screen loader.
+  bool _isLoadingMetadata = false;
   bool _isDeleted = false;
   StreamSubscription<LibraryChangeEvent>? _libraryContentSubscription;
 
@@ -1684,7 +1687,9 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     if (!_canUseDetail) return;
     _invalidatePlaybackProbes(refreshItems: true);
     setState(() {
-      _isLoadingMetadata = true;
+      // Keep the existing detail visible while Plex enriches the item. The
+      // route was opened with usable metadata from Discover, so this request
+      // must not replace the whole screen with a loading indicator.
       _hasLoadedExtras = false;
       _hasLoadedRelatedHubs = false;
     });
