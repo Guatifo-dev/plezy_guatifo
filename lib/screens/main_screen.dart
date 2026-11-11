@@ -2106,6 +2106,8 @@ class _MainScreenState extends State<MainScreen>
                   );
                   return MainScreenFocusScope(
                     focusSidebar: _focusSidebar,
+                    isSidebarFocused: _isSidebarFocused,
+                    isDiscoverTabActive: _currentTab == NavigationTabId.discover,
                     sideNavigationWidth: targetContentOffset,
                     reservedSideNavigationWidth: reservedContentOffset,
                     foregroundLeft: contentLayout.left,
