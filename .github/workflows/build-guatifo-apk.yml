@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   build-android:
-    name: Build Android ARM64 APK
+    name: Build Android ARM32 + ARM64 APK
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -36,12 +36,12 @@ jobs:
         run: flutter pub get --enforce-lockfile --no-example
 
       - name: Build release APK (debug-signed for private installation)
-        run: flutter build apk --release --target-platform android-arm64 --dart-define=GIT_COMMIT=${{ github.sha }}
+        run: flutter build apk --release --target-platform android-arm,android-arm64 --dart-define=GIT_COMMIT=${{ github.sha }}
 
       - name: Publish APK artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: plezy-guatifo-android-arm64
+          name: plezy-guatifo-android-arm32-arm64
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
