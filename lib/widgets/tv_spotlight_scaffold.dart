@@ -85,11 +85,13 @@ class TvSpotlightScaffold extends StatelessWidget {
     final settings = SettingsService.instance;
     final scale = TvLayoutConstants.scaleForSize(size);
     final railSize = MainScreenFocusScope.foregroundSizeOf(context);
-    // Keep the Discover surface mounted underneath a detail route. The
-    // native preview player is shared with the detail route's corner surface,
-    // allowing it to hand off the video surface without restarting playback.
-    // Focus/tab gating still removes it when the user leaves Discover for menus.
-    final spotlightPreviewActive = MainScreenFocusScope.spotlightPreviewActiveOf(context);
+    // Covered routes detach the Discover surface, but the shared native
+    // player retains its paused position. The detail route attaches its own
+    // corner surface to that same session; returning here reattaches without
+    // restarting the 3-second delay or trailer.
+    final routeIsCurrent = ModalRoute.of(context)?.isCurrent ?? true;
+    final spotlightPreviewActive =
+        MainScreenFocusScope.spotlightPreviewActiveOf(context) && routeIsCurrent && TickerMode.of(context);
     final fullBleedWidth = MainScreenFocusScope.fullBleedWidthOf(context);
     final railHeight = hubs.isEmpty
         ? 0.0
