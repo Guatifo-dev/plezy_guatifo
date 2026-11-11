@@ -35,6 +35,7 @@ class TvSpotlightBackground extends StatelessWidget {
   final bool showInfo;
   final String? Function(String? artworkPath)? localArtworkPathResolver;
   final bool allowNetwork;
+  final bool allowTrailerPreview;
 
   /// Optional caller-owned fact appended to the existing metadata line.
   final Widget? metadataTrailing;
@@ -51,6 +52,7 @@ class TvSpotlightBackground extends StatelessWidget {
     this.showInfo = true,
     this.localArtworkPathResolver,
     this.allowNetwork = true,
+    this.allowTrailerPreview = true,
     this.metadataTrailing,
   });
 
@@ -95,7 +97,7 @@ class TvSpotlightBackground extends StatelessWidget {
                   ? SettingValueBuilder<bool>(
                       pref: SettingsService.plexTrailerPreview,
                       builder: (context, trailerPreview, _) =>
-                          _buildCornerBackdrop(backdropSize, backdrop, media, client, trailerPreview),
+                          _buildCornerBackdrop(backdropSize, backdrop, media, client, trailerPreview && allowTrailerPreview),
                     )
                   : blurArtwork(backdrop),
             ),
