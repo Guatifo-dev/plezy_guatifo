@@ -303,7 +303,8 @@ android {
   }
 
   defaultConfig {
-    applicationId = "com.edde746.plezy"
+    // Keep the customized build alongside the official Plezy installation.
+    applicationId = "com.guatifo.plezy"
     minSdk = 25 // Fire OS 6.x (API 25); the mpv-android AAR shares the same floor
     targetSdk = flutter.targetSdkVersion
     versionCode = flutter.versionCode
