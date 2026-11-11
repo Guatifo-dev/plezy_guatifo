@@ -1,6 +1,7 @@
 package com.edde746.plezy
 
 import android.content.Context
+import android.util.Log
 import android.graphics.Color
 import android.view.Gravity
 import android.view.TextureView
@@ -50,6 +51,20 @@ private class TrailerPreviewPlatformView(
   }
 
   init {
+    Log.i("TrailerPreview", "Native preview view created; URL present=${!url.isNullOrBlank()}")
+    player.addListener(object : Player.Listener {
+      override fun onPlaybackStateChanged(playbackState: Int) {
+        Log.i("TrailerPreview", "Playback state=$playbackState, playWhenReady=${player.playWhenReady}")
+      }
+
+      override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+        Log.e("TrailerPreview", "Native preview playback error: ${error.errorCodeName}", error)
+      }
+
+      override fun onRenderedFirstFrame() {
+        Log.i("TrailerPreview", "First trailer video frame rendered")
+      }
+    })
     player.volume = 0f
     player.repeatMode = Player.REPEAT_MODE_ONE
     player.setVideoTextureView(textureView)
@@ -63,6 +78,7 @@ private class TrailerPreviewPlatformView(
   override fun getView(): View = container
 
   override fun dispose() {
+    Log.i("TrailerPreview", "Disposing native preview view")
     player.clearVideoTextureView(textureView)
     player.release()
   }
