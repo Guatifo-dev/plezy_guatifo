@@ -1596,6 +1596,7 @@ class SettingsService extends BaseSharedPreferencesService {
   static final List<Pref<Object?>> _portableOnlyPrefs = [
     rewindOnResume,
     tvFullCardLayout,
+    plexTrailerPreview,
     focusGlow,
     useGlobalHubs,
     showServerNameOnHubs,
