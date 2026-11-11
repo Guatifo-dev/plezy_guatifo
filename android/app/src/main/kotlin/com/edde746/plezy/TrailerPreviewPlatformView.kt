@@ -87,10 +87,14 @@ internal object TrailerPreviewPlayerManager {
       player?.playWhenReady = true
       Log.i(TAG, "Transferred shared trailer surface to view=" + fallback.key)
     } else {
-      player?.clearVideoSurface()
-      player?.playWhenReady = false
+      // Route transitions can dispose the old Flutter PlatformView before the
+      // replacement view is created. Do not pause the shared player here:
+      // pausing playWhenReady also interrupts the trailer audio briefly.
+      // SurfaceView owns its own lifecycle and Media3 will detach its output
+      // when that surface is destroyed. The next route will attach its new
+      // SurfaceView to this same still-playing player.
       activeViewId = null
-      Log.i(TAG, "No preview surface; retaining paused trailer session")
+      Log.i(TAG, "No preview surface during route handoff; keeping shared player and audio running")
     }
   }
 
