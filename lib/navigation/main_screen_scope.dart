@@ -17,10 +17,15 @@ enum MainScreenScopeAspect {
   /// `foregroundWidth` / `viewportWidth` / `reservedSideNavigationWidth` —
   /// stable across sidebar flips (only change with window geometry).
   layout,
+
+  /// Focus ownership for the spotlight preview; changes when the sidebar or tab changes.
+  focus,
 }
 
 class MainScreenFocusScope extends InheritedModel<MainScreenScopeAspect> {
   final VoidCallback focusSidebar;
+  final bool isSidebarFocused;
+  final bool isDiscoverTabActive;
   final double sideNavigationWidth;
   final double? reservedSideNavigationWidth;
   final double? foregroundLeft;
@@ -32,6 +37,8 @@ class MainScreenFocusScope extends InheritedModel<MainScreenScopeAspect> {
   const MainScreenFocusScope({
     super.key,
     required this.focusSidebar,
+    this.isSidebarFocused = false,
+    this.isDiscoverTabActive = true,
     required this.sideNavigationWidth,
     this.reservedSideNavigationWidth,
     this.foregroundLeft,
@@ -54,6 +61,11 @@ class MainScreenFocusScope extends InheritedModel<MainScreenScopeAspect> {
   /// Focuses the sidebar without registering an inherited dependency.
   static void focusSidebarOf(BuildContext context) {
     of(context, listen: false)?.focusSidebar();
+  }
+
+  static bool spotlightPreviewActiveOf(BuildContext context) {
+    final scope = _dependOn(context, MainScreenScopeAspect.focus);
+    return scope != null && !scope.isSidebarFocused && scope.isDiscoverTabActive;
   }
 
   static MainScreenFocusScope? _dependOn(BuildContext context, MainScreenScopeAspect aspect) {
@@ -97,13 +109,19 @@ class MainScreenFocusScope extends InheritedModel<MainScreenScopeAspect> {
         reservedSideNavigationWidth != oldWidget.reservedSideNavigationWidth ||
         foregroundLeft != oldWidget.foregroundLeft ||
         foregroundWidth != oldWidget.foregroundWidth ||
-        viewportWidth != oldWidget.viewportWidth;
+        viewportWidth != oldWidget.viewportWidth ||
+        isSidebarFocused != oldWidget.isSidebarFocused ||
+        isDiscoverTabActive != oldWidget.isDiscoverTabActive;
   }
 
   @override
   bool updateShouldNotifyDependent(MainScreenFocusScope oldWidget, Set<MainScreenScopeAspect> dependencies) {
     if (dependencies.contains(MainScreenScopeAspect.offset) &&
         (foregroundLeft != oldWidget.foregroundLeft || sideNavigationWidth != oldWidget.sideNavigationWidth)) {
+      return true;
+    }
+    if (dependencies.contains(MainScreenScopeAspect.focus) &&
+        (isSidebarFocused != oldWidget.isSidebarFocused || isDiscoverTabActive != oldWidget.isDiscoverTabActive)) {
       return true;
     }
     if (dependencies.contains(MainScreenScopeAspect.layout) &&
