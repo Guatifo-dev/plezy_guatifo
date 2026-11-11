@@ -55,6 +55,7 @@ private class TrailerPreviewPlatformView(
     .setMediaSourceFactory(mediaSourceFactory)
     .build()
   private val surfaceView = SurfaceView(context)
+  private var playerReleased = false
   private val container = FrameLayout(context).apply {
     setBackgroundColor(Color.TRANSPARENT)
     addView(
@@ -76,9 +77,11 @@ private class TrailerPreviewPlatformView(
       override fun onPlaybackStateChanged(playbackState: Int) {
         Log.i("TrailerPreview", "Playback state=$playbackState, playWhenReady=${player.playWhenReady}")
         if (playbackState == Player.STATE_ENDED) {
-          // Reveal the static Plex artwork underneath after the one-shot trailer.
-          container.visibility = View.INVISIBLE
-          Log.i("TrailerPreview", "Trailer finished; revealing static artwork")
+          // A SurfaceView owns a separate surface and can leave a black layer
+          // above Flutter even when its container is merely INVISIBLE. Remove
+          // the surface and release the player so the original artwork shows.
+          Log.i("TrailerPreview", "Trailer finished; releasing preview and revealing static artwork")
+          releasePlayer()
         }
       }
 
@@ -125,9 +128,22 @@ private class TrailerPreviewPlatformView(
 
   override fun getView(): View = container
 
+  private fun releasePlayer() {
+    if (playerReleased) return
+    playerReleased = true
+    // Mute first, then detach the SurfaceView and release every decoder/audio
+    // resource. This also guarantees no preview audio survives a navigation
+    // transition or the start of normal playback.
+    player.volume = 0f
+    surfaceView.visibility = View.GONE
+    container.visibility = View.GONE
+    player.clearVideoSurfaceView(surfaceView)
+    player.stop()
+    player.release()
+  }
+
   override fun dispose() {
     Log.i("TrailerPreview", "Disposing native preview view")
-    player.clearVideoSurfaceView(surfaceView)
-    player.release()
+    releasePlayer()
   }
 }
