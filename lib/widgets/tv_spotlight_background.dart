@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../i18n/strings.g.dart';
 import '../media/media_item.dart';
+import '../media/media_backend.dart';
 import '../media/media_item_types.dart';
 import '../media/media_server_client.dart';
 import '../services/device_performance.dart';
@@ -20,6 +21,7 @@ import 'fitted_metadata_line.dart';
 import 'settings_builder.dart';
 import 'media_rating_badge.dart';
 import 'optimized_media_image.dart' show ClearLogoImage, blurArtwork;
+import 'plex_trailer_preview.dart';
 import 'rasterized_gradient.dart';
 
 class TvSpotlightBackground extends StatelessWidget {
@@ -91,6 +93,8 @@ class TvSpotlightBackground extends StatelessWidget {
             RepaintBoundary(
               child: cornerBackdrop ? _buildCornerBackdrop(backdropSize, backdrop) : blurArtwork(backdrop),
             ),
+            if (media != null && media.backend == MediaBackend.plex)
+              Positioned.fill(child: PlexTrailerPreview(item: media, client: client)),
             _buildHorizontalScrim(bgColor),
             RasterizedGradient(
               gradient: LinearGradient(
