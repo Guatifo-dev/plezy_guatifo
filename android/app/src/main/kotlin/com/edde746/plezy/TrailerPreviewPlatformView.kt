@@ -35,7 +35,7 @@ private class TrailerPreviewPlatformView(
   private val player = ExoPlayer.Builder(context).build()
   private val playerView = PlayerView(context).apply {
     useController = false
-    setUseTextureView(true)
+    setSurfaceType(PlayerView.SURFACE_TYPE_TEXTURE_VIEW)
     setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_ZOOM)
     setShutterBackgroundColor(Color.TRANSPARENT)
     setKeepContentOnPlayerReset(true)
