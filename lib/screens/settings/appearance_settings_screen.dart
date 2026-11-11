@@ -102,6 +102,12 @@ class AppearanceSettingsScreen extends StatelessWidget {
                 title: t.settings.plexTrailerPreview,
                 subtitle: t.settings.plexTrailerPreviewDescription,
               ),
+              SettingSwitchTile(
+                pref: SettingsService.plexTrailerPreviewAudio,
+                icon: Symbols.volume_up_rounded,
+                title: t.settings.plexTrailerPreviewAudio,
+                subtitle: t.settings.plexTrailerPreviewAudioDescription,
+              ),
             if (PlatformDetector.isTV())
               SettingSwitchTile(
                 pref: SettingsService.focusGlow,
