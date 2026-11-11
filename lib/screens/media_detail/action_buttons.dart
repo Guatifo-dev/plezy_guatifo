@@ -62,6 +62,8 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
 
     Future<void> onPlayPressed() async {
       if (!_canUseDetail) return;
+      await PlexTrailerPreview.stop();
+      if (!_canUseDetail) return;
       // For TV shows, play the episode the hero describes (focused on TV,
       // otherwise on-deck); with neither, the first episode of the first season.
       if (metadata.isShow) {
@@ -105,6 +107,8 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
     }
 
     Future<void> onPlayVersionPressed() async {
+      if (!_canUseDetail) return;
+      await PlexTrailerPreview.stop();
       if (!_canUseDetail) return;
       final didNavigate = await promptAndPlayVersion(context, metadata);
       // Same post-playback refresh plain Play gets from
@@ -165,8 +169,11 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
     // ⋮ menu item so the trailer stays reachable when the row hides its button.
     final VoidCallback? onPlayTrailer = primaryTrailer == null
         ? null
-        : () =>
-              unawaited(navigateToVideoPlayer(context, metadata: primaryTrailer, isLaunchCurrent: () => _canUseDetail));
+        : () => unawaited(() async {
+            await PlexTrailerPreview.stop();
+            if (!_canUseDetail) return;
+            await navigateToVideoPlayer(context, metadata: primaryTrailer, isLaunchCurrent: () => _canUseDetail);
+          }());
 
     final gap = isTv ? 8.0 * tvScale : 12.0;
 
