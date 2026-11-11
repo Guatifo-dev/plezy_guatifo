@@ -44,7 +44,6 @@ internal object TrailerPreviewPlayerManager {
   }
 
   private fun notifySurfaceReady() {
-    if (!awaitingFirstFrame) return
     awaitingFirstFrame = false
     eventChannel?.invokeMethod("surfaceReady", null)
   }
@@ -55,6 +54,7 @@ internal object TrailerPreviewPlayerManager {
     if (url.isNullOrBlank()) return
     if (completedUrl == url) {
       surface.visibility = View.GONE
+      notifySurfaceReady()
       return
     }
     if (currentUrl != url || player == null) {
