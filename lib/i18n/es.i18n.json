@@ -515,7 +515,9 @@
     "playerScopeGlobal": "En todas partes",
     "playerScopeLibrary": "Por biblioteca",
     "playerScopeTitle": "Por serie o película",
-    "exportDialogTitle": "Exportar ajustes de Plezy"
+    "exportDialogTitle": "Exportar ajustes de Plezy",
+    "plexTrailerPreview": "Reproducir tráileres de Plex automáticamente",
+    "plexTrailerPreviewDescription": "Tras una breve pausa, reproduce el tráiler de la película o serie seleccionada en el espacio de la imagen de la esquina (solo Android TV)"
   },
   "themeEditor": {
     "builtIn": "Integrados",
