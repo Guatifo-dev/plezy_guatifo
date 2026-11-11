@@ -90,6 +90,7 @@ internal object TrailerPreviewPlayerManager {
     player = created
     created.addListener(object : Player.Listener {
       override fun onPlaybackStateChanged(playbackState: Int) {
+        if (player !== created) return
         Log.i(TAG, "Playback state=" + playbackState + ", playWhenReady=" + created.playWhenReady)
         if (playbackState == Player.STATE_ENDED) {
           synchronized(this@TrailerPreviewPlayerManager) {
