@@ -877,6 +877,10 @@ class PlezyActivity : FlutterActivity() {
     flutterEngine.plugins.add(MpvPlayerPlugin())
     flutterEngine.plugins.add(ExoPlayerPlugin())
     flutterEngine.plugins.add(MpvAudioPlayerPlugin())
+    flutterEngine.platformViewsController.registry.registerViewFactory(
+      "com.guatifo.plezy/trailer_preview",
+      TrailerPreviewPlatformViewFactory()
+    )
 
     MethodChannel(flutterEngine.dartExecutor.binaryMessenger, DEVICE_CHANNEL).setMethodCallHandler { call, result ->
       when (call.method) {
