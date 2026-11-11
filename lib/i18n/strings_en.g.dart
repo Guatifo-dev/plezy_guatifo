@@ -601,6 +601,12 @@ class Translations$settings$en {
 
 	/// en: 'Show spotlight artwork in the top-right corner instead of filling the screen'
 	String get tvCornerSpotlightBackdropDescription => 'Show spotlight artwork in the top-right corner instead of filling the screen';
+	
+	/// en: 'Play Plex trailers automatically'
+	String get plexTrailerPreview => 'Play Plex trailers automatically';
+
+	/// en: 'After a short pause, play the selected movie or series trailer in the corner artwork area (Android TV only)'
+	String get plexTrailerPreviewDescription => 'After a short pause, play the selected movie or series trailer in the corner artwork area (Android TV only)';
 
 	/// en: 'View Mode'
 	String get viewMode => 'View Mode';
