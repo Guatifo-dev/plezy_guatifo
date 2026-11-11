@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
@@ -94,6 +95,13 @@ class AppearanceSettingsScreen extends StatelessWidget {
                 icon: Symbols.picture_in_picture_alt_rounded,
                 title: t.settings.tvCornerSpotlightBackdrop,
                 subtitle: t.settings.tvCornerSpotlightBackdropDescription,
+              ),
+            if (PlatformDetector.isTV() && Platform.isAndroid)
+              SettingSwitchTile(
+                pref: SettingsService.plexTrailerPreview,
+                icon: Symbols.movie_rounded,
+                title: t.settings.plexTrailerPreview,
+                subtitle: t.settings.plexTrailerPreviewDescription,
               ),
             if (PlatformDetector.isTV())
               SettingSwitchTile(
