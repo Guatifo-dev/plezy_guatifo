@@ -608,6 +608,12 @@ class Translations$settings$en {
 	/// en: 'After a short pause, play the selected movie or series trailer in the corner artwork area (Android TV only)'
 	String get plexTrailerPreviewDescription => 'After a short pause, play the selected movie or series trailer in the corner artwork area (Android TV only)';
 
+	/// en: 'Trailer preview audio'
+	String get plexTrailerPreviewAudio => 'Trailer preview audio';
+
+	/// en: 'Play trailer sound in the corner preview'
+	String get plexTrailerPreviewAudioDescription => 'Play trailer sound in the corner preview';
+
 	/// en: 'View Mode'
 	String get viewMode => 'View Mode';
 
