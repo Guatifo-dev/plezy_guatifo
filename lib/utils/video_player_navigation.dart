@@ -589,7 +589,11 @@ int? _versionSizeBytes(MediaVersion? version) {
 /// Returns true when playback navigation started; false when the user
 /// dismissed a picker or the context went away. The returned future completes
 /// after the player route pops, so callers can refresh on return.
-Future<bool> promptAndPlayVersion(BuildContext context, MediaItem item) async {
+Future<bool> promptAndPlayVersion(
+  BuildContext context,
+  MediaItem item, {
+  Future<void> Function()? onBeforePlayback,
+}) async {
   final itemServerId = serverIdOrNull(item.serverId);
   final client = context.tryGetMediaClientForServer(itemServerId);
   final itemServerOnline =
@@ -631,6 +635,8 @@ Future<bool> promptAndPlayVersion(BuildContext context, MediaItem item) async {
     if (!context.mounted) return false;
   }
 
+  await onBeforePlayback?.call();
+  if (!context.mounted) return false;
   await navigateToVideoPlayer(
     context,
     metadata: item,
