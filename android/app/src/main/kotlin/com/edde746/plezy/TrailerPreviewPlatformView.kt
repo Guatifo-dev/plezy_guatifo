@@ -8,8 +8,11 @@ import android.view.TextureView
 import android.view.View
 import android.widget.FrameLayout
 import androidx.media3.common.MediaItem
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import io.flutter.plugin.common.StandardMessageCodec
 import io.flutter.plugin.platform.PlatformView
 import io.flutter.plugin.platform.PlatformViewFactory
@@ -33,7 +36,17 @@ private class TrailerPreviewPlatformView(
   context: Context,
   url: String?
 ) : PlatformView {
-  private val player = ExoPlayer.Builder(context).build()
+  // Plex can answer trailer playback URLs with an HTTP 302 that changes
+  // protocol (commonly HTTP -> HTTPS). ExoPlayer's default HTTP factory
+  // rejects cross-protocol redirects, so explicitly allow them here.
+  private val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+    .setAllowCrossProtocolRedirects(true)
+  private val mediaSourceFactory = DefaultMediaSourceFactory(
+    DefaultDataSource.Factory(context, httpDataSourceFactory)
+  )
+  private val player = ExoPlayer.Builder(context)
+    .setMediaSourceFactory(mediaSourceFactory)
+    .build()
   private val textureView = TextureView(context)
   private val container = FrameLayout(context).apply {
     setBackgroundColor(Color.TRANSPARENT)
