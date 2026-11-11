@@ -84,21 +84,22 @@ class _PlexTrailerPreviewState extends State<PlexTrailerPreview> {
 
       // Plezy's Android TV build uses mpv by default. Keep the preview muted
       // before opening the URL so no audio can leak during initial buffering.
-      player = Player(useExoPlayer: false, hardwareDecoding: true);
-      await player.setVolume(0);
+      final previewPlayer = Player(useExoPlayer: false, hardwareDecoding: true);
+      player = previewPlayer;
+      await previewPlayer.setVolume(0);
       if (!_isCurrent(generation)) {
-        await _disposePlayer(player);
+        await _disposePlayer(previewPlayer);
         return;
       }
 
-      setState(() => _player = player);
+      setState(() => _player = previewPlayer);
       await WidgetsBinding.instance.endOfFrame;
       if (!_isCurrent(generation)) {
-        await _disposePlayer(player);
+        await _disposePlayer(previewPlayer);
         return;
       }
 
-      await player.open(Media(target.url));
+      await previewPlayer.open(Media(target.url));
     } catch (_) {
       if (player != null) {
         if (identical(_player, player)) {
