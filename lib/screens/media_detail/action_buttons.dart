@@ -286,6 +286,8 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
         ? FocusableAction(
             debugLabel: 'detail_shuffle',
             onPressed: () async {
+              await PlexTrailerPreview.stop();
+              if (!_canUseDetail) return;
               await _handleShufflePlayWithQueue(context, metadata);
             },
             builder: (context, state) => iconActionButton(
