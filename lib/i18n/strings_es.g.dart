@@ -311,6 +311,8 @@ class _Translations$settings$es extends Translations$settings$en {
 	@override String get gridSpacingSpacious => 'Espacioso';
 	@override String get tvCornerSpotlightBackdrop => 'Imagen destacada en la esquina';
 	@override String get tvCornerSpotlightBackdropDescription => 'Mostrar la imagen destacada en la esquina superior derecha en lugar de ocupar toda la pantalla';
+	@override String get plexTrailerPreview => 'Reproducir tráileres de Plex automáticamente';
+	@override String get plexTrailerPreviewDescription => 'Tras una breve pausa, reproduce el tráiler de la película o serie seleccionada en el espacio de la imagen de la esquina (solo Android TV)';
 	@override String get viewMode => 'Modo de vista';
 	@override String get gridView => 'Cuadrícula';
 	@override String get listView => 'Lista';
