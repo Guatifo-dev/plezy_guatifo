@@ -8,6 +8,9 @@ import android.view.TextureView
 import android.view.View
 import android.widget.FrameLayout
 import androidx.media3.common.MediaItem
+import androidx.media3.common.VideoSize
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.common.Player
@@ -27,14 +30,18 @@ internal class TrailerPreviewPlatformViewFactory :
   PlatformViewFactory(StandardMessageCodec.INSTANCE) {
 
   override fun create(context: Context, viewId: Int, args: Any?): PlatformView {
-    val url = (args as? Map<*, *>)?.get("url") as? String
-    return TrailerPreviewPlatformView(context, url)
+    val params = args as? Map<*, *>
+    val url = params?.get("url") as? String
+    val audioEnabled = params?.get("audioEnabled") as? Boolean ?: true
+    return TrailerPreviewPlatformView(context, url, audioEnabled)
   }
 }
 
+@OptIn(UnstableApi::class)
 private class TrailerPreviewPlatformView(
   context: Context,
-  url: String?
+  url: String?,
+  audioEnabled: Boolean
 ) : PlatformView {
   // Plex can answer trailer playback URLs with an HTTP 302 that changes
   // protocol (commonly HTTP -> HTTPS). ExoPlayer's default HTTP factory
@@ -70,6 +77,10 @@ private class TrailerPreviewPlatformView(
         Log.i("TrailerPreview", "Playback state=$playbackState, playWhenReady=${player.playWhenReady}")
       }
 
+      override fun onVideoSizeChanged(videoSize: VideoSize) {
+        Log.i("TrailerPreview", "Video size=${videoSize.width}x${videoSize.height}, pixelRatio=${videoSize.pixelWidthHeightRatio}")
+      }
+
       override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
         Log.e("TrailerPreview", "Native preview playback error: ${error.errorCodeName}", error)
       }
@@ -78,7 +89,26 @@ private class TrailerPreviewPlatformView(
         Log.i("TrailerPreview", "First trailer video frame rendered")
       }
     })
-    player.volume = 0f
+    player.addAnalyticsListener(object : AnalyticsListener {
+      override fun onVideoDecoderInitialized(
+        eventTime: AnalyticsListener.EventTime,
+        decoderName: String,
+        initializedTimestampMs: Long,
+        initializationDurationMs: Long
+      ) {
+        Log.i("TrailerPreview", "Video decoder=$decoderName, initialization=${initializationDurationMs}ms")
+      }
+
+      override fun onDroppedVideoFrames(
+        eventTime: AnalyticsListener.EventTime,
+        droppedFrames: Int,
+        elapsedMs: Long
+      ) {
+        Log.w("TrailerPreview", "Dropped video frames=$droppedFrames over ${elapsedMs}ms")
+      }
+    })
+    player.volume = if (audioEnabled) 1f else 0f
+    Log.i("TrailerPreview", "Trailer audio enabled=$audioEnabled")
     player.repeatMode = Player.REPEAT_MODE_ONE
     player.setVideoTextureView(textureView)
     if (!url.isNullOrBlank()) {
