@@ -1,149 +1,183 @@
 package com.edde746.plezy
 
 import android.content.Context
-import android.util.Log
 import android.graphics.Color
+import android.util.Log
 import android.view.Gravity
 import android.view.SurfaceView
 import android.view.View
 import android.widget.FrameLayout
 import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
-import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import io.flutter.plugin.common.StandardMessageCodec
 import io.flutter.plugin.platform.PlatformView
 import io.flutter.plugin.platform.PlatformViewFactory
 
-/**
- * A small, isolated preview player for the TV home spotlight.
- *
- * The preview uses a dedicated SurfaceView for direct video presentation and
- * does not contend with Plezy's main player.
- */
-internal class TrailerPreviewPlatformViewFactory :
-  PlatformViewFactory(StandardMessageCodec.INSTANCE) {
-
-  override fun create(context: Context, viewId: Int, args: Any?): PlatformView {
-    val params = args as? Map<*, *>
-    val url = params?.get("url") as? String
-    val audioEnabled = params?.get("audioEnabled") as? Boolean ?: true
-    return TrailerPreviewPlatformView(context, url, audioEnabled)
-  }
-}
-
+/** One Media3 player shared by Discover and details corner surfaces. */
 @OptIn(UnstableApi::class)
-private class TrailerPreviewPlatformView(
-  context: Context,
-  url: String?,
-  audioEnabled: Boolean
-) : PlatformView {
-  // Plex can answer trailer playback URLs with an HTTP 302 that changes
-  // protocol (commonly HTTP -> HTTPS). ExoPlayer's default HTTP factory
-  // rejects cross-protocol redirects, so explicitly allow them here.
-  private val httpDataSourceFactory = DefaultHttpDataSource.Factory()
-    .setAllowCrossProtocolRedirects(true)
-  private val mediaSourceFactory = DefaultMediaSourceFactory(
-    DefaultDataSource.Factory(context, httpDataSourceFactory)
-  )
-  private val player = ExoPlayer.Builder(context)
-    .setMediaSourceFactory(mediaSourceFactory)
-    .build()
-  private val surfaceView = SurfaceView(context)
-  private var playerReleased = false
-  private val container = FrameLayout(context).apply {
-    setBackgroundColor(Color.TRANSPARENT)
-    addView(
-      surfaceView,
-      FrameLayout.LayoutParams(
-        FrameLayout.LayoutParams.MATCH_PARENT,
-        FrameLayout.LayoutParams.MATCH_PARENT,
-        Gravity.CENTER
-      )
-    )
-    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-    isFocusable = false
-    isFocusableInTouchMode = false
+internal object TrailerPreviewPlayerManager {
+  private const val TAG = "TrailerPreview"
+  private val surfaces = LinkedHashMap<Int, SurfaceView>()
+  private var player: ExoPlayer? = null
+  private var currentUrl: String? = null
+  private var completedUrl: String? = null
+  private var activeViewId: Int? = null
+
+  @Synchronized
+  fun attach(viewId: Int, context: Context, surface: SurfaceView, url: String?, audioEnabled: Boolean) {
+    surfaces[viewId] = surface
+    if (url.isNullOrBlank()) return
+    if (completedUrl == url) {
+      surface.visibility = View.GONE
+      return
+    }
+    if (currentUrl != url || player == null) {
+      releasePlayer()
+      currentUrl = url
+      completedUrl = null
+      createPlayer(context.applicationContext, url, audioEnabled)
+    }
+    player?.volume = if (audioEnabled) 1f else 0f
+    surfaces.values.forEach { it.visibility = View.GONE }
+    surface.visibility = View.VISIBLE
+    activeViewId = viewId
+    player?.setVideoSurfaceView(surface)
+    player?.playWhenReady = true
+    Log.i(TAG, "Attached view=" + viewId + " to shared trailer session")
   }
 
-  init {
-    Log.i("TrailerPreview", "Native preview view created; URL present=${!url.isNullOrBlank()}")
-    player.addListener(object : Player.Listener {
+  @Synchronized
+  fun detach(viewId: Int) {
+    surfaces.remove(viewId)
+    if (activeViewId != viewId) return
+    val fallback = surfaces.entries.lastOrNull()
+    if (fallback != null && currentUrl != null && completedUrl != currentUrl) {
+      surfaces.values.forEach { it.visibility = View.GONE }
+      fallback.value.visibility = View.VISIBLE
+      activeViewId = fallback.key
+      player?.setVideoSurfaceView(fallback.value)
+      player?.playWhenReady = true
+      Log.i(TAG, "Transferred shared trailer surface to view=" + fallback.key)
+    } else {
+      player?.clearVideoSurface()
+      player?.playWhenReady = false
+      activeViewId = null
+      Log.i(TAG, "No preview surface; retaining paused trailer session")
+    }
+  }
+
+  @Synchronized
+  fun stop() {
+    Log.i(TAG, "Stopping shared trailer session on normal playback")
+    releasePlayer()
+    currentUrl = null
+    completedUrl = null
+    surfaces.values.forEach { it.visibility = View.GONE }
+    activeViewId = null
+  }
+
+  private fun createPlayer(context: Context, url: String, audioEnabled: Boolean) {
+    val httpFactory = DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true)
+    val mediaSourceFactory = DefaultMediaSourceFactory(DefaultDataSource.Factory(context, httpFactory))
+    val created = ExoPlayer.Builder(context).setMediaSourceFactory(mediaSourceFactory).build()
+    player = created
+    created.addListener(object : Player.Listener {
       override fun onPlaybackStateChanged(playbackState: Int) {
-        Log.i("TrailerPreview", "Playback state=$playbackState, playWhenReady=${player.playWhenReady}")
+        Log.i(TAG, "Playback state=" + playbackState + ", playWhenReady=" + created.playWhenReady)
         if (playbackState == Player.STATE_ENDED) {
-          // A SurfaceView owns a separate surface and can leave a black layer
-          // above Flutter even when its container is merely INVISIBLE. Remove
-          // the surface and release the player so the original artwork shows.
-          Log.i("TrailerPreview", "Trailer finished; releasing preview and revealing static artwork")
-          releasePlayer()
+          synchronized(this@TrailerPreviewPlayerManager) {
+            completedUrl = currentUrl
+            Log.i(TAG, "Trailer finished; releasing decoder and revealing static artwork")
+            releasePlayer()
+            surfaces.values.forEach { it.visibility = View.GONE }
+            activeViewId = null
+          }
         }
       }
-
       override fun onVideoSizeChanged(videoSize: VideoSize) {
-        Log.i("TrailerPreview", "Video size=${videoSize.width}x${videoSize.height}, pixelRatio=${videoSize.pixelWidthHeightRatio}")
+        Log.i(TAG, "Video size=" + videoSize.width + "x" + videoSize.height)
       }
-
       override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-        Log.e("TrailerPreview", "Native preview playback error: ${error.errorCodeName}", error)
+        Log.e(TAG, "Native preview playback error: " + error.errorCodeName, error)
       }
-
       override fun onRenderedFirstFrame() {
-        Log.i("TrailerPreview", "First trailer video frame rendered")
+        Log.i(TAG, "First trailer frame rendered")
       }
     })
-    player.addAnalyticsListener(object : AnalyticsListener {
+    created.addAnalyticsListener(object : AnalyticsListener {
       override fun onVideoDecoderInitialized(
         eventTime: AnalyticsListener.EventTime,
         decoderName: String,
         initializedTimestampMs: Long,
         initializationDurationMs: Long
       ) {
-        Log.i("TrailerPreview", "Video decoder=$decoderName, initialization=${initializationDurationMs}ms")
+        Log.i(TAG, "Video decoder=" + decoderName + ", initMs=" + initializationDurationMs)
       }
-
       override fun onDroppedVideoFrames(
         eventTime: AnalyticsListener.EventTime,
         droppedFrames: Int,
         elapsedMs: Long
       ) {
-        Log.w("TrailerPreview", "Dropped video frames=$droppedFrames over ${elapsedMs}ms")
+        Log.w(TAG, "Dropped video frames=" + droppedFrames + " in " + elapsedMs + "ms")
       }
     })
-    player.volume = if (audioEnabled) 1f else 0f
-    Log.i("TrailerPreview", "Trailer audio enabled=$audioEnabled")
-    player.repeatMode = Player.REPEAT_MODE_OFF
-    player.setVideoSurfaceView(surfaceView)
-    if (!url.isNullOrBlank()) {
-      player.setMediaItem(MediaItem.fromUri(url))
-      player.prepare()
-      player.playWhenReady = true
-    }
+    created.volume = if (audioEnabled) 1f else 0f
+    created.repeatMode = Player.REPEAT_MODE_OFF
+    created.setMediaItem(MediaItem.fromUri(url))
+    created.prepare()
+    Log.i(TAG, "Created shared trailer player; audio enabled=" + audioEnabled)
   }
-
-  override fun getView(): View = container
 
   private fun releasePlayer() {
-    if (playerReleased) return
-    playerReleased = true
-    // Mute first, then detach the SurfaceView and release every decoder/audio
-    // resource. This also guarantees no preview audio survives a navigation
-    // transition or the start of normal playback.
-    player.volume = 0f
-    surfaceView.visibility = View.GONE
-    container.visibility = View.GONE
-    player.clearVideoSurfaceView(surfaceView)
-    player.stop()
-    player.release()
+    val old = player ?: return
+    old.volume = 0f
+    old.clearVideoSurface()
+    old.stop()
+    old.release()
+    player = null
   }
+}
 
+internal class TrailerPreviewPlatformViewFactory :
+  PlatformViewFactory(StandardMessageCodec.INSTANCE) {
+  override fun create(context: Context, viewId: Int, args: Any?): PlatformView {
+    val params = args as? Map<*, *>
+    val url = params?.get("url") as? String
+    val audioEnabled = params?.get("audioEnabled") as? Boolean ?: true
+    return TrailerPreviewPlatformView(context, viewId, url, audioEnabled)
+  }
+}
+
+private class TrailerPreviewPlatformView(
+  context: Context,
+  private val viewId: Int,
+  url: String?,
+  audioEnabled: Boolean
+) : PlatformView {
+  private val surfaceView = SurfaceView(context)
+  private val container = FrameLayout(context).apply {
+    setBackgroundColor(Color.TRANSPARENT)
+    addView(surfaceView, FrameLayout.LayoutParams(
+      FrameLayout.LayoutParams.MATCH_PARENT,
+      FrameLayout.LayoutParams.MATCH_PARENT,
+      Gravity.CENTER
+    ))
+    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+  }
+  init {
+    Log.i("TrailerPreview", "Native preview surface created; view=" + viewId + ", URL present=" + !url.isNullOrBlank())
+    TrailerPreviewPlayerManager.attach(viewId, context, surfaceView, url, audioEnabled)
+  }
+  override fun getView(): View = container
   override fun dispose() {
-    Log.i("TrailerPreview", "Disposing native preview view")
-    releasePlayer()
+    Log.i("TrailerPreview", "Disposing preview surface view=" + viewId)
+    TrailerPreviewPlayerManager.detach(viewId)
   }
 }
