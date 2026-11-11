@@ -96,8 +96,16 @@ class TvSpotlightBackground extends StatelessWidget {
               child: cornerBackdrop
                   ? SettingValueBuilder<bool>(
                       pref: SettingsService.plexTrailerPreview,
-                      builder: (context, trailerPreview, _) =>
-                          _buildCornerBackdrop(backdropSize, backdrop, media, client, trailerPreview && allowTrailerPreview),
+                      builder: (context, trailerPreview, _) {
+                        final showTrailer = trailerPreview && allowTrailerPreview;
+                        if (showTrailer && media != null && client != null && Platform.isAndroid) {
+                          // Prepare the artwork layer before the new route paints.
+                          // The native player reports when its replacement surface
+                          // has rendered the first frame.
+                          PlexTrailerPreview.prepareForRoute(ModalRoute.of(context));
+                        }
+                        return _buildCornerBackdrop(backdropSize, backdrop, media, client, showTrailer);
+                      },
                     )
                   : blurArtwork(backdrop),
             ),
@@ -184,13 +192,20 @@ class TvSpotlightBackground extends StatelessWidget {
               stops: [0.0, 0.55, 1.0],
             ).createShader(rect),
             blendMode: BlendMode.dstIn,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                backdrop,
-                if (trailerPreview && media != null && client != null && Platform.isAndroid)
-                  PlexTrailerPreview(key: ValueKey(media.globalKey), item: media, client: client),
-              ],
+            child: ValueListenableBuilder<bool>(
+              valueListenable: PlexTrailerPreview.surfaceReady,
+              builder: (context, surfaceReady, _) => Stack(
+                fit: StackFit.expand,
+                children: [
+                  // A SurfaceView briefly exposes the Flutter artwork while
+                  // Media3 transfers output between route-owned platform views.
+                  // Keep that artwork covered until the replacement surface
+                  // confirms its first rendered frame.
+                  if (surfaceReady) backdrop else const ColoredBox(color: Colors.black),
+                  if (trailerPreview && media != null && client != null && Platform.isAndroid)
+                    PlexTrailerPreview(key: ValueKey(media.globalKey), item: media, client: client),
+                ],
+              ),
             ),
           ),
         ),

@@ -16,6 +16,7 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.StandardMessageCodec
 import io.flutter.plugin.platform.PlatformView
 import io.flutter.plugin.platform.PlatformViewFactory
@@ -29,6 +30,24 @@ internal object TrailerPreviewPlayerManager {
   private var currentUrl: String? = null
   private var completedUrl: String? = null
   private var activeViewId: Int? = null
+  private var eventChannel: MethodChannel? = null
+  private var awaitingFirstFrame = false
+
+  @Synchronized
+  fun setEventChannel(channel: MethodChannel) {
+    eventChannel = channel
+  }
+
+  private fun notifySurfaceWaiting() {
+    awaitingFirstFrame = true
+    eventChannel?.invokeMethod("surfaceWaiting", null)
+  }
+
+  private fun notifySurfaceReady() {
+    if (!awaitingFirstFrame) return
+    awaitingFirstFrame = false
+    eventChannel?.invokeMethod("surfaceReady", null)
+  }
 
   @Synchronized
   fun attach(viewId: Int, context: Context, surface: SurfaceView, url: String?, audioEnabled: Boolean) {
@@ -48,6 +67,7 @@ internal object TrailerPreviewPlayerManager {
     surfaces.values.forEach { it.visibility = View.GONE }
     surface.visibility = View.VISIBLE
     activeViewId = viewId
+    notifySurfaceWaiting()
     player?.setVideoSurfaceView(surface)
     player?.playWhenReady = true
     Log.i(TAG, "Attached view=" + viewId + " to shared trailer session")
@@ -62,6 +82,7 @@ internal object TrailerPreviewPlayerManager {
       surfaces.values.forEach { it.visibility = View.GONE }
       fallback.value.visibility = View.VISIBLE
       activeViewId = fallback.key
+      notifySurfaceWaiting()
       player?.setVideoSurfaceView(fallback.value)
       player?.playWhenReady = true
       Log.i(TAG, "Transferred shared trailer surface to view=" + fallback.key)
@@ -79,6 +100,7 @@ internal object TrailerPreviewPlayerManager {
     releasePlayer()
     currentUrl = null
     completedUrl = null
+    notifySurfaceReady()
     surfaces.values.forEach { it.visibility = View.GONE }
     activeViewId = null
   }
@@ -96,6 +118,7 @@ internal object TrailerPreviewPlayerManager {
           synchronized(this@TrailerPreviewPlayerManager) {
             completedUrl = currentUrl
             Log.i(TAG, "Trailer finished; releasing decoder and revealing static artwork")
+            notifySurfaceReady()
             releasePlayer()
             surfaces.values.forEach { it.visibility = View.GONE }
             activeViewId = null
@@ -107,8 +130,14 @@ internal object TrailerPreviewPlayerManager {
       }
       override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
         Log.e(TAG, "Native preview playback error: " + error.errorCodeName, error)
+        synchronized(this@TrailerPreviewPlayerManager) {
+          notifySurfaceReady()
+        }
       }
       override fun onRenderedFirstFrame() {
+        synchronized(this@TrailerPreviewPlayerManager) {
+          notifySurfaceReady()
+        }
         Log.i(TAG, "First trailer frame rendered")
       }
     })

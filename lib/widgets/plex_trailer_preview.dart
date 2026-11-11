@@ -28,6 +28,16 @@ class PlexTrailerPreview extends StatefulWidget {
     await _TrailerPreviewSession.stop();
   }
 
+  /// True once the currently attached native surface has rendered a frame.
+  /// During route handoff the artwork is covered until this becomes true.
+  static ValueListenable<bool> get surfaceReady => _TrailerPreviewSession.surfaceReady;
+
+  /// Marks a route handoff before its new Android surface is attached.
+  static void prepareForRoute(Object? routeToken) {
+    _TrailerPreviewSession.initialize();
+    _TrailerPreviewSession.prepareForRoute(routeToken);
+  }
+
   @override
   State<PlexTrailerPreview> createState() => _PlexTrailerPreviewState();
 }
@@ -36,6 +46,7 @@ class _PlexTrailerPreviewState extends State<PlexTrailerPreview> {
   @override
   void initState() {
     super.initState();
+    _TrailerPreviewSession.initialize();
     _TrailerPreviewSession.ensure(widget.item, widget.client);
   }
 
@@ -76,7 +87,28 @@ abstract final class _TrailerPreviewSession {
   static const _settleDelay = Duration(seconds: 3);
   static const _controlChannel = MethodChannel('com.guatifo.plezy/trailer_preview_control');
   static final ValueNotifier<String?> url = ValueNotifier<String?>(null);
+  static final ValueNotifier<bool> surfaceReady = ValueNotifier<bool>(true);
+  static bool _channelHandlerInstalled = false;
+  static Object? _lastPreparedRoute;
   static Timer? _timer;
+
+  static void initialize() {
+    if (_channelHandlerInstalled || !Platform.isAndroid) return;
+    _channelHandlerInstalled = true;
+    _controlChannel.setMethodCallHandler((call) async {
+      if (call.method == 'surfaceWaiting') {
+        surfaceReady.value = false;
+      } else if (call.method == 'surfaceReady') {
+        surfaceReady.value = true;
+      }
+    });
+  }
+
+  static void prepareForRoute(Object? routeToken) {
+    if (routeToken == null || identical(_lastPreparedRoute, routeToken)) return;
+    _lastPreparedRoute = routeToken;
+    if (url.value != null) surfaceReady.value = false;
+  }
   static String? _itemKey;
   static int _generation = 0;
   static Future<void> _pendingNativeStop = Future<void>.value();
@@ -94,6 +126,8 @@ abstract final class _TrailerPreviewSession {
     }
     final generation = ++_generation;
     _itemKey = key;
+    _lastPreparedRoute = null;
+    surfaceReady.value = true;
     url.value = null;
 
     if (!Platform.isAndroid ||
@@ -128,6 +162,7 @@ abstract final class _TrailerPreviewSession {
       await _pendingNativeStop;
       if (!_isCurrent(generation)) return;
       debugPrint('[TrailerPreview] Resolved shared trailer URL for item=' + item.id);
+      surfaceReady.value = false;
       url.value = target.url;
     } catch (error) {
       debugPrint('[TrailerPreview] ERROR loading trailer: ' + error.toString());
@@ -141,6 +176,8 @@ abstract final class _TrailerPreviewSession {
     _timer = null;
     _generation++;
     _itemKey = null;
+    _lastPreparedRoute = null;
+    surfaceReady.value = true;
     url.value = null;
     await _stopNative();
   }

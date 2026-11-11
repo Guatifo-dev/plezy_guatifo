@@ -882,10 +882,12 @@ class PlezyActivity : FlutterActivity() {
       TrailerPreviewPlatformViewFactory()
     )
 
-    MethodChannel(
+    val trailerPreviewChannel = MethodChannel(
       flutterEngine.dartExecutor.binaryMessenger,
       "com.guatifo.plezy/trailer_preview_control"
-    ).setMethodCallHandler { call, result ->
+    )
+    TrailerPreviewPlayerManager.setEventChannel(trailerPreviewChannel)
+    trailerPreviewChannel.setMethodCallHandler { call, result ->
       when (call.method) {
         "stop" -> {
           TrailerPreviewPlayerManager.stop()
