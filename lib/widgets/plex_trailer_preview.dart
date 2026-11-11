@@ -24,7 +24,7 @@ class PlexTrailerPreview extends StatefulWidget {
 
   /// Stops and releases the shared preview before normal playback takes over.
   static Future<void> stop() async {
-    _TrailerPreviewSession.stop();
+    await _TrailerPreviewSession.stop();
   }
 
   @override
@@ -127,16 +127,18 @@ abstract final class _TrailerPreviewSession {
 
   static bool _isCurrent(int generation) => generation == _generation;
 
-  static void stop() {
+  static Future<void> stop() async {
     _timer?.cancel();
     _timer = null;
     _generation++;
     _itemKey = null;
     url.value = null;
     if (Platform.isAndroid) {
-      _controlChannel.invokeMethod<void>('stop').catchError((Object error) {
+      try {
+        await _controlChannel.invokeMethod<void>('stop');
+      } catch (error) {
         debugPrint('[TrailerPreview] Could not stop native preview: ' + error.toString());
-      });
+      }
     }
   }
 }
