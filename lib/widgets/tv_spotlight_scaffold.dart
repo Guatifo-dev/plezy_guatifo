@@ -85,6 +85,7 @@ class TvSpotlightScaffold extends StatelessWidget {
     final settings = SettingsService.instance;
     final scale = TvLayoutConstants.scaleForSize(size);
     final railSize = MainScreenFocusScope.foregroundSizeOf(context);
+    final spotlightPreviewActive = MainScreenFocusScope.spotlightPreviewActiveOf(context);
     final fullBleedWidth = MainScreenFocusScope.fullBleedWidthOf(context);
     final railHeight = hubs.isEmpty
         ? 0.0
@@ -132,6 +133,7 @@ class TvSpotlightScaffold extends StatelessWidget {
                         contentBottom: spotlightBottom,
                         contentLeft: spotlightLeft + foregroundLeft,
                         targetWidthPx: (size.width * MediaQuery.devicePixelRatioOf(context)).ceil(),
+                        allowTrailerPreview: spotlightPreviewActive,
                       );
                     },
                   ),
@@ -157,6 +159,7 @@ class _CatalogSpotlightBackground extends StatefulWidget {
     required this.contentBottom,
     required this.contentLeft,
     required this.targetWidthPx,
+    required this.allowTrailerPreview,
   });
 
   final MediaItem? item;
@@ -166,6 +169,7 @@ class _CatalogSpotlightBackground extends StatefulWidget {
   final double contentBottom;
   final double contentLeft;
   final int targetWidthPx;
+  final bool allowTrailerPreview;
 
   @override
   State<_CatalogSpotlightBackground> createState() => _CatalogSpotlightBackgroundState();
@@ -259,6 +263,7 @@ class _CatalogSpotlightBackgroundState extends State<_CatalogSpotlightBackground
       contentBottom: widget.contentBottom,
       contentLeft: widget.contentLeft,
       compact: true,
+      allowTrailerPreview: widget.allowTrailerPreview,
       metadataTrailing: _buildNextEpisodeMetadata(context),
     );
     if (accentColor == null) return background;
