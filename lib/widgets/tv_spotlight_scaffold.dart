@@ -85,7 +85,13 @@ class TvSpotlightScaffold extends StatelessWidget {
     final settings = SettingsService.instance;
     final scale = TvLayoutConstants.scaleForSize(size);
     final railSize = MainScreenFocusScope.foregroundSizeOf(context);
-    final spotlightPreviewActive = MainScreenFocusScope.spotlightPreviewActiveOf(context);
+    // Modal routes (details, playback, settings opened as a route) keep this
+    // screen mounted underneath. TickerMode changes when a route is covered,
+    // so removing the preview here disposes its native player instead of only
+    // hiding its picture/audio.
+    final routeIsCurrent = ModalRoute.of(context)?.isCurrent ?? true;
+    final spotlightPreviewActive =
+        MainScreenFocusScope.spotlightPreviewActiveOf(context) && routeIsCurrent && TickerMode.of(context);
     final fullBleedWidth = MainScreenFocusScope.fullBleedWidthOf(context);
     final railHeight = hubs.isEmpty
         ? 0.0
