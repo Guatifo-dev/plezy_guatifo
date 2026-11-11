@@ -2,12 +2,13 @@ package com.edde746.plezy
 
 import android.content.Context
 import android.graphics.Color
+import android.view.Gravity
+import android.view.TextureView
 import android.view.View
+import android.widget.FrameLayout
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.ui.AspectRatioFrameLayout
-import androidx.media3.ui.PlayerView
 import io.flutter.plugin.common.StandardMessageCodec
 import io.flutter.plugin.platform.PlatformView
 import io.flutter.plugin.platform.PlatformViewFactory
@@ -15,9 +16,8 @@ import io.flutter.plugin.platform.PlatformViewFactory
 /**
  * A small, isolated preview player for the TV home spotlight.
  *
- * Unlike Plezy's primary playback surface, this uses Media3's TextureView
- * output. It can therefore live inside a Flutter layout box and cannot take
- * ownership of the app-wide MPV SurfaceView used by normal playback.
+ * The preview renders directly into a TextureView so it stays within the
+ * Flutter platform-view bounds and does not contend with Plezy's main player.
  */
 internal class TrailerPreviewPlatformViewFactory :
   PlatformViewFactory(StandardMessageCodec.INSTANCE) {
@@ -33,22 +33,26 @@ private class TrailerPreviewPlatformView(
   url: String?
 ) : PlatformView {
   private val player = ExoPlayer.Builder(context).build()
-  private val playerView = PlayerView(context).apply {
-    useController = false
-    setSurfaceType(PlayerView.SURFACE_TYPE_TEXTURE_VIEW)
-    setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_ZOOM)
-    setShutterBackgroundColor(Color.TRANSPARENT)
-    setKeepContentOnPlayerReset(true)
+  private val textureView = TextureView(context)
+  private val container = FrameLayout(context).apply {
     setBackgroundColor(Color.TRANSPARENT)
+    addView(
+      textureView,
+      FrameLayout.LayoutParams(
+        FrameLayout.LayoutParams.MATCH_PARENT,
+        FrameLayout.LayoutParams.MATCH_PARENT,
+        Gravity.CENTER
+      )
+    )
     importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
     isFocusable = false
     isFocusableInTouchMode = false
-    player = this@TrailerPreviewPlatformView.player
   }
 
   init {
     player.volume = 0f
     player.repeatMode = Player.REPEAT_MODE_ONE
+    player.setVideoTextureView(textureView)
     if (!url.isNullOrBlank()) {
       player.setMediaItem(MediaItem.fromUri(url))
       player.prepare()
@@ -56,10 +60,10 @@ private class TrailerPreviewPlatformView(
     }
   }
 
-  override fun getView(): View = playerView
+  override fun getView(): View = container
 
   override fun dispose() {
-    playerView.player = null
+    player.clearVideoTextureView(textureView)
     player.release()
   }
 }
