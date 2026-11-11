@@ -10,6 +10,8 @@ import '../media/media_item.dart';
 import '../media/media_item_types.dart';
 import '../media/media_server_client.dart';
 import '../media/primary_trailer.dart';
+import '../services/settings_service.dart';
+import 'settings_builder.dart';
 
 /// Plays the selected Plex trailer in an isolated Android TextureView.
 ///
@@ -104,11 +106,15 @@ class _PlexTrailerPreviewState extends State<PlexTrailerPreview> {
   Widget build(BuildContext context) {
     final url = _url;
     if (url == null) return const SizedBox.shrink();
-    return AndroidView(
-      viewType: 'com.guatifo.plezy/trailer_preview',
-      creationParams: <String, Object>{'url': url},
-      creationParamsCodec: const StandardMessageCodec(),
-      hitTestBehavior: PlatformViewHitTestBehavior.transparent,
+    return SettingValueBuilder<bool>(
+      pref: SettingsService.plexTrailerPreviewAudio,
+      builder: (context, audioEnabled, _) => AndroidView(
+        key: ValueKey('$url-$audioEnabled'),
+        viewType: 'com.guatifo.plezy/trailer_preview',
+        creationParams: <String, Object>{'url': url, 'audioEnabled': audioEnabled},
+        creationParamsCodec: const StandardMessageCodec(),
+        hitTestBehavior: PlatformViewHitTestBehavior.transparent,
+      ),
     );
   }
 }
