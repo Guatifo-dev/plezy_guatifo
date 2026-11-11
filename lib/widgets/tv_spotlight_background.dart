@@ -22,6 +22,7 @@ import 'settings_builder.dart';
 import 'media_rating_badge.dart';
 import 'optimized_media_image.dart' show ClearLogoImage, blurArtwork;
 import 'rasterized_gradient.dart';
+import 'plex_trailer_preview.dart';
 
 class TvSpotlightBackground extends StatelessWidget {
   final MediaItem? item;
@@ -90,7 +91,13 @@ class TvSpotlightBackground extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             RepaintBoundary(
-              child: cornerBackdrop ? _buildCornerBackdrop(backdropSize, backdrop) : blurArtwork(backdrop),
+              child: cornerBackdrop
+                  ? SettingValueBuilder<bool>(
+                      pref: SettingsService.plexTrailerPreview,
+                      builder: (context, trailerPreview, _) =>
+                          _buildCornerBackdrop(backdropSize, backdrop, media, client, trailerPreview),
+                    )
+                  : blurArtwork(backdrop),
             ),
             _buildHorizontalScrim(bgColor),
             RasterizedGradient(
@@ -157,7 +164,7 @@ class TvSpotlightBackground extends StatelessWidget {
   /// Corner spotlight: artwork pinned to the top-right corner, left and
   /// bottom edges feathered into the scaffold background so the info block
   /// sits on a calm surface instead of the image.
-  Widget _buildCornerBackdrop(Size backdropSize, Widget backdrop) {
+  Widget _buildCornerBackdrop(Size backdropSize, Widget backdrop, MediaItem? media, MediaServerClient? client, bool trailerPreview) {
     return Align(
       alignment: Alignment.topRight,
       child: SizedBox(
@@ -175,7 +182,14 @@ class TvSpotlightBackground extends StatelessWidget {
               stops: [0.0, 0.55, 1.0],
             ).createShader(rect),
             blendMode: BlendMode.dstIn,
-            child: backdrop,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                backdrop,
+                if (trailerPreview && media != null && client != null && Platform.isAndroid)
+                  PlexTrailerPreview(key: ValueKey(media.globalKey), item: media, client: client),
+              ],
+            ),
           ),
         ),
       ),
