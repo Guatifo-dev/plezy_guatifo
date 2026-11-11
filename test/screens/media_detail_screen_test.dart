@@ -3160,7 +3160,11 @@ void main() {
             ..onDeckGate = Completer<void>()
             ..onDeckEpisode = episode;
       await pumpProfileNavigator(tester, (_) => mediaDetailRoute(metadata: show), client: client);
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(
+        find.byType(CircularProgressIndicator),
+        findsNothing,
+        reason: 'the navigated item should render while its full metadata request is pending',
+      );
 
       deleteExact(show.id);
       await settleDetail(tester);
