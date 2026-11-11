@@ -78,6 +78,7 @@ abstract final class _TrailerPreviewSession {
   static Timer? _timer;
   static String? _itemKey;
   static int _generation = 0;
+  static Future<void> _pendingNativeStop = Future<void>.value();
 
   static void ensure(MediaItem item, MediaServerClient client) {
     final key = item.globalKey;
@@ -85,6 +86,11 @@ abstract final class _TrailerPreviewSession {
 
     _timer?.cancel();
     _timer = null;
+    if (_itemKey != null && _itemKey != key) {
+      // Retire the previous title's paused native player before this session
+      // resolves its own URL.
+      _pendingNativeStop = _stopNative();
+    }
     final generation = ++_generation;
     _itemKey = key;
     url.value = null;
@@ -118,6 +124,8 @@ abstract final class _TrailerPreviewSession {
         debugPrint('[TrailerPreview] Trailer playback URL could not be resolved');
         return;
       }
+      await _pendingNativeStop;
+      if (!_isCurrent(generation)) return;
       debugPrint('[TrailerPreview] Resolved shared trailer URL for item=' + item.id);
       url.value = target.url;
     } catch (error) {
@@ -133,12 +141,15 @@ abstract final class _TrailerPreviewSession {
     _generation++;
     _itemKey = null;
     url.value = null;
-    if (Platform.isAndroid) {
-      try {
-        await _controlChannel.invokeMethod<void>('stop');
-      } catch (error) {
-        debugPrint('[TrailerPreview] Could not stop native preview: ' + error.toString());
-      }
+    await _stopNative();
+  }
+
+  static Future<void> _stopNative() async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _controlChannel.invokeMethod<void>('stop');
+    } catch (error) {
+      debugPrint('[TrailerPreview] Could not stop native preview: ' + error.toString());
     }
   }
 }
