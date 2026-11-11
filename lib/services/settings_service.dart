@@ -1023,6 +1023,7 @@ class SettingsService extends BaseSharedPreferencesService {
   );
   static const automotiveUiScale = _AutomotiveUiScalePref();
   static const tvCornerSpotlightBackdrop = BoolPref('tv_corner_spotlight_backdrop');
+  static const plexTrailerPreview = BoolPref('plex_trailer_preview', defaultValue: true);
   static const episodePosterMode = _EpisodePosterModePref();
   static const continueWatchingAction = EnumPref<ContinueWatchingAction>(
     'continue_watching_action',
