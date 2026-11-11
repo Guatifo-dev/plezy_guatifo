@@ -108,8 +108,11 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
 
     Future<void> onPlayVersionPressed() async {
       if (!_canUseDetail) return;
-      final didNavigate = await promptAndPlayVersion(context, metadata);
-      if (didNavigate) await PlexTrailerPreview.stop();
+      final didNavigate = await promptAndPlayVersion(
+        context,
+        metadata,
+        onBeforePlayback: PlexTrailerPreview.stop,
+      );
       // Same post-playback refresh plain Play gets from
       // navigateToVideoPlayerWithRefresh; the split segment is online-only.
       if (didNavigate && mounted) unawaited(_refreshWatchState());
