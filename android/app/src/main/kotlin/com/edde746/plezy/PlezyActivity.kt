@@ -882,6 +882,19 @@ class PlezyActivity : FlutterActivity() {
       TrailerPreviewPlatformViewFactory()
     )
 
+    MethodChannel(
+      flutterEngine.dartExecutor.binaryMessenger,
+      "com.guatifo.plezy/trailer_preview_control"
+    ).setMethodCallHandler { call, result ->
+      when (call.method) {
+        "stop" -> {
+          TrailerPreviewPlayerManager.stop()
+          result.success(null)
+        }
+        else -> result.notImplemented()
+      }
+    }
+
     MethodChannel(flutterEngine.dartExecutor.binaryMessenger, DEVICE_CHANNEL).setMethodCallHandler { call, result ->
       when (call.method) {
         "getTvDetection" -> result.success(getAndroidTvDetection())
