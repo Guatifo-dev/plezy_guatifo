@@ -96,7 +96,7 @@ abstract final class _TrailerPreviewSession {
       return;
     }
 
-    debugPrint('[TrailerPreview] Scheduled shared session item=' + item.id + ' title=' + item.title);
+    debugPrint('[TrailerPreview] Scheduled shared session item=' + item.id + ' title=' + (item.title ?? ''));
     _timer = Timer(_settleDelay, () => _load(item, client, generation));
   }
 
