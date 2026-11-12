@@ -623,6 +623,8 @@ class PlezyActivity : FlutterActivity() {
   }
 
   override fun onDestroy() {
+    // Final safety net: a retained Media3 preview must never outlive the app.
+    TrailerPreviewPlayerManager.stop()
     externalPlayerChannel.dispose()
     systemBarsInsetsHost?.setOnApplyWindowInsetsListener(null)
     systemBarsInsetsHost = null
@@ -743,6 +745,9 @@ class PlezyActivity : FlutterActivity() {
   }
 
   override fun onStop() {
+    // Stop preview audio as soon as Plezy is no longer foregrounded (Home,
+    // app switch, or exit), even if Flutter keeps the engine and widget tree.
+    TrailerPreviewPlayerManager.stop()
     activityStarted = false
     if (isAndroidTvDevice()) flutterSurfaceReconnectPending = true
     appIconChannel.onStop()
