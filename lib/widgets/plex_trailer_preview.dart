@@ -42,12 +42,26 @@ class PlexTrailerPreview extends StatefulWidget {
   State<PlexTrailerPreview> createState() => _PlexTrailerPreviewState();
 }
 
-class _PlexTrailerPreviewState extends State<PlexTrailerPreview> {
+class _PlexTrailerPreviewState extends State<PlexTrailerPreview> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _TrailerPreviewSession.initialize();
+    _TrailerPreviewSession.attachWidget();
     _TrailerPreviewSession.ensure(widget.item, widget.client);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
+      // A preview is never allowed to keep playing after Plezy leaves the
+      // foreground or the activity is being torn down.
+      unawaited(PlexTrailerPreview.stop());
+    } else if (state == AppLifecycleState.resumed) {
+      // Recreate the preview lazily after returning to the app.
+      _TrailerPreviewSession.ensure(widget.item, widget.client);
+    }
   }
 
   @override
@@ -57,6 +71,13 @@ class _PlexTrailerPreviewState extends State<PlexTrailerPreview> {
         !identical(oldWidget.client, widget.client)) {
       _TrailerPreviewSession.ensure(widget.item, widget.client);
     }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _TrailerPreviewSession.detachWidget();
+    super.dispose();
   }
 
   @override
@@ -91,6 +112,28 @@ abstract final class _TrailerPreviewSession {
   static bool _channelHandlerInstalled = false;
   static Object? _lastPreparedRoute;
   static Timer? _timer;
+  static Timer? _orphanStopTimer;
+  static int _attachedWidgets = 0;
+
+  static void attachWidget() {
+    _orphanStopTimer?.cancel();
+    _orphanStopTimer = null;
+    _attachedWidgets++;
+  }
+
+  static void detachWidget() {
+    _attachedWidgets = (_attachedWidgets - 1).clamp(0, 1 << 30);
+    if (_attachedWidgets != 0) return;
+
+    // Route handoffs can briefly dispose the old PlatformView before the new
+    // route mounts its replacement. Wait one short handoff window; if no
+    // spotlight has claimed the session again, stop native playback entirely.
+    _orphanStopTimer?.cancel();
+    _orphanStopTimer = Timer(const Duration(milliseconds: 700), () {
+      _orphanStopTimer = null;
+      if (_attachedWidgets == 0) unawaited(stop());
+    });
+  }
 
   static void initialize() {
     if (_channelHandlerInstalled || !Platform.isAndroid) return;
@@ -172,6 +215,8 @@ abstract final class _TrailerPreviewSession {
   static bool _isCurrent(int generation) => generation == _generation;
 
   static Future<void> stop() async {
+    _orphanStopTimer?.cancel();
+    _orphanStopTimer = null;
     _timer?.cancel();
     _timer = null;
     _generation++;
