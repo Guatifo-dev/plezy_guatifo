@@ -294,7 +294,7 @@ class _HubDetailScreenState extends State<HubDetailScreen>
 
     final client = serverId == null ? null : context.tryGetMediaClientForServer(ServerId(serverId));
     final usesCustomLoader = loader != null;
-    _usesPaginatedLoader = !usesCustomLoader && client != null && _shouldUsePaginatedLoader(client);
+    _usesPaginatedLoader = widget.fetchPage != null || (!usesCustomLoader && client != null && _shouldUsePaginatedLoader(client));
 
     setState(() {
       _isLoading = true;
