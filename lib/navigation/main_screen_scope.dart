@@ -63,9 +63,12 @@ class MainScreenFocusScope extends InheritedModel<MainScreenScopeAspect> {
     of(context, listen: false)?.focusSidebar();
   }
 
+  /// Enables the preview on any visible spotlight screen, not only Discover.
+  /// The owning scaffold additionally gates this by its current route and
+  /// TickerMode, so kept-alive library tabs stay silent while hidden.
   static bool spotlightPreviewActiveOf(BuildContext context) {
     final scope = _dependOn(context, MainScreenScopeAspect.focus);
-    return scope != null && !scope.isSidebarFocused && scope.isDiscoverTabActive;
+    return scope != null && !scope.isSidebarFocused;
   }
 
   static MainScreenFocusScope? _dependOn(BuildContext context, MainScreenScopeAspect aspect) {
