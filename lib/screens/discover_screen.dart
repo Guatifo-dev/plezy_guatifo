@@ -378,7 +378,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     final seenKeys = items.map((item) => item.globalKey).toSet();
     while (items.length < initialHub.size) {
       if (!mounted || generation != _catalogLoadGeneration) return;
-      final requested = math.min(100, initialHub.size - items.length);
+      final requested = math.min(100, initialHub.size - items.length).toInt();
       try {
         final page = await loader(items.length, requested, null);
         if (!mounted || generation != _catalogLoadGeneration) return;
