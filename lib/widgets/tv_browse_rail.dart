@@ -1169,11 +1169,17 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
   }
 
   void _handleLongPressCurrentItem() {
+    debugPrint('[SynopsisDebug] rail long-press handler entered');
     final hub = _activeHub;
-    if (hub == null) return;
+    if (hub == null) {
+      debugPrint('[SynopsisDebug] rail long-press has no active hub');
+      return;
+    }
     final item = _itemAtSlot(hub, _itemIndex);
+    debugPrint('[SynopsisDebug] rail long-press item=${item?.displayTitle}, callback=${widget.onLongPressItem != null}');
     if (item != null && !_isPersonHub(hub) && widget.onLongPressItem != null) {
       _displacedFocusItem = null;
+      debugPrint('[SynopsisDebug] calling synopsis callback');
       widget.onLongPressItem!(item);
       return;
     }
