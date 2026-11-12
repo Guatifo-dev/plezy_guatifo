@@ -262,6 +262,8 @@ class _HubDetailScreenState extends State<HubDetailScreen>
 
   @override
   Future<LibraryPage<MediaItem>> fetchPage(int start, int size, AbortController? abort) async {
+    final customLoader = widget.fetchPage;
+    if (customLoader != null) return customLoader(start, size, abort);
     final serverId = widget.hub.serverId;
     final client = serverId == null ? null : context.tryGetMediaClientForServer(ServerId(serverId));
     if (client == null) throw StateError('No media client available for paginated hub');
