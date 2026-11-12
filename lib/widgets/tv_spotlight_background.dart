@@ -93,21 +93,44 @@ class TvSpotlightBackground extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             RepaintBoundary(
-              child: cornerBackdrop
-                  ? SettingValueBuilder<bool>(
-                      pref: SettingsService.plexTrailerPreview,
-                      builder: (context, trailerPreview, _) {
-                        final showTrailer = trailerPreview && allowTrailerPreview;
-                        if (showTrailer && media != null && client != null && Platform.isAndroid) {
-                          // Prepare the artwork layer before the new route paints.
-                          // The native player reports when its replacement surface
-                          // has rendered the first frame.
-                          PlexTrailerPreview.prepareForRoute(ModalRoute.of(context));
-                        }
-                        return _buildCornerBackdrop(backdropSize, backdrop, media, client, showTrailer);
-                      },
-                    )
-                  : blurArtwork(backdrop),
+              child: SettingValueBuilder<bool>(
+                pref: SettingsService.plexTrailerPreview,
+                builder: (context, trailerPreview, _) {
+                  final showTrailer = trailerPreview && allowTrailerPreview &&
+                      media != null && client != null && Platform.isAndroid;
+                  if (showTrailer) {
+                    // Prepare the artwork layer before the new route paints.
+                    // The native player reports when its replacement surface
+                    // has rendered the first frame.
+                    PlexTrailerPreview.prepareForRoute(ModalRoute.of(context));
+                  }
+                  if (cornerBackdrop) {
+                    return _buildCornerBackdrop(backdropSize, backdrop, media, client, showTrailer);
+                  }
+                  // Full-artwork mode must also host the shared trailer player.
+                  // Keep it in the same top-right spotlight area so enabling
+                  // or disabling the corner-artwork layout never disables trailers.
+                  return Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      blurArtwork(backdrop),
+                      if (showTrailer)
+                        Align(
+                          alignment: Alignment.topRight,
+                          child: SizedBox(
+                            width: backdropSize.width,
+                            height: backdropSize.height,
+                            child: PlexTrailerPreview(
+                              key: ValueKey(media!.globalKey),
+                              item: media,
+                              client: client!,
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
             ),
             _buildHorizontalScrim(bgColor),
             RasterizedGradient(
