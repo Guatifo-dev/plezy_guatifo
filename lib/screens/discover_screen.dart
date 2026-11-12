@@ -134,6 +134,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   final TvSpotlightController _spotlight = TvSpotlightController();
   MediaItem? _synopsisPanelItem;
   final ScrollController _synopsisScrollController = ScrollController();
+  late final FocusNode _synopsisFocusNode = FocusNode(debugLabel: 'discover_synopsis_panel');
   bool _isTabVisible = true;
 
   bool _initialLoadComplete = false;
@@ -242,6 +243,14 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     if (!mounted) return;
     if (_synopsisScrollController.hasClients) _synopsisScrollController.jumpTo(0);
     setState(() => _synopsisPanelItem = item);
+    // Request focus only after the panel has entered the widget tree. Relying
+    // on autofocus here is timing-sensitive when the rail owns a locked focus
+    // node and the panel is inserted into an already-mounted Stack.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _synopsisPanelItem == item && _synopsisFocusNode.canRequestFocus) {
+        _synopsisFocusNode.requestFocus();
+      }
+    });
   }
 
   void _closeSynopsisPanel() {
@@ -292,7 +301,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
 
     return Positioned.fill(
       child: Focus(
-        autofocus: true,
+        focusNode: _synopsisFocusNode,
         onKeyEvent: _handleSynopsisPanelKeyEvent,
         child: ColoredBox(
           color: Colors.black.withValues(alpha: 0.76),
@@ -883,6 +892,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     _indicatorTimer?.cancel();
     _spotlight.dispose();
     _synopsisScrollController.dispose();
+    _synopsisFocusNode.dispose();
     _indicatorProgress.dispose();
     _heroIndex.dispose();
     _heroController.dispose();
