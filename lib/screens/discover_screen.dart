@@ -1590,6 +1590,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
             ),
           _cachedTvToolbarOverlay(),
           if (_switchingProfile) const ProfileSwitchingOverlay(),
+          if (_synopsisPanelItem != null) _buildSynopsisPanel(_synopsisPanelItem!),
         ],
       ),
     );
