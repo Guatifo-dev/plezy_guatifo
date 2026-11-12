@@ -238,7 +238,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
 
   void _openSynopsisPanel(MediaItem item) {
     if (!mounted) return;
-    _synopsisScrollController.jumpTo(0);
+    if (_synopsisScrollController.hasClients) _synopsisScrollController.jumpTo(0);
     setState(() => _synopsisPanelItem = item);
   }
 
