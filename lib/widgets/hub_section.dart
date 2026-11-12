@@ -16,6 +16,7 @@ import '../utils/layout_constants.dart';
 import '../utils/platform_detector.dart';
 import '../theme/mono_tokens.dart';
 import '../focus/locked_hub_controller.dart';
+import '../media/library_query.dart';
 import '../media/media_hub.dart';
 import '../media/media_item.dart';
 import '../mixins/mounted_set_state_mixin.dart';
@@ -58,6 +59,7 @@ class HubSection extends StatefulWidget {
   final bool usesContinueWatchingAction;
   final bool showServerName;
   final Future<List<MediaItem>> Function()? loadMoreItems;
+  final LibraryPageLoader<MediaItem>? Function(MediaHub hub)? fetchPageForHub;
 
   /// Provider-reported result count shown alongside the existing hub title.
   final int? totalResults;
@@ -110,6 +112,7 @@ class HubSection extends StatefulWidget {
     bool? usesContinueWatchingAction,
     this.showServerName = false,
     this.loadMoreItems,
+    this.fetchPageForHub,
     this.totalResults,
     this.onFocusedItemChanged,
     this.onItemTap,
@@ -459,6 +462,7 @@ class HubSectionState extends State<HubSection> with MountedSetStateMixin, Skele
         builder: (context) => HubDetailScreen(
           hub: widget.hub,
           loadItems: widget.loadMoreItems,
+          fetchPage: widget.fetchPageForHub?.call(widget.hub),
           isInContinueWatching: widget.isInContinueWatching,
           usesContinueWatchingAction: widget.usesContinueWatchingAction,
           onRemoveFromContinueWatching: widget.onRemoveFromContinueWatching,
