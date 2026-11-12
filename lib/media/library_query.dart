@@ -151,6 +151,10 @@ sealed class LibraryPage<T> with _$LibraryPage<T> {
       _LibraryPage<T>;
 }
 
+/// Optional offset-paged loader for a hub whose content comes from one or
+/// more libraries rather than a native server hub endpoint.
+typedef LibraryPageLoader<T> = Future<LibraryPage<T>> Function(int start, int size, AbortController? abort);
+
 /// Conservative total for a page whose backend omitted an exact count. A full
 /// page adds one sentinel item so callers keep pagination enabled without
 /// claiming to know the real total.
