@@ -107,7 +107,13 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     final key = (_discover.hubs, _catalogHubs);
     if (_combinedHubsCache != null && key == _combinedHubsCacheKey) return _combinedHubsCache!;
     _combinedHubsCacheKey = key;
-    return _combinedHubsCache = [..._discover.hubs, ..._catalogHubs];
+    // Plex may return collection shelves alongside ordinary movie/show hubs.
+    // These shelves can contain virtual collections, including ones whose
+    // members are not present in the user's libraries.
+    final mediaHubs = _discover.hubs.where((hub) =>
+        hub.type.toLowerCase() != MediaKind.collection.id &&
+        hub.items.every((item) => item.kind != MediaKind.collection));
+    return _combinedHubsCache = [...mediaHubs, ..._catalogHubs];
   }
   bool get _hasMoreContinueWatching => _discover.hasMoreContinueWatching;
   bool get _isLoading => _discover.isLoading;
@@ -301,7 +307,9 @@ class _DiscoverScreenState extends State<DiscoverScreen>
         title: kind == MediaKind.movie ? t.libraries.groupings.movies : t.libraries.groupings.shows,
         type: kind.id,
         size: totalCount,
-        more: totalCount > previewItems.length,
+        // The complete catalog is appended to this horizontal shelf in the
+        // background. Do not expose the generic View All poster grid.
+        more: false,
         items: previewItems,
       ));
 
@@ -348,6 +356,62 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     if (!_initialLoadComplete && PlatformDetector.isTV() && _catalogHubs.isNotEmpty) {
       _initialLoadComplete = true;
       _focusTvBrowseRailWhenReady(initial: true);
+    }
+
+    // Keep filling each horizontal shelf until every real library item is
+    // present. Cards are appended progressively, so the user can already
+    // browse and open details while the remaining pages are fetched.
+    for (final hub in _catalogHubs) {
+      final loader = _catalogPageLoaders[hub.id];
+      if (loader != null && hub.items.length < hub.size) {
+        unawaited(_loadCatalogShelfCompletely(hub, loader, generation));
+      }
+    }
+  }
+
+  Future<void> _loadCatalogShelfCompletely(
+    MediaHub initialHub,
+    LibraryPageLoader<MediaItem> loader,
+    int generation,
+  ) async {
+    final items = List<MediaItem>.of(initialHub.items);
+    final seenKeys = items.map((item) => item.globalKey).toSet();
+    while (items.length < initialHub.size) {
+      if (!mounted || generation != _catalogLoadGeneration) return;
+      final requested = math.min(100, initialHub.size - items.length);
+      try {
+        final page = await loader(items.length, requested, null);
+        if (!mounted || generation != _catalogLoadGeneration) return;
+        if (page.items.isEmpty) break;
+        var added = 0;
+        for (final item in page.items) {
+          if (seenKeys.add(item.globalKey)) {
+            items.add(item);
+            added++;
+          }
+        }
+        if (added == 0) break;
+
+        final updatedItems = List<MediaItem>.of(items);
+        setState(() {
+          _catalogHubs = [
+            for (final hub in _catalogHubs)
+              if (hub.id == initialHub.id)
+                hub.copyWith(items: updatedItems, size: initialHub.size)
+              else
+                hub,
+          ];
+          _combinedHubsCache = null;
+          _updateHubKeys();
+        });
+      } catch (error, stackTrace) {
+        appLogger.w(
+          'Discover: failed to finish ${initialHub.type} catalog shelf',
+          error: error,
+          stackTrace: stackTrace,
+        );
+        break;
+      }
     }
   }
 
