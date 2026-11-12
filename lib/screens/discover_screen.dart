@@ -255,20 +255,17 @@ class _DiscoverScreenState extends State<DiscoverScreen>
         libraryId: updated.libraryId ?? source.libraryId,
       );
       final globalKey = source.globalKey;
-      var changed = false;
+      final changed = _catalogHubs.any((hub) => hub.items.any((item) => item.globalKey == globalKey));
+      if (!changed) return;
       final nextHubs = <MediaHub>[
         for (final hub in _catalogHubs)
           hub.copyWith(
             items: [
               for (final item in hub.items)
-                if (item.globalKey == globalKey)
-                  (changed = true) ? refreshed : refreshed
-                else
-                  item,
+                if (item.globalKey == globalKey) refreshed else item,
             ],
           ),
       ];
-      if (!changed) return;
 
       setState(() {
         _catalogHubs = nextHubs;
