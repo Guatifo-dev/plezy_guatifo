@@ -243,6 +243,11 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   Future<void> _refreshDiscoverItem(MediaItem source) async {
     await _discover.updateItem(source);
     if (!mounted || source.serverId == null) return;
+    final globalKey = source.globalKey;
+    final isCatalogItem = _catalogHubs.any(
+      (hub) => hub.items.any((item) => item.globalKey == globalKey),
+    );
+    if (!isCatalogItem) return;
 
     try {
       final client = context.tryGetMediaClientForServer(ServerId(source.serverId!));
@@ -254,7 +259,6 @@ class _DiscoverScreenState extends State<DiscoverScreen>
         serverName: source.serverName ?? updated.serverName,
         libraryId: updated.libraryId ?? source.libraryId,
       );
-      final globalKey = source.globalKey;
       final changed = _catalogHubs.any((hub) => hub.items.any((item) => item.globalKey == globalKey));
       if (!changed) return;
       final nextHubs = <MediaHub>[
