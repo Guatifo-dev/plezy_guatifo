@@ -240,6 +240,9 @@ class MediaCard extends StatefulWidget {
   /// repeating the show on every card (#2217).
   final bool showTitleImplied;
 
+  /// Show a media item's clear logo instead of its text title on Discover catalog cards.
+  final bool showClearLogo;
+
   /// Paint-time black tint amount for the artwork, from 0 (clear) to 1 (black).
   final Animation<double>? artworkDim;
 
@@ -270,6 +273,7 @@ class MediaCard extends StatefulWidget {
     this.episodePosterModeOverride,
     this.fullBleedImage = false,
     this.showTitleImplied = false,
+    this.showClearLogo = false,
     this.artworkDim,
     this.cardShapeOverride,
   }) : usesContinueWatchingAction = usesContinueWatchingAction ?? isInContinueWatching;
@@ -705,7 +709,24 @@ class MediaCardState extends State<MediaCard> with ContextMenuTapMixin<MediaCard
               SizedBox(
                 height: posterHeight != null ? 2 : context.settingsRead(SettingsService.gridSpacing).posterTitleGap,
               ),
-              if (widget.onTap == null && item is MediaItem && !_impliesShowTitle(item) && _hasClickableTitle(item))
+              if (widget.showClearLogo && item is MediaItem && item.clearLogoPath?.isNotEmpty == true)
+                ClearLogoImage(
+                  client: widget.isOffline
+                      ? null
+                      : context.tryGetMediaClientWithFallback(serverIdOrNull(item.serverId)),
+                  logoPath: item.clearLogoPath,
+                  width: widget.width ?? double.infinity,
+                  height: 30,
+                  fallbackWidth: widget.width ?? double.infinity,
+                  alignment: Alignment.centerLeft,
+                  fallbackBuilder: (_) => Text(
+                    item.displayTitle,
+                    maxLines: 1,
+                    overflow: .ellipsis,
+                    style: MediaCard._gridTitleStyle,
+                  ),
+                )
+              else if (widget.onTap == null && item is MediaItem && !_impliesShowTitle(item) && _hasClickableTitle(item))
                 _ClickableText(
                   text: item.displayTitle,
                   style: MediaCard._gridTitleStyle,
