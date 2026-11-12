@@ -25,7 +25,7 @@ import '../utils/media_image_helper.dart';
 import '../utils/content_utils.dart';
 import '../widgets/cycling_media_backdrop.dart';
 import '../widgets/hero_carousel_backdrop.dart';
-import '../widgets/optimized_media_image.dart' show ClearLogoImage, blurArtwork;
+import '../widgets/optimized_media_image.dart' show ClearLogoImage, OptimizedMediaImage, blurArtwork;
 import '../widgets/rasterized_gradient.dart';
 import '../widgets/toolbar_scrim.dart';
 import '../widgets/system_clock.dart';
@@ -130,6 +130,8 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   bool _isAutoScrollPaused = false;
   bool _heroFocusPausedAutoScroll = false;
   final TvSpotlightController _spotlight = TvSpotlightController();
+  MediaItem? _synopsisPanelItem;
+  final ScrollController _synopsisScrollController = ScrollController();
   bool _isTabVisible = true;
 
   bool _initialLoadComplete = false;
@@ -233,6 +235,151 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   );
 
   void _setSpotlightItem(MediaItem item) => _spotlight.select(item);
+
+  void _openSynopsisPanel(MediaItem item) {
+    if (!mounted) return;
+    _synopsisScrollController.jumpTo(0);
+    setState(() => _synopsisPanelItem = item);
+  }
+
+  void _closeSynopsisPanel() {
+    if (!mounted || _synopsisPanelItem == null) return;
+    setState(() => _synopsisPanelItem = null);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _tvBrowseRailKey.currentState?.requestFocus();
+    });
+  }
+
+  KeyEventResult _handleSynopsisPanelKeyEvent(FocusNode node, KeyEvent event) {
+    final backResult = handleBackKeyAction(event, _closeSynopsisPanel);
+    if (backResult != KeyEventResult.ignored) return backResult;
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) return KeyEventResult.ignored;
+
+    final position = _synopsisScrollController.hasClients
+        ? _synopsisScrollController.position
+        : null;
+    if (event.logicalKey.isUpKey || event.logicalKey.isDownKey) {
+      if (position != null) {
+        final direction = event.logicalKey.isDownKey ? 1.0 : -1.0;
+        final target = (position.pixels + direction * position.viewportDimension * 0.68)
+            .clamp(0.0, position.maxScrollExtent)
+            .toDouble();
+        _synopsisScrollController.animateTo(
+          target,
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+        );
+      }
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey.isLeftKey || event.logicalKey.isRightKey) {
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  Widget _buildSynopsisPanel(MediaItem item) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final scale = TvLayoutConstants.scaleOf(context);
+    final title = item.grandparentTitle ?? item.displayTitle;
+    final hideSpoiler = SettingsService.instance.read(SettingsService.hideSpoilers) && item.shouldHideSpoiler;
+    final summary = hideSpoiler ? t.messages.noDescriptionAvailable : item.summary;
+    final width = MediaQuery.sizeOf(context).width;
+    final height = MediaQuery.sizeOf(context).height;
+
+    return Positioned.fill(
+      child: Focus(
+        autofocus: true,
+        onKeyEvent: _handleSynopsisPanelKeyEvent,
+        child: ColoredBox(
+          color: Colors.black.withValues(alpha: 0.76),
+          child: Center(
+            child: Container(
+              width: math.min(width * 0.86, 1320.0 * scale),
+              height: height * 0.78,
+              padding: EdgeInsets.all(30 * scale),
+              decoration: BoxDecoration(
+                color: colorScheme.surface,
+                borderRadius: BorderRadius.circular(22 * scale),
+                border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.65)),
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.42), blurRadius: 34, spreadRadius: 4)],
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(
+                    width: math.min(width * 0.23, 300.0 * scale),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(14 * scale),
+                      child: OptimizedMediaImage.poster(
+                        client: _getMediaClientForItem(item),
+                        imagePath: item.thumbPath,
+                        fit: BoxFit.contain,
+                        fallbackIcon: Symbols.movie_rounded,
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 34 * scale),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.headlineSmall?.copyWith(
+                            color: colorScheme.onSurface,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 30 * scale,
+                          ),
+                        ),
+                        if (item.year != null) ...[
+                          SizedBox(height: 8 * scale),
+                          Text(
+                            item.year.toString(),
+                            style: theme.textTheme.titleMedium?.copyWith(color: colorScheme.onSurfaceVariant),
+                          ),
+                        ],
+                        SizedBox(height: 22 * scale),
+                        Expanded(
+                          child: Scrollbar(
+                            controller: _synopsisScrollController,
+                            thumbVisibility: true,
+                            child: SingleChildScrollView(
+                              controller: _synopsisScrollController,
+                              padding: EdgeInsets.only(right: 18 * scale, bottom: 8 * scale),
+                              child: Text(
+                                summary?.isNotEmpty == true ? summary! : t.messages.noDescriptionAvailable,
+                                style: theme.textTheme.bodyLarge?.copyWith(
+                                  color: colorScheme.onSurface.withValues(alpha: 0.9),
+                                  fontSize: 21 * scale,
+                                  height: 1.55,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        SizedBox(height: 12 * scale),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            'BACK  ·  ${t.common.close}',
+                            style: theme.textTheme.labelLarge?.copyWith(color: colorScheme.onSurfaceVariant),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   void _onCatalogLibrariesChanged() => unawaited(_refreshCatalogHubs());
 
@@ -733,6 +880,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     _autoScrollTimer?.cancel();
     _indicatorTimer?.cancel();
     _spotlight.dispose();
+    _synopsisScrollController.dispose();
     _indicatorProgress.dispose();
     _heroIndex.dispose();
     _heroController.dispose();
@@ -1332,6 +1480,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
           // Toolbar buttons are still reachable via explicit UP from hero section.
           Positioned(top: 0, left: 0, right: 0, child: ExcludeFocusTraversal(child: _buildOverlaidAppBar())),
           if (_switchingProfile) const ProfileSwitchingOverlay(),
+          if (_synopsisPanelItem != null) _buildSynopsisPanel(_synopsisPanelItem!),
         ],
       ),
     );
@@ -1355,6 +1504,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       showServerName: showServerName,
       iconForHub: (hub, _) => hubIconFor(hub),
       onFocusedItemChanged: _setSpotlightItem,
+      onLongPressItem: _openSynopsisPanel,
       onRefresh: _refreshDiscoverItem,
       onRemoveFromContinueWatching: _discover.refreshContinueWatching,
       isContinueWatchingHub: (hub) => hub.isContinueWatchingHub,
