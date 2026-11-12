@@ -1707,7 +1707,8 @@ class PlexClient
       final item = items[i];
       if (item.clearLogo != null && item.clearLogo!.isNotEmpty) continue;
       final ownerKey = switch (item.type?.toLowerCase()) {
-        'movie', 'show' => item.ratingKey,
+        'movie' => item.ratingKey,
+        'show' => item.ratingKey,
         'episode' => item.grandparentRatingKey,
         'season' => item.parentRatingKey,
         _ => null,
