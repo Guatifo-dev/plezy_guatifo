@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart' show KeyEventResult, VoidCallback;
 
@@ -28,11 +29,14 @@ class DpadSelectLongPressController {
       // Some platforms report another down instead of a repeat. Only the
       // transition from up to down may start (or restart) the timer.
       if (!_isKeyDown) {
+        debugPrint('[SynopsisDebug] SELECT down: long-press timer started');
         _isKeyDown = true;
         _timer?.cancel();
         _timer = Timer(duration, () {
+          debugPrint('[SynopsisDebug] SELECT timer fired; ownerActive=${isOwnerActive()}, keyDown=$_isKeyDown');
           if (!isOwnerActive() || !_isKeyDown) return;
           SelectKeyUpSuppressor.suppressSelectUntilKeyUp();
+          debugPrint('[SynopsisDebug] invoking long-press callback');
           onLongPress();
         });
       }
@@ -42,6 +46,7 @@ class DpadSelectLongPressController {
     if (event is KeyRepeatEvent) return KeyEventResult.handled;
 
     if (event is KeyUpEvent) {
+      debugPrint('[SynopsisDebug] SELECT up; timerActive=${_timer?.isActive}, keyDown=$_isKeyDown');
       final timerWasActive = _timer?.isActive ?? false;
       _timer?.cancel();
       if (timerWasActive && _isKeyDown) onShortPress();
