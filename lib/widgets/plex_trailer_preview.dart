@@ -122,7 +122,7 @@ abstract final class _TrailerPreviewSession {
   }
 
   static void detachWidget() {
-    _attachedWidgets = (_attachedWidgets - 1).clamp(0, 1 << 30);
+    if (_attachedWidgets > 0) _attachedWidgets--;
     if (_attachedWidgets != 0) return;
 
     // Route handoffs can briefly dispose the old PlatformView before the new
