@@ -38,6 +38,7 @@ import 'focusable_detail_screen_mixin.dart';
 class HubDetailScreen extends StatefulWidget {
   final MediaHub hub;
   final Future<List<MediaItem>> Function()? loadItems;
+  final LibraryPageLoader<MediaItem>? fetchPage;
   final bool isInContinueWatching;
   final bool usesContinueWatchingAction;
   final VoidCallback? onRemoveFromContinueWatching;
