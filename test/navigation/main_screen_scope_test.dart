@@ -81,4 +81,49 @@ void main() {
     expect(childBuilds, 1);
     expect(focusCalls, 1);
   });
+  testWidgets('spotlight preview is enabled on visible non-Discover tabs', (tester) async {
+    late BuildContext childContext;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainScreenFocusScope(
+          focusSidebar: () {},
+          isDiscoverTabActive: false,
+          sideNavigationWidth: 0,
+          child: Builder(
+            builder: (context) {
+              childContext = context;
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      ),
+    );
+
+    expect(MainScreenFocusScope.spotlightPreviewActiveOf(childContext), isTrue);
+  });
+
+  testWidgets('spotlight preview is disabled while the sidebar owns focus', (tester) async {
+    late BuildContext childContext;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainScreenFocusScope(
+          focusSidebar: () {},
+          isSidebarFocused: true,
+          isDiscoverTabActive: false,
+          sideNavigationWidth: 0,
+          child: Builder(
+            builder: (context) {
+              childContext = context;
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      ),
+    );
+
+    expect(MainScreenFocusScope.spotlightPreviewActiveOf(childContext), isFalse);
+  });
+
 }
