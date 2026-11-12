@@ -304,7 +304,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       nextHubs.add(MediaHub(
         id: hubId,
         identifier: hubId,
-        title: kind == MediaKind.movie ? t.libraries.groupings.movies : t.libraries.groupings.shows,
+        title: kind == MediaKind.movie ? 'Todas las Películas' : 'Todas las Series',
         type: kind.id,
         size: totalCount,
         // The complete catalog is appended to this horizontal shelf in the
