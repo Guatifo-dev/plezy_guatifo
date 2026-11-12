@@ -794,7 +794,6 @@ class HubSectionState extends State<HubSection> with MountedSetStateMixin, Skele
                                     usesContinueWatchingAction: widget.usesContinueWatchingAction,
                                     mixedHubContext: isMixedHub,
                                     episodePosterModeOverride: episodePosterMode,
-                                    showClearLogo: widget.hub.id.startsWith('discover.all.'),
                                   ),
                                 ),
                               ),
