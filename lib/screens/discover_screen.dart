@@ -4,6 +4,7 @@ import 'dart:io' show Platform;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:plezy/widgets/app_icon.dart';
 import '../widgets/server_activities_button.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -13,6 +14,7 @@ import '../focus/hub_vertical_navigation.dart';
 import '../focus/locked_hub_controller.dart';
 import '../focus/input_mode_tracker.dart';
 import '../focus/key_event_utils.dart';
+import '../focus/dpad_navigator.dart';
 
 import '../media/library_query.dart';
 import '../media/media_item.dart';
