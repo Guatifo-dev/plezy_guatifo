@@ -365,7 +365,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                         Align(
                           alignment: Alignment.centerRight,
                           child: Text(
-                            'BACK  ·  ${t.common.close}',
+                            'BACK',
                             style: theme.textTheme.labelLarge?.copyWith(color: colorScheme.onSurfaceVariant),
                           ),
                         ),
