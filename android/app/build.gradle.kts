@@ -321,6 +321,14 @@ android {
       }
     }
 
+    // The dedicated Guatifo CI artifact targets Flutter's 32-bit ARM runtime.
+    // Exclude unrelated native ABIs from the APK without changing other build variants.
+    if (System.getenv("GUA_ARM32") != null) {
+      ndk {
+        abiFilters += listOf("armeabi-v7a")
+      }
+    }
+
     if (System.getenv("AMAZON") != null) {
       versionCode = (flutter.versionCode ?: 0) + 3000
       ndk {
