@@ -14,8 +14,11 @@ import '../focus/locked_hub_controller.dart';
 import '../focus/input_mode_tracker.dart';
 import '../focus/key_event_utils.dart';
 
+import '../media/library_query.dart';
 import '../media/media_item.dart';
 import '../media/media_item_types.dart';
+import '../media/media_kind.dart';
+import '../media/media_library.dart';
 import '../media/media_server_client.dart';
 import '../media/media_hub.dart';
 import '../utils/media_image_helper.dart';
@@ -27,6 +30,8 @@ import '../widgets/rasterized_gradient.dart';
 import '../widgets/toolbar_scrim.dart';
 import '../widgets/system_clock.dart';
 import '../providers/discover_provider.dart';
+import '../providers/hidden_libraries_provider.dart';
+import '../providers/libraries_provider.dart';
 import '../providers/multi_server_provider.dart';
 import '../providers/watch_state_store.dart';
 import '../widgets/hub_section.dart';
@@ -88,7 +93,22 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   int _seenLoadGeneration = 0;
 
   List<MediaItem> get _onDeck => _discover.onDeck;
-  List<MediaHub> get _hubs => _discover.hubs;
+  List<MediaHub> _catalogHubs = const [];
+  Map<String, LibraryPageLoader<MediaItem>> _catalogPageLoaders = {};
+  List<MediaHub>? _combinedHubsCache;
+  (List<MediaHub>, List<MediaHub>)? _combinedHubsCacheKey;
+  late final LibrariesProvider _librariesProvider;
+  late final HiddenLibrariesProvider _hiddenLibrariesProvider;
+  String? _catalogLibrariesSignature;
+  String? _catalogLoadingSignature;
+  int _catalogLoadGeneration = 0;
+
+  List<MediaHub> get _hubs {
+    final key = (_discover.hubs, _catalogHubs);
+    if (_combinedHubsCache != null && key == _combinedHubsCacheKey) return _combinedHubsCache!;
+    _combinedHubsCacheKey = key;
+    return _combinedHubsCache = [..._discover.hubs, ..._catalogHubs];
+  }
   bool get _hasMoreContinueWatching => _discover.hasMoreContinueWatching;
   bool get _isLoading => _discover.isLoading;
   bool get _areHubsLoading => _discover.areHubsLoading;
@@ -207,6 +227,129 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   );
 
   void _setSpotlightItem(MediaItem item) => _spotlight.select(item);
+
+  void _onCatalogLibrariesChanged() => unawaited(_refreshCatalogHubs());
+
+  /// Add one complete, paginated movie catalog and one series catalog to
+  /// Discover. Each catalog can span several libraries and servers; its
+  /// global offsets are translated into the corresponding per-library page.
+  Future<void> _refreshCatalogHubs() async {
+    await _hiddenLibrariesProvider.ensureInitialized();
+    if (!mounted) return;
+
+    final hiddenKeys = _hiddenLibrariesProvider.hiddenLibraryKeys;
+    final libraries = _librariesProvider.libraries
+        .where((library) =>
+            (library.kind == MediaKind.movie || library.kind == MediaKind.show) &&
+            !hiddenKeys.contains(library.globalKey))
+        .toList();
+    final signature = libraries
+        .map((library) => '${library.globalKey}:${library.kind.name}:${library.title}')
+        .join('|');
+    if (signature == _catalogLibrariesSignature || signature == _catalogLoadingSignature) return;
+
+    _catalogLoadingSignature = signature;
+    final generation = ++_catalogLoadGeneration;
+    final grouped = <MediaKind, List<MediaLibrary>>{
+      MediaKind.movie: [],
+      MediaKind.show: [],
+    };
+    for (final library in libraries) {
+      grouped[library.kind]!.add(library);
+    }
+
+    final nextHubs = <MediaHub>[];
+    final nextLoaders = <String, LibraryPageLoader<MediaItem>>{};
+    for (final kind in [MediaKind.movie, MediaKind.show]) {
+      final sourceResults = await Future.wait(grouped[kind]!.map((library) async {
+        final serverId = library.serverId;
+        final client = context.tryGetMediaClientForServer(
+          serverId == null ? null : ServerId(serverId),
+        );
+        if (client == null) return null;
+        try {
+          final page = await client.fetchLibraryPagedContent(
+            library.id,
+            query: LibraryQuery(kind: kind, offset: 0, limit: 20),
+            libraryKind: kind,
+          );
+          return _DiscoverCatalogSource(
+            library: library,
+            client: client,
+            totalCount: page.totalCount > page.items.length ? page.totalCount : page.items.length,
+            previewItems: page.items,
+          );
+        } catch (error, stackTrace) {
+          appLogger.w(
+            'Discover: failed to load ${kind.id} catalog preview from ${library.title}',
+            error: error,
+            stackTrace: stackTrace,
+          );
+          return null;
+        }
+      }));
+
+      final sources = sourceResults.whereType<_DiscoverCatalogSource>().toList();
+      final totalCount = sources.fold<int>(0, (sum, source) => sum + source.totalCount);
+      final previewItems = sources.expand((source) => source.previewItems).take(20).toList();
+      if (totalCount == 0 || previewItems.isEmpty) continue;
+
+      final hubId = 'discover.all.${kind.id}';
+      nextHubs.add(MediaHub(
+        id: hubId,
+        identifier: hubId,
+        title: kind == MediaKind.movie ? t.libraries.groupings.movies : t.libraries.groupings.shows,
+        type: kind.id,
+        size: totalCount,
+        more: totalCount > previewItems.length,
+        items: previewItems,
+      ));
+
+      nextLoaders[hubId] = (start, size, abort) async {
+        final end = start + size;
+        var libraryBase = 0;
+        final pageItems = <MediaItem>[];
+        for (final source in sources) {
+          abort?.throwIfAborted();
+          final libraryEnd = libraryBase + source.totalCount;
+          final overlapStart = start > libraryBase ? start : libraryBase;
+          final overlapEnd = end < libraryEnd ? end : libraryEnd;
+          if (overlapStart < overlapEnd) {
+            final localOffset = overlapStart - libraryBase;
+            final localLimit = overlapEnd - overlapStart;
+            final page = await source.client.fetchLibraryPagedContent(
+              source.library.id,
+              query: LibraryQuery(kind: kind, offset: localOffset, limit: localLimit),
+              libraryKind: kind,
+              abort: abort,
+            );
+            pageItems.addAll(page.items);
+          }
+          libraryBase = libraryEnd;
+          if (libraryBase >= end) break;
+        }
+        return LibraryPage<MediaItem>(
+          items: pageItems,
+          totalCount: totalCount,
+          offset: start,
+        );
+      };
+    }
+
+    if (!mounted || generation != _catalogLoadGeneration) return;
+    _catalogLibrariesSignature = signature;
+    _catalogLoadingSignature = null;
+    setState(() {
+      _catalogHubs = nextHubs;
+      _catalogPageLoaders = nextLoaders;
+      _combinedHubsCache = null;
+      _updateHubKeys();
+    });
+    if (!_initialLoadComplete && PlatformDetector.isTV() && _catalogHubs.isNotEmpty) {
+      _initialLoadComplete = true;
+      _focusTvBrowseRailWhenReady(initial: true);
+    }
+  }
 
   void _scrollToTop() {
     if (!_scrollController.hasClients) return;
@@ -352,6 +495,11 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     _discover = context.read<DiscoverProvider>();
     _seenLoadGeneration = _discover.loadGeneration;
     _discover.addListener(_onDiscoverChanged);
+    _librariesProvider = context.read<LibrariesProvider>();
+    _hiddenLibrariesProvider = context.read<HiddenLibrariesProvider>();
+    _librariesProvider.addListener(_onCatalogLibrariesChanged);
+    _hiddenLibrariesProvider.addListener(_onCatalogLibrariesChanged);
+    unawaited(_refreshCatalogHubs());
     _updateHubKeys();
     unawaited(_discover.load());
     _startAutoScroll();
@@ -465,6 +613,9 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   @override
   void dispose() {
     _discover.removeListener(_onDiscoverChanged);
+    _librariesProvider.removeListener(_onCatalogLibrariesChanged);
+    _hiddenLibrariesProvider.removeListener(_onCatalogLibrariesChanged);
+    _catalogLoadGeneration++;
     WidgetsBinding.instance.removeObserver(this);
     _autoScrollTimer?.cancel();
     _indicatorTimer?.cancel();
@@ -1004,6 +1155,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                       icon: hubIconFor(_hubs[i]),
                       showServerName: showServerNameOnHubs || hubsSpanMultipleServers,
                       onRefresh: _discover.updateItem,
+                      fetchPageForHub: (hub) => _catalogPageLoaders[hub.id],
                       // Hub index is i + 1 if continue watching exists, otherwise i
                       onVerticalNavigation: (isUp) => _handleVerticalNavigation(_onDeck.isNotEmpty ? i + 1 : i, isUp),
                       onNavigateUp: (i == 0 && _onDeck.isEmpty) ? _focusTopBoundary : null,
@@ -1097,6 +1249,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       // Every other hub pages from its server in View All, as on phones; handing
       // it the preview items only showed that preview again.
       loadMoreItems: (hub) => hub.id == 'continue_watching' ? _discover.loadAllContinueWatching : null,
+      fetchPageForHub: (hub) => _catalogPageLoaders[hub.id],
       onNavigateUp: _focusTopActions,
       onNavigateToSidebar: _navigateToSidebar,
       tallPosterScale: TvBrowseRailLayout.compactTallPosterScale,
@@ -1693,4 +1846,20 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       },
     );
   }
+}
+
+
+/// One source library contributing a segment to a combined Discover catalog.
+class _DiscoverCatalogSource {
+  final MediaLibrary library;
+  final MediaServerClient client;
+  final int totalCount;
+  final List<MediaItem> previewItems;
+
+  const _DiscoverCatalogSource({
+    required this.library,
+    required this.client,
+    required this.totalCount,
+    required this.previewItems,
+  });
 }
