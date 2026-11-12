@@ -418,6 +418,19 @@ android {
       // (the one libmpv was linked against) win for std::from_chars<float>,
       // while older native consumers remain ABI-compatible.
       pickFirsts.add("lib/*/libc++_shared.so")
+
+      // The Guatifo CI APK is built for 32-bit ARM only. Some native
+      // dependencies ship extra ABIs through custom JNI source directories,
+      // so filter them at packaging time as well as at native-build time.
+      if (System.getenv("GUA_ARM32") != null) {
+        excludes.addAll(
+          listOf(
+            "**/arm64-v8a/**",
+            "**/x86/**",
+            "**/x86_64/**"
+          )
+        )
+      }
     }
   }
 
