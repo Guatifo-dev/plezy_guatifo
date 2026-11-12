@@ -287,7 +287,7 @@ class _HubDetailScreenState extends State<HubDetailScreen>
 
     final serverId = widget.hub.serverId;
     final loader = widget.loadItems;
-    if (loader == null && serverId == null) {
+    if (loader == null && widget.fetchPage == null && serverId == null) {
       appLogger.w('Hub has no serverId; cannot load more items for ${widget.hub.id}');
       return;
     }
