@@ -236,6 +236,54 @@ class _DiscoverScreenState extends State<DiscoverScreen>
 
   void _onCatalogLibrariesChanged() => unawaited(_refreshCatalogHubs());
 
+  /// Reconcile an edited or otherwise changed item in both backend-provided
+  /// Discover hubs and the locally synthesized complete library shelves.
+  /// Those shelves own their item lists, so DiscoverProvider.updateItem alone
+  /// cannot refresh their artwork after MetadataEditScreen returns.
+  Future<void> _refreshDiscoverItem(MediaItem source) async {
+    await _discover.updateItem(source);
+    if (!mounted || source.serverId == null) return;
+
+    try {
+      final client = context.tryGetMediaClientForServer(ServerId(source.serverId!));
+      final updated = await client?.fetchItem(source.id);
+      if (!mounted || updated == null) return;
+
+      final refreshed = updated.copyWith(
+        serverId: source.serverId ?? updated.serverId,
+        serverName: source.serverName ?? updated.serverName,
+        libraryId: updated.libraryId ?? source.libraryId,
+      );
+      final globalKey = source.globalKey;
+      var changed = false;
+      final nextHubs = <MediaHub>[
+        for (final hub in _catalogHubs)
+          hub.copyWith(
+            items: [
+              for (final item in hub.items)
+                if (item.globalKey == globalKey)
+                  (changed = true) ? refreshed : refreshed
+                else
+                  item,
+            ],
+          ),
+      ];
+      if (!changed) return;
+
+      setState(() {
+        _catalogHubs = nextHubs;
+        _combinedHubsCache = null;
+        _updateHubKeys();
+      });
+    } catch (error, stackTrace) {
+      appLogger.w(
+        'Discover: failed to refresh edited catalog item ${source.displayTitle}',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+  }
+
   /// Add one complete, paginated movie catalog and one series catalog to
   /// Discover. Each catalog can span several libraries and servers; its
   /// global offsets are translated into the corresponding per-library page.
@@ -1199,7 +1247,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                       hub: continueWatchingHub,
                       focusMemory: _hubFocusMemory,
                       icon: hubIconFor(continueWatchingHub),
-                      onRefresh: _discover.updateItem,
+                      onRefresh: _refreshDiscoverItem,
                       onRemoveFromContinueWatching: _discover.refreshContinueWatching,
                       isInContinueWatching: true,
                       loadMoreItems: _discover.loadAllContinueWatching,
@@ -1218,7 +1266,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                       focusMemory: _hubFocusMemory,
                       icon: hubIconFor(_hubs[i]),
                       showServerName: showServerNameOnHubs || hubsSpanMultipleServers,
-                      onRefresh: _discover.updateItem,
+                      onRefresh: _refreshDiscoverItem,
                       fetchPageForHub: (hub) => _catalogPageLoaders[hub.id],
                       // Hub index is i + 1 if continue watching exists, otherwise i
                       onVerticalNavigation: (isUp) => _handleVerticalNavigation(_onDeck.isNotEmpty ? i + 1 : i, isUp),
@@ -1306,7 +1354,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       showServerName: showServerName,
       iconForHub: (hub, _) => hubIconFor(hub),
       onFocusedItemChanged: _setSpotlightItem,
-      onRefresh: _discover.updateItem,
+      onRefresh: _refreshDiscoverItem,
       onRemoveFromContinueWatching: _discover.refreshContinueWatching,
       isContinueWatchingHub: (hub) => hub.isContinueWatchingHub,
       usesContinueWatchingAction: (hub) => hub.usesContinueWatchingAction,
