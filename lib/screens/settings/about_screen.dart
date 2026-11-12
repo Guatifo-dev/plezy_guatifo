@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:plezy/widgets/app_icon.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -22,6 +23,8 @@ class AboutScreen extends StatelessWidget {
       future: _packageInfoFuture,
       builder: (context, snapshot) {
         final appVersion = snapshot.data?.version ?? '';
+        const gitCommit = String.fromEnvironment('GIT_COMMIT');
+        final shortCommit = gitCommit.length >= 7 ? gitCommit.substring(0, 7) : gitCommit;
         return FocusedScrollScaffold(
           title: Text(t.about.title),
           slivers: [
@@ -41,6 +44,30 @@ class AboutScreen extends StatelessWidget {
                           t.about.versionLabel(version: appVersion),
                           style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: tokens(context).textMuted),
                         ),
+                        if (gitCommit.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'Commit: $shortCommit',
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: tokens(context).textMuted),
+                              ),
+                              const SizedBox(width: 4),
+                              IconButton(
+                                tooltip: 'Copiar SHA completo',
+                                visualDensity: VisualDensity.compact,
+                                icon: const Icon(Icons.copy_rounded, size: 16),
+                                onPressed: () {
+                                  Clipboard.setData(const ClipboardData(text: gitCommit));
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('SHA del commit copiado')),
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                        ],
                         const SizedBox(height: 24),
                         Text(
                           t.about.appDescription,
