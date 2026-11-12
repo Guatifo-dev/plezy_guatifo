@@ -15,6 +15,7 @@ import '../focus/focus_navigation_intent.dart';
 import '../focus/locked_hub_controller.dart';
 import '../i18n/strings.g.dart';
 import '../media/ids.dart';
+import '../media/library_query.dart';
 import '../media/media_hub.dart';
 import '../media/media_item.dart';
 import '../navigation/main_screen_scope.dart';
@@ -365,6 +366,7 @@ class TvBrowseRail extends StatefulWidget {
   /// that screen page it itself. Only hubs the server cannot list in full
   /// (Continue Watching, catalog rows) need one.
   final Future<List<MediaItem>> Function()? Function(MediaHub hub)? loadMoreItems;
+  final LibraryPageLoader<MediaItem>? Function(MediaHub hub)? fetchPageForHub;
 
   /// Optional per-hub trailing-slot state (loading/error/viewAll). When null the
   /// rail keeps the legacy "[MediaHub.more] → View All" behavior.
@@ -415,6 +417,7 @@ class TvBrowseRail extends StatefulWidget {
     this.isContinueWatchingHub,
     this.usesContinueWatchingAction,
     this.loadMoreItems,
+    this.fetchPageForHub,
     this.trailingForHub,
     this.leadingItemForHub,
     this.onRetryHub,
@@ -1217,6 +1220,7 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
         builder: (context) => HubDetailScreen(
           hub: hub,
           loadItems: widget.loadMoreItems?.call(hub),
+          fetchPage: widget.fetchPageForHub?.call(hub),
           isInContinueWatching: _isContinueWatchingHub(hub),
           usesContinueWatchingAction: _usesContinueWatchingAction(hub),
           onRemoveFromContinueWatching: widget.onRemoveFromContinueWatching,
