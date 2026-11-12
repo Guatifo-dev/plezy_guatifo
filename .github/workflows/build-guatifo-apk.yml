@@ -36,6 +36,8 @@ jobs:
         run: flutter pub get --enforce-lockfile --no-example
 
       - name: Build release APK (debug-signed for private installation)
+        env:
+          GUA_ARM32: "1"
         run: flutter build apk --release --target-platform android-arm --dart-define=GIT_COMMIT=${{ github.sha }}
 
       - name: Publish APK artifact
