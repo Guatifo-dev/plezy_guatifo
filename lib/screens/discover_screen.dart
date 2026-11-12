@@ -240,6 +240,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   void _setSpotlightItem(MediaItem item) => _spotlight.select(item);
 
   void _openSynopsisPanel(MediaItem item) {
+    debugPrint('[SynopsisDebug] Discover synopsis callback entered for ${item.displayTitle}; mounted=$mounted');
     if (!mounted) return;
     if (_synopsisScrollController.hasClients) _synopsisScrollController.jumpTo(0);
     setState(() => _synopsisPanelItem = item);
@@ -290,6 +291,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   }
 
   Widget _buildSynopsisPanel(MediaItem item) {
+    debugPrint('[SynopsisDebug] building synopsis panel for ${item.displayTitle}');
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final scale = TvLayoutConstants.scaleOf(context);
