@@ -355,6 +355,7 @@ class TvBrowseRail extends StatefulWidget {
   /// clear, mirroring the mobile [HubSection] behavior.
   final bool showServerName;
   final ValueChanged<MediaItem>? onFocusedItemChanged;
+  final ValueChanged<MediaItem>? onLongPressItem;
   final void Function(MediaHub hub, MediaItem item)? onFocusedHubItemChanged;
   final void Function(MediaItem source)? onRefresh;
   final VoidCallback? onRemoveFromContinueWatching;
@@ -411,6 +412,7 @@ class TvBrowseRail extends StatefulWidget {
     required this.iconForHub,
     this.showServerName = false,
     this.onFocusedItemChanged,
+    this.onLongPressItem,
     this.onFocusedHubItemChanged,
     this.onRefresh,
     this.onRemoveFromContinueWatching,
@@ -819,7 +821,7 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
         event,
         isOwnerActive: () => mounted,
         onShortPress: _activateCurrentItem,
-        onLongPress: _showContextMenuForCurrentItem,
+        onLongPress: _handleLongPressCurrentItem,
       );
     }
 
@@ -1166,6 +1168,18 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
     _leadingMenuKeyFor(hub).currentState?.showContextMenu(context, position: position);
   }
 
+  void _handleLongPressCurrentItem() {
+    final hub = _activeHub;
+    if (hub == null) return;
+    final item = _itemAtSlot(hub, _itemIndex);
+    if (item != null && !_isPersonHub(hub) && widget.onLongPressItem != null) {
+      _displacedFocusItem = null;
+      widget.onLongPressItem!(item);
+      return;
+    }
+    _showContextMenuForCurrentItem();
+  }
+
   void _showContextMenuForCurrentItem() {
     final hub = _activeHub;
     if (hub == null) return;
@@ -1501,7 +1515,7 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
           button: actionable,
           label: _semanticSelectionLabel(hub, itemIndex, trailing),
           onTap: actionable ? () => unawaited(_activateCurrentItem()) : null,
-          onLongPress: (item != null || isLeading) && !_isPersonHub(hub) ? _showContextMenuForCurrentItem : null,
+          onLongPress: (item != null || isLeading) && !_isPersonHub(hub) ? _handleLongPressCurrentItem : null,
           onScrollLeft: itemIndex > 0 ? () => _moveItem(-1) : null,
           onScrollRight: itemIndex < totalCount - 1 ? () => _moveItem(1) : null,
           onScrollUp: hubIndex > 0 ? () => _moveHub(-1) : null,
@@ -1830,7 +1844,12 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
             ? null
             : () {
                 _selectHubItem(_liveHub(hub, hubIndex), hubIndex, itemIndex);
-                _cardKeyFor(hub, itemIndex).currentState?.showContextMenu();
+                if (widget.onLongPressItem != null) {
+                  _displacedFocusItem = null;
+                  widget.onLongPressItem!(item);
+                } else {
+                  _cardKeyFor(hub, itemIndex).currentState?.showContextMenu();
+                }
               },
         child: child!,
       ),
