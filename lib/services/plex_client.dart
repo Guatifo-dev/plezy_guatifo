@@ -1694,21 +1694,20 @@ class PlexClient
     return _backfillMissingLogos(result);
   }
 
-  /// Some PMS versions (before the ~1.43 hub refresh) omit the show's
-  /// inherited `clearLogo` image from episode/season hub rows while the
-  /// show's own metadata still carries it, so the hero and other logo
-  /// surfaces fall back to the title even though the detail page works.
-  /// Resolve every missing owner's logo in one bulk metadata request
-  /// (`/library/metadata` accepts comma-joined rating keys) and stamp it on
-  /// the rows — the same grandparent lookup Plex Web performs. Best-effort:
-  /// a failed lookup never fails the shelf (it is retried on the next
-  /// refresh).
+  /// Some PMS versions omit `clearLogo` from library and hub rows even
+  /// though the item's full metadata still carries it. Episodes and seasons
+  /// inherit the logo from their show; movies and shows own their logo.
+  /// Resolve all missing logo owners in one bulk metadata request
+  /// (`/library/metadata` accepts comma-joined rating keys) and stamp the
+  /// result onto the lightweight rows. Best-effort: a failed lookup never
+  /// fails the shelf (it is retried on the next refresh).
   Future<List<PlexMetadataDto>> _backfillMissingLogos(List<PlexMetadataDto> items) async {
     final missingByOwner = <String, List<int>>{};
     for (var i = 0; i < items.length; i++) {
       final item = items[i];
       if (item.clearLogo != null && item.clearLogo!.isNotEmpty) continue;
       final ownerKey = switch (item.type?.toLowerCase()) {
+        'movie', 'show' => item.ratingKey,
         'episode' => item.grandparentRatingKey,
         'season' => item.parentRatingKey,
         _ => null,
@@ -4651,7 +4650,11 @@ class PlexClient
     AbortController? abort,
   }) async {
     final result = await _getLibraryContent(sectionId, start: start, size: size, filters: filters, abort: abort);
-    return (items: result.items.map((m) => PlexMappers.mediaItem(m)).toList(), totalSize: result.totalSize);
+    // Library rows are intentionally lightweight and some PMS versions omit
+    // clearLogo from them. Backfill missing logos in one request per page so
+    // catalog cards can show the same artwork as the full detail screen.
+    final itemsWithLogos = await _backfillMissingLogos(result.items);
+    return (items: itemsWithLogos.map((m) => PlexMappers.mediaItem(m)).toList(), totalSize: result.totalSize);
   }
 
   /// Full item with on-deck episode from a single `/library/metadata/{id}`
