@@ -47,6 +47,7 @@ class HubDetailScreen extends StatefulWidget {
     super.key,
     required this.hub,
     this.loadItems,
+    this.fetchPage,
     this.isInContinueWatching = false,
     bool? usesContinueWatchingAction,
     this.onRemoveFromContinueWatching,
