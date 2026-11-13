@@ -1873,7 +1873,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       selected.displayTitle,
       selected.title,
     ].whereType<String>().join(' ');
-    if (RegExp(r'\\batmos\\b', caseSensitive: false).hasMatch(description)) return 'Dolby Atmos';
+    if (RegExp(r'\batmos\b', caseSensitive: false).hasMatch(description)) return 'Dolby Atmos';
 
     final codec = selected.codec?.trim();
     if (codec == null || codec.isEmpty) return null;

@@ -217,7 +217,7 @@ List<MediaStream> _fallbackStreamsFromPlexMedia(Map<String, dynamic>? media, Map
 
 bool _hasHdr10PlusHint(Iterable<Object?> values) {
   final text = values.whereType<Object>().join(' ');
-  return RegExp(r'hdr[\\s._-]*10[\\s._-]*(?:\\+|plus)', caseSensitive: false).hasMatch(text);
+  return RegExp(r'hdr[\s._-]*10[\s._-]*(?:\+|plus)', caseSensitive: false).hasMatch(text);
 }
 
 Set<String> _mediaDisplayHintTokens(Map<String, dynamic> media, Map? part) {
