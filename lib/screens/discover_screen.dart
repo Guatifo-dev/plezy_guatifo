@@ -3,7 +3,6 @@ import '../media/ids.dart';
 import 'dart:io' show Platform;
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:plezy/widgets/app_icon.dart';
@@ -134,8 +133,6 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   final ValueNotifier<int> _heroIndex = ValueNotifier<int>(0);
   final Map<String, ({MediaItem item, MediaSourceInfo? source, int mediaIndex})> _heroFormatMetadata = {};
   final Set<String> _heroFormatMetadataRequests = {};
-  late final ValueListenable<bool> _heroFormatBadgesListenable =
-      SettingsService.instance.listenable(SettingsService.showHeroFormatBadges);
 
   /// Discover hub rows can omit stream details. Probe the same cached source
   /// metadata used by the detail screen, so the hero reports the server-selected
@@ -289,7 +286,6 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   }
 
   Widget? _buildTvSpotlightFormatMetadata(MediaItem? item) {
-    if (!SettingsService.instance.read(SettingsService.showHeroFormatBadges)) return null;
     if (item == null || item.kind != MediaKind.movie) return null;
     if (item is PlexMediaItem && item.subtype == 'clip') return null;
     final metadata = _heroFormatMetadata[item.globalKey];
@@ -308,7 +304,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       runSpacing: 6,
       children: [
         if (resolution != null) _buildHeroFormatBadge(resolution, isTv: true),
-        ..._buildHeroAudioFormatBadges(audio, isTv: true),
+        if (audio != null) _buildHeroFormatBadge(audio, isTv: true),
         if (hasDolbyVision) _buildHeroFormatBadge('DOLBY VISION', isTv: true),
         if (hasHdr10Plus) _buildHeroFormatBadge('HDR10+', isTv: true),
         if (hasHdr) _buildHeroFormatBadge('HDR', isTv: true),
@@ -839,7 +835,6 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   @override
   void initState() {
     super.initState();
-    _heroFormatBadgesListenable.addListener(_onHeroFormatBadgesChanged);
     WidgetsBinding.instance.addObserver(this);
     _heroFocusNode = FocusNode(debugLabel: 'hero_section');
     _heroFocusNode.addListener(_onHeroFocusChanged);
@@ -854,10 +849,6 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     _updateHubKeys();
     unawaited(_discover.load());
     _startAutoScroll();
-  }
-
-  void _onHeroFormatBadgesChanged() {
-    if (mounted) setState(() {});
   }
 
   /// Mirror provider changes into this state's UI concerns: rebuild, apply
@@ -967,7 +958,6 @@ class _DiscoverScreenState extends State<DiscoverScreen>
 
   @override
   void dispose() {
-    _heroFormatBadgesListenable.removeListener(_onHeroFormatBadgesChanged);
     _discover.removeListener(_onDiscoverChanged);
     _librariesProvider.removeListener(_onCatalogLibrariesChanged);
     _hiddenLibrariesProvider.removeListener(_onCatalogLibrariesChanged);
@@ -1950,430 +1940,22 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     (stream) => stream.kind == MediaStreamKind.video && stream.dolbyVision,
   );
 
-  List<Widget> _buildHeroAudioFormatBadges(String? label, {required bool isTv}) {
-    if (label == null || label.trim().isEmpty) return const [];
-    final hasAtmos = RegExp(r'\batmos\b', caseSensitive: false).hasMatch(label);
-    final detail = label
-        .replaceAll(RegExp(r'\bDolby\s+Atmos\b', caseSensitive: false), '')
-        .replaceAll(RegExp(r'\bAtmos\b', caseSensitive: false), '')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
-    return [
-      if (hasAtmos) _buildHeroFormatBadge('DOLBY ATMOS', isTv: isTv),
-      if (detail.isNotEmpty) _buildHeroFormatBadge(detail, isTv: isTv),
-    ];
-  }
-
   Widget _buildHeroFormatBadge(String label, {required bool isTv}) {
-    final upper = label.toUpperCase();
-    final Color background;
-    final Color foreground;
-    if (upper.contains('DOLBY VISION')) {
-      background = const Color(0xFF080A08);
-      foreground = const Color(0xFFC7E66B);
-    } else if (upper.contains('DOLBY ATMOS')) {
-      background = const Color(0xFF101010);
-      foreground = const Color(0xFFF4F4F4);
-    } else if (upper.contains('HDR10+')) {
-      background = const Color(0xFF29200B);
-      foreground = const Color(0xFFFFD66B);
-    } else if (upper == 'HDR') {
-      background = const Color(0xFF4B2C0C);
-      foreground = const Color(0xFFFFC078);
-    } else if (upper.contains('DTS')) {
-      background = const Color(0xFF102B49);
-      foreground = const Color(0xFF9AD8FF);
-    } else if (upper.contains('TRUEHD')) {
-      background = const Color(0xFF302044);
-      foreground = const Color(0xFFE0C3FF);
-    } else if (RegExp(r'^(?:4K|8K|2160P|1440P|1080P|720P|576P|480P)$').hasMatch(upper)) {
-      background = const Color(0xFF123746);
-      foreground = const Color(0xFFB5E9F8);
-    } else {
-      background = const Color(0xFF25282D);
-      foreground = const Color(0xFFF0F1F2);
-    }
+    final color = Theme.of(context).colorScheme.onSurface;
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: isTv ? 10 : 8, vertical: isTv ? 5 : 3),
+      padding: EdgeInsets.symmetric(horizontal: isTv ? 9 : 7, vertical: isTv ? 4 : 3),
       decoration: BoxDecoration(
-        color: background,
-        border: Border.all(color: foreground.withValues(alpha: 0.72), width: 0.9),
-        borderRadius: BorderRadius.circular(5),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.22), blurRadius: 5, offset: const Offset(0, 2))],
+        color: color.withValues(alpha: 0.13),
+        border: Border.all(color: color.withValues(alpha: 0.48), width: 0.8),
+        borderRadius: BorderRadius.circular(4),
       ),
       child: Text(
         label,
         style: TextStyle(
-          color: foreground,
+          color: color,
           fontSize: isTv ? 13 : 10,
-          fontWeight: FontWeight.w900,
-          letterSpacing: upper.startsWith('DOLBY') ? 0.65 : 0.3,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeroItem(MediaItem heroItem, double heroHeight) {
-    final heroClient = _getMediaClientForItem(heroItem);
-    final isEpisode = heroItem.isEpisode;
-    final showName = heroItem.grandparentTitle ?? heroItem.displayTitle;
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final isLargeScreen = ScreenBreakpoints.isWideTabletOrLarger(screenWidth);
-    final isTv = PlatformDetector.isTV();
-    final alignLeft = isTv || isLargeScreen;
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    // A landscape phone hands the hero its whole ~400dp viewport, and a short
-    // portrait one its capped height; the usual logo and bottom offset would
-    // push the content up into the top bar.
-    final compact = !isTv && heroHeight < 450;
-    final heroLogoWidth = isTv ? TvLayoutConstants.heroLogoWidth : 400.0;
-    final heroLogoHeight = isTv
-        ? TvLayoutConstants.heroLogoHeight
-        : compact
-        ? 80.0
-        : 120.0;
-    final heroTitleStyle = theme.textTheme.displaySmall?.copyWith(
-      color: colorScheme.onSurface,
-      fontWeight: .bold,
-      fontSize: isTv ? 52 : null,
-      shadows: [Shadow(color: colorScheme.surface.withValues(alpha: 0.8), blurRadius: 8)],
-    );
-
-    final contentTypeLabel = heroItem.isMovie ? t.discover.movie : t.discover.tvShow;
-
-    final hideSpoilers = SettingsService.instance.read(SettingsService.hideSpoilers);
-    final shouldHideSpoiler = hideSpoilers && heroItem.shouldHideSpoiler;
-
-    final heroLabel = isEpisode ? "${heroItem.grandparentTitle}, ${heroItem.title}" : heroItem.title;
-    final isPlexClip = heroItem is PlexMediaItem && heroItem.subtype == 'clip';
-    final showHeroFormatBadges = SettingsService.instance.read(SettingsService.showHeroFormatBadges);
-    final isMovieForFormatBadges = showHeroFormatBadges && heroItem.kind == MediaKind.movie && !isPlexClip;
-    final formatMetadata = _heroFormatMetadata[heroItem.globalKey];
-    final formatItem = formatMetadata?.item ?? heroItem;
-    final formatVersionIndex = formatMetadata?.mediaIndex ?? 0;
-    final videoLabels = isMovieForFormatBadges
-        ? buildMediaVideoLabels(formatItem, versionIndex: formatVersionIndex)
-        : const <String>[];
-    final resolutionBadge = videoLabels.where((label) =>
-        RegExp(r'^(?:4K|8K|2160p|1440p|1080p|720p|576p|480p)$', caseSensitive: false).hasMatch(label.trim()),
-      ).firstOrNull;
-    final audioFormatBadge = isMovieForFormatBadges
-        ? _heroMovieAudioBadge(formatItem, formatMetadata?.source)
-        : null;
-    final hasHdr10Plus = isMovieForFormatBadges && _heroMovieHasHdr10Plus(formatItem, formatVersionIndex);
-    final hasDolbyVision = isMovieForFormatBadges && _heroMovieHasDolbyVision(formatItem, formatVersionIndex);
-    final hasHdr = isMovieForFormatBadges && videoLabels.contains('HDR') && !hasHdr10Plus && !hasDolbyVision;
-    final hasBasicMetadata = heroItem.year != null || heroItem.contentRating != null || heroItem.rating != null;
-
-    return Semantics(
-      label: heroLabel,
-      button: true,
-      hint: t.accessibility.tapToPlay,
-      child: ClickableCursor(
-        child: GestureDetector(
-          // The artwork lives in the shared backdrop below the PageView, so
-          // the page itself must claim taps on its empty area.
-          behavior: HitTestBehavior.opaque,
-          onTap: () {
-            appLogger.d('Activating hero item: ${heroItem.title}');
-            navigateToMediaItem(context, heroItem, playDirectly: true);
-          },
-          child: Stack(
-            fit: StackFit.expand,
-            clipBehavior: Clip.none,
-            children: [
-              // Content with responsive alignment. Compact trims the offset
-              // but still clears the page indicator row (bottom 16, ~18 tall)
-              // that sits over every handheld hero.
-              Positioned(
-                bottom: isTv
-                    ? 88
-                    : compact
-                    ? 44
-                    : isLargeScreen
-                    ? 80
-                    : 50,
-                left: 0,
-                right: isTv
-                    ? screenWidth * 0.36
-                    : isLargeScreen
-                    ? 200
-                    : 0,
-                // Horizontal-only SafeArea: the PageView artwork behind stays
-                // full-bleed; the foreground text/buttons clear the landscape
-                // notch. Vertical placement is handled by `bottom` above.
-                child: SafeArea(
-                  top: false,
-                  bottom: false,
-                  child: Padding(
-                    padding: .symmetric(
-                      horizontal: isTv
-                          ? TvLayoutConstants.horizontalInset
-                          : isLargeScreen
-                          ? 40
-                          : 24,
-                    ),
-                    child: Align(
-                      alignment: alignLeft ? Alignment.centerLeft : Alignment.center,
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          maxWidth: isTv ? TvLayoutConstants.heroContentMaxWidth : double.infinity,
-                        ),
-                        child: Column(
-                          crossAxisAlignment: alignLeft ? CrossAxisAlignment.start : CrossAxisAlignment.center,
-                          mainAxisSize: .min,
-                          children: [
-                            // Show logo, falling back to the name/title. The
-                            // logo keeps its slot; the title gets a wider one.
-                            LayoutBuilder(
-                              builder: (context, constraints) => ClearLogoImage(
-                                client: heroClient,
-                                logoPath: heroItem.clearLogoPath,
-                                width: math.min(heroLogoWidth, constraints.maxWidth),
-                                height: heroLogoHeight,
-                                fallbackWidth: ClearLogoImage.fallbackWidthFor(
-                                  logoWidth: heroLogoWidth,
-                                  available: constraints.maxWidth,
-                                ),
-                                alignment: alignLeft ? Alignment.bottomLeft : Alignment.bottomCenter,
-                                // The hero scrim washes artwork toward the scaffold
-                                // background; light themes recolor light-toned logos.
-                                logoToneTarget: logoToneTargetFor(
-                                  surface: theme.scaffoldBackgroundColor,
-                                  foreground: colorScheme.onSurface,
-                                ),
-                                fallbackBuilder: (context) => FittingTitleText(
-                                  showName,
-                                  style: heroTitleStyle,
-                                  textAlign: alignLeft ? TextAlign.left : TextAlign.center,
-                                  alignment: alignLeft ? Alignment.centerLeft : Alignment.center,
-                                ),
-                              ),
-                            ),
-
-                            // Basic metadata and compact format wordmarks. The latter
-                            // are deliberately movie-only; episodes may differ by file.
-                            if (hasBasicMetadata || resolutionBadge != null || audioFormatBadge != null || hasHdr10Plus || hasDolbyVision || hasHdr) ...[
-                              const SizedBox(height: 16),
-                              Wrap(
-                                alignment: alignLeft ? WrapAlignment.start : WrapAlignment.center,
-                                crossAxisAlignment: WrapCrossAlignment.center,
-                                spacing: 8,
-                                runSpacing: 6,
-                                children: [
-                                  if (hasBasicMetadata)
-                                    Text(
-                                      [
-                                        contentTypeLabel,
-                                        if (heroItem.rating != null) '★ ${formatRating(heroItem.rating!)}',
-                                        if (heroItem.contentRating != null) formatContentRating(heroItem.contentRating!),
-                                        if (heroItem.year != null) heroItem.year.toString(),
-                                      ].join(' • '),
-                                      style: TextStyle(
-                                        color: colorScheme.onSurface,
-                                        fontSize: isTv ? 18 : 14,
-                                        fontWeight: .w600,
-                                      ),
-                                    ),
-                                  if (resolutionBadge != null) _buildHeroFormatBadge(resolutionBadge, isTv: isTv),
-                                  ..._buildHeroAudioFormatBadges(audioFormatBadge, isTv: isTv),
-                                  if (hasDolbyVision) _buildHeroFormatBadge('DOLBY VISION', isTv: isTv),
-                                  if (hasHdr10Plus) _buildHeroFormatBadge('HDR10+', isTv: isTv),
-                                  if (hasHdr) _buildHeroFormatBadge('HDR', isTv: isTv),
-                                ],
-                              ),
-                            ],
-
-                            if (!alignLeft) ...[const SizedBox(height: 20), _buildSmartPlayButton(heroItem)],
-
-                            if (heroItem.summary != null && !shouldHideSpoiler) ...[
-                              const SizedBox(height: 12),
-                              RichText(
-                                maxLines: isTv ? 3 : 2,
-                                overflow: .ellipsis,
-                                textAlign: alignLeft ? TextAlign.left : TextAlign.center,
-                                text: TextSpan(
-                                  style: TextStyle(
-                                    color: colorScheme.onSurface.withValues(alpha: 0.7),
-                                    fontSize: isTv ? 18 : 14,
-                                    height: isTv ? 1.45 : 1.4,
-                                  ),
-                                  children: [
-                                    if (isEpisode && heroItem.parentIndex != null && heroItem.index != null)
-                                      TextSpan(
-                                        text: 'S${heroItem.parentIndex}, E${heroItem.index}: ',
-                                        style: TextStyle(fontWeight: .bold, color: colorScheme.onSurface),
-                                      ),
-                                    TextSpan(
-                                      text: heroItem.summary?.isNotEmpty == true
-                                          ? heroItem.summary!
-                                          : t.messages.noDescriptionAvailable,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ] else if (shouldHideSpoiler &&
-                                isEpisode &&
-                                heroItem.parentIndex != null &&
-                                heroItem.index != null) ...[
-                              const SizedBox(height: 12),
-                              Text(
-                                'S${heroItem.parentIndex}, E${heroItem.index}: ${heroItem.title}',
-                                maxLines: 2,
-                                overflow: .ellipsis,
-                                textAlign: alignLeft ? TextAlign.left : TextAlign.center,
-                                style: TextStyle(
-                                  color: colorScheme.onSurface.withValues(alpha: 0.7),
-                                  fontSize: isTv ? 18 : 14,
-                                  height: isTv ? 1.45 : 1.4,
-                                ),
-                              ),
-                            ],
-
-                            if (alignLeft) ...[SizedBox(height: isTv ? 28 : 20), _buildSmartPlayButton(heroItem)],
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSmartPlayButton(MediaItem rawHeroItem) {
-    return Builder(
-      builder: (context) {
-        // The on-deck snapshot refetches shortly after a watch event; the store
-        // patch bridges the gap so "minutes left" never lags.
-        final heroItem = context.withFreshWatchState(rawHeroItem);
-        final hasProgress = heroItem.hasActiveProgress;
-        final isTv = PlatformDetector.isTV();
-
-        final minutesLeft = hasProgress ? ((heroItem.durationMs! - heroItem.viewOffsetMs!) / 60_000).round() : 0;
-
-        final progress = hasProgress ? heroItem.viewOffsetMs! / heroItem.durationMs! : 0.0;
-
-        return ListenableBuilder(
-          listenable: _heroFocusNode,
-          builder: (context, _) {
-            final showFocus = isTv && _heroFocusNode.hasFocus && InputModeTracker.isKeyboardMode(context);
-            final colorScheme = Theme.of(context).colorScheme;
-            final backgroundColor = showFocus ? colorScheme.primary : Colors.white;
-            final foregroundColor = showFocus ? colorScheme.onPrimary : Colors.black;
-            return InkWell(
-              onTap: () {
-                appLogger.d('Playing: ${heroItem.title}');
-                navigateToVideoPlayer(context, metadata: heroItem);
-              },
-              borderRadius: BorderRadius.all(Radius.circular(isTv ? 32 : 24)),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 150),
-                curve: Curves.easeOutCubic,
-                padding: .symmetric(horizontal: isTv ? 34 : 24, vertical: isTv ? 16 : 12),
-                decoration: BoxDecoration(
-                  color: backgroundColor,
-                  borderRadius: BorderRadius.all(Radius.circular(isTv ? 32 : 24)),
-                  boxShadow: showFocus
-                      ? [BoxShadow(color: colorScheme.primary.withValues(alpha: 0.35), blurRadius: 28, spreadRadius: 4)]
-                      : null,
-                ),
-                child: Row(
-                  mainAxisSize: .min,
-                  children: [
-                    AppIcon(Symbols.play_arrow_rounded, fill: 1, size: isTv ? 28 : 20, color: foregroundColor),
-                    SizedBox(width: isTv ? 12 : 8),
-                    if (hasProgress) ...[
-                      // Progress bar
-                      Container(
-                        width: isTv ? 56 : 40,
-                        height: isTv ? 8 : 6,
-                        decoration: BoxDecoration(
-                          color: foregroundColor.withValues(alpha: 0.25),
-                          borderRadius: BorderRadius.all(Radius.circular(isTv ? 4 : 3)),
-                        ),
-                        child: FractionallySizedBox(
-                          alignment: .centerLeft,
-                          widthFactor: progress,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: foregroundColor,
-                              borderRadius: BorderRadius.all(Radius.circular(isTv ? 3 : 2)),
-                            ),
-                          ),
-                        ),
-                      ),
-                      SizedBox(width: isTv ? 12 : 8),
-                      Text(
-                        t.discover.minutesLeft(minutes: minutesLeft),
-                        style: TextStyle(
-                          color: foregroundColor,
-                          fontSize: isTv ? 18 : 14,
-                          fontWeight: isTv ? FontWeight.w700 : FontWeight.w600,
-                        ),
-                      ),
-                    ] else
-                      Text(
-                        t.common.play,
-                        style: TextStyle(
-                          color: foregroundColor,
-                          fontSize: isTv ? 18 : 14,
-                          fontWeight: isTv ? FontWeight.w700 : FontWeight.w600,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-}
-
-
-/// One source library contributing a segment to a combined Discover catalog.
-class _DiscoverCatalogSource {
-  final MediaLibrary library;
-  final MediaServerClient client;
-  final int totalCount;
-  final List<MediaItem> previewItems;
-
-  const _DiscoverCatalogSource({
-    required this.library,
-    required this.client,
-    required this.totalCount,
-    required this.previewItems,
-  });
-}
-).hasMatch(upper)) {
-      background = const Color(0xFF123746);
-      foreground = const Color(0xFFB5E9F8);
-    } else {
-      background = const Color(0xFF25282D);
-      foreground = const Color(0xFFF0F1F2);
-    }
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: isTv ? 10 : 8, vertical: isTv ? 5 : 3),
-      decoration: BoxDecoration(
-        color: background,
-        border: Border.all(color: foreground.withValues(alpha: 0.72), width: 0.9),
-        borderRadius: BorderRadius.circular(5),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.22), blurRadius: 5, offset: const Offset(0, 2))],
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: foreground,
-          fontSize: isTv ? 13 : 10,
-          fontWeight: FontWeight.w900,
-          letterSpacing: upper.startsWith('DOLBY') ? 0.65 : 0.3,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.35,
         ),
       ),
     );
