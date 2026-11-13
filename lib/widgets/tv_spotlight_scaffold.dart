@@ -70,6 +70,7 @@ class TvSpotlightScaffold extends StatelessWidget {
     required this.resolveClient,
     required this.foreground,
     this.hideSpoilers,
+    this.metadataBelowBuilder,
   });
 
   final List<MediaHub> hubs;
@@ -78,6 +79,7 @@ class TvSpotlightScaffold extends StatelessWidget {
   final TvSpotlightClientResolver resolveClient;
   final Widget foreground;
   final bool? hideSpoilers;
+  final Widget? Function(MediaItem?)? metadataBelowBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -140,6 +142,7 @@ class TvSpotlightScaffold extends StatelessWidget {
                         contentLeft: spotlightLeft + foregroundLeft,
                         targetWidthPx: (size.width * MediaQuery.devicePixelRatioOf(context)).ceil(),
                         allowTrailerPreview: spotlightPreviewActive,
+                        metadataBelow: metadataBelowBuilder?.call(spotlight),
                       );
                     },
                   ),
@@ -166,6 +169,7 @@ class _CatalogSpotlightBackground extends StatefulWidget {
     required this.contentLeft,
     required this.targetWidthPx,
     required this.allowTrailerPreview,
+    this.metadataBelow,
   });
 
   final MediaItem? item;
@@ -176,6 +180,7 @@ class _CatalogSpotlightBackground extends StatefulWidget {
   final double contentLeft;
   final int targetWidthPx;
   final bool allowTrailerPreview;
+  final Widget? metadataBelow;
 
   @override
   State<_CatalogSpotlightBackground> createState() => _CatalogSpotlightBackgroundState();
@@ -271,6 +276,7 @@ class _CatalogSpotlightBackgroundState extends State<_CatalogSpotlightBackground
       compact: true,
       allowTrailerPreview: widget.allowTrailerPreview,
       metadataTrailing: _buildNextEpisodeMetadata(context),
+      metadataBelow: widget.metadataBelow,
     );
     if (accentColor == null) return background;
     return Theme(
