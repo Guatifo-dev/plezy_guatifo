@@ -1942,7 +1942,8 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     final shouldHideSpoiler = hideSpoilers && heroItem.shouldHideSpoiler;
 
     final heroLabel = isEpisode ? "${heroItem.grandparentTitle}, ${heroItem.title}" : heroItem.title;
-    final isMovieForFormatBadges = heroItem.kind == MediaKind.movie && heroItem.subtype != 'clip';
+    final isPlexClip = heroItem is PlexMediaItem && heroItem.subtype == 'clip';
+    final isMovieForFormatBadges = heroItem.kind == MediaKind.movie && !isPlexClip;
     final audioFormatBadge = isMovieForFormatBadges ? _heroMovieAudioBadge(heroItem) : null;
     final hasHdr10Plus = isMovieForFormatBadges && _heroMovieHasHdr10Plus(heroItem);
     final hasDolbyVision = isMovieForFormatBadges && _heroMovieHasDolbyVision(heroItem);
