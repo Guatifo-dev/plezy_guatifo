@@ -519,7 +519,9 @@
     "plexTrailerPreview": "Play Plex trailers automatically",
     "plexTrailerPreviewDescription": "After a short pause, play the selected movie or series trailer in the corner artwork area (Android TV only)",
     "plexTrailerPreviewAudio": "Trailer preview audio",
-    "plexTrailerPreviewAudioDescription": "Play trailer sound in the corner preview"
+    "plexTrailerPreviewAudioDescription": "Play trailer sound in the corner preview",
+    "showHeroFormatBadges": "Show audio and video format badges",
+    "showHeroFormatBadgesDescription": "Display resolution, HDR, Dolby Vision and audio formats on movie highlights"
   },
   "themeEditor": {
     "builtIn": "Built-in",

@@ -519,7 +519,9 @@
     "plexTrailerPreview": "Reproducir tráileres de Plex automáticamente",
     "plexTrailerPreviewDescription": "Tras una breve pausa, reproduce el tráiler de la película o serie seleccionada en el espacio de la imagen de la esquina (solo Android TV)",
     "plexTrailerPreviewAudio": "Sonido de los tráileres",
-    "plexTrailerPreviewAudioDescription": "Reproducir el sonido del tráiler en la vista previa de la esquina"
+    "plexTrailerPreviewAudioDescription": "Reproducir el sonido del tráiler en la vista previa de la esquina",
+    "showHeroFormatBadges": "Mostrar distintivos de audio y vídeo",
+    "showHeroFormatBadgesDescription": "Mostrar resolución, HDR, Dolby Vision y formatos de audio en las películas destacadas"
   },
   "themeEditor": {
     "builtIn": "Integrados",

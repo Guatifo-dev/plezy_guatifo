@@ -35,6 +35,9 @@ jobs:
       - name: Install dependencies
         run: flutter pub get --enforce-lockfile --no-example
 
+      - name: Generate localized strings
+        run: dart run slang
+
       - name: Configure persistent release signing
         env:
           PLEZY_KEYSTORE_BASE64: ${{ secrets.PLEZY_KEYSTORE_BASE64 }}

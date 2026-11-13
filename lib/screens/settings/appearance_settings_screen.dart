@@ -70,6 +70,12 @@ class AppearanceSettingsScreen extends StatelessWidget {
                 subtitle: t.settings.showSeasonPostersOnTabsDescription,
               ),
             SettingSwitchTile(
+              pref: SettingsService.showHeroFormatBadges,
+              icon: Symbols.high_quality_rounded,
+              title: t.settings.showHeroFormatBadges,
+              subtitle: t.settings.showHeroFormatBadgesDescription,
+            ),
+            SettingSwitchTile(
               pref: SettingsService.hideSpoilers,
               icon: Symbols.visibility_off_rounded,
               title: t.settings.hideSpoilers,

@@ -1025,6 +1025,7 @@ class SettingsService extends BaseSharedPreferencesService {
   static const tvCornerSpotlightBackdrop = BoolPref('tv_corner_spotlight_backdrop', defaultValue: true);
   static const plexTrailerPreview = BoolPref('plex_trailer_preview', defaultValue: true);
   static const plexTrailerPreviewAudio = BoolPref('plex_trailer_preview_audio', defaultValue: true);
+  static const showHeroFormatBadges = BoolPref('show_hero_format_badges', defaultValue: true);
   static const episodePosterMode = _EpisodePosterModePref();
   static const continueWatchingAction = EnumPref<ContinueWatchingAction>(
     'continue_watching_action',
