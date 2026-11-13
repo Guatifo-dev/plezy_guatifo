@@ -3,6 +3,7 @@ import '../media/ids.dart';
 import 'dart:io' show Platform;
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:plezy/widgets/app_icon.dart';
@@ -1985,7 +1986,32 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     } else if (upper.contains('TRUEHD')) {
       background = const Color(0xFF302044);
       foreground = const Color(0xFFE0C3FF);
-    } else if (RegExp(r'^(4K|8K|2160P|1440P|1080P|720P|576P|480P)
+    } else if (RegExp(r'^(?:4K|8K|2160P|1440P|1080P|720P|576P|480P)$').hasMatch(upper)) {
+      background = const Color(0xFF123746);
+      foreground = const Color(0xFFB5E9F8);
+    } else {
+      background = const Color(0xFF25282D);
+      foreground = const Color(0xFFF0F1F2);
+    }
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: isTv ? 10 : 8, vertical: isTv ? 5 : 3),
+      decoration: BoxDecoration(
+        color: background,
+        border: Border.all(color: foreground.withValues(alpha: 0.72), width: 0.9),
+        borderRadius: BorderRadius.circular(5),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.22), blurRadius: 5, offset: const Offset(0, 2))],
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: foreground,
+          fontSize: isTv ? 13 : 10,
+          fontWeight: FontWeight.w900,
+          letterSpacing: upper.startsWith('DOLBY') ? 0.65 : 0.3,
+        ),
+      ),
+    );
+  }
 
   Widget _buildHeroItem(MediaItem heroItem, double heroHeight) {
     final heroClient = _getMediaClientForItem(heroItem);
