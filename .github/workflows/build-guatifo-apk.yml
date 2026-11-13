@@ -35,10 +35,27 @@ jobs:
       - name: Install dependencies
         run: flutter pub get --enforce-lockfile --no-example
 
-      - name: Build release APK (debug-signed for private installation)
+      - name: Configure persistent release signing
+        env:
+          PLEZY_KEYSTORE_BASE64: ${{ secrets.PLEZY_KEYSTORE_BASE64 }}
+          PLEZY_KEYSTORE_PASSWORD: ${{ secrets.PLEZY_KEYSTORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$PLEZY_KEYSTORE_BASE64" || { echo "::error::Missing PLEZY_KEYSTORE_BASE64 secret"; exit 1; }
+          test -n "$PLEZY_KEYSTORE_PASSWORD" || { echo "::error::Missing PLEZY_KEYSTORE_PASSWORD secret"; exit 1; }
+          umask 077
+          printf '%s' "$PLEZY_KEYSTORE_BASE64" | base64 --decode > android/plezy-guatifo-release.jks
+          cat > android/key.properties <<EOF
+          storePassword=$PLEZY_KEYSTORE_PASSWORD
+          keyPassword=$PLEZY_KEYSTORE_PASSWORD
+          keyAlias=plezy-guatifo
+          storeFile=plezy-guatifo-release.jks
+          EOF
+
+      - name: Build release APK (persistent signing)
         env:
           GUA_ARM32: "1"
-        run: flutter build apk --release --target-platform android-arm --dart-define=GIT_COMMIT=${{ github.sha }}
+        run: flutter build apk --release --target-platform android-arm --build-number="$((160 + GITHUB_RUN_NUMBER))" --dart-define=GIT_COMMIT=${{ github.sha }}
 
       - name: Publish APK artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

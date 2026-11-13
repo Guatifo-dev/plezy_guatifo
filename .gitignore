@@ -75,3 +75,7 @@ maestro/**/*.png
 
 server/deploy.sh
 server/Caddyfile
+
+# Android release signing material (never commit)
+/android/key.properties
+/android/plezy-guatifo-release.jks

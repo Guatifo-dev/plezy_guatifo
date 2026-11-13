@@ -361,7 +361,7 @@ android {
 
   buildTypes {
     release {
-      // Only use release signing if key.properties exists (not in CI/CD)
+      // Use the persistent release key whenever local/CI signing properties are present.
       val keystorePropertiesFile = rootProject.file("key.properties")
       if (keystorePropertiesFile.exists()) {
         signingConfig = signingConfigs.getByName("release")
