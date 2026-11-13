@@ -23,10 +23,12 @@ import '../media/media_kind.dart';
 import '../media/media_library.dart';
 import '../media/media_stream.dart';
 import '../media/media_server_client.dart';
+import '../media/media_source_info.dart';
 import '../media/media_hub.dart';
 import '../utils/media_image_helper.dart';
 import '../utils/content_utils.dart';
 import '../utils/codec_utils.dart';
+import '../utils/media_quality_labels.dart';
 import '../widgets/cycling_media_backdrop.dart';
 import '../widgets/hero_carousel_backdrop.dart';
 import '../widgets/optimized_media_image.dart' show ClearLogoImage, OptimizedMediaImage, blurArtwork;
@@ -50,6 +52,8 @@ import '../profiles/profile.dart';
 import '../profiles/profile_activation.dart';
 import '../profiles/profile_avatar.dart';
 import '../services/settings_service.dart';
+import '../services/playback_track_preview.dart';
+import '../providers/account_preferences_controller.dart';
 import '../widgets/settings_builder.dart';
 import '../widgets/fitting_title_text.dart';
 import '../widgets/tv_browse_rail.dart';
@@ -128,29 +132,37 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   final PageController _heroController = PageController();
   final ScrollController _scrollController = ScrollController();
   final ValueNotifier<int> _heroIndex = ValueNotifier<int>(0);
-  final Map<String, MediaItem> _heroFormatMetadata = {};
+  final Map<String, ({MediaItem item, MediaSourceInfo? source, int mediaIndex})> _heroFormatMetadata = {};
   final Set<String> _heroFormatMetadataRequests = {};
 
-  /// Hub rows are intentionally lightweight on some Plex server versions and
-  /// may omit embedded media streams. Fetch the full item metadata once for a
-  /// focused movie so format badges use the actual selected/default tracks.
+  /// Discover hub rows can omit stream details. Probe the same cached source
+  /// metadata used by the detail screen, so the hero reports the server-selected
+  /// audio track and matching media version. This read-only lookup never starts
+  /// playback or a transcode.
   void _ensureHeroFormatMetadata(MediaItem item) {
     if (item.kind != MediaKind.movie) return;
     if (item is PlexMediaItem && item.subtype == 'clip') return;
-    if (_heroMovieStreams(item).isNotEmpty) return;
 
     final key = item.globalKey;
     if (_heroFormatMetadata.containsKey(key) || !_heroFormatMetadataRequests.add(key)) return;
 
     Future<void>(() async {
       try {
-        final client = _getMediaClientForItem(item);
+        final client = context.tryGetMediaClientWithFallback(serverIdOrNull(item.serverId));
         if (client == null) return;
-        final detailedItem = await client.fetchItem(item.id);
-        if (!mounted || detailedItem == null) return;
-        if (_heroMovieStreams(detailedItem).isNotEmpty) {
-          setState(() => _heroFormatMetadata[key] = detailedItem);
-        }
+        final fetched = await client.fetchItem(item.id);
+        if (!mounted || fetched == null) return;
+        final detailedItem = fetched.copyWith(
+          serverId: item.serverId ?? fetched.serverId,
+          serverName: item.serverName ?? fetched.serverName,
+        );
+        final source = await client.fetchCachedMediaSourceInfo(detailedItem.id);
+        if (!mounted) return;
+        setState(() => _heroFormatMetadata[key] = (
+          item: detailedItem,
+          source: source,
+          mediaIndex: source?.mediaIndex ?? 0,
+        ));
       } catch (error, stackTrace) {
         appLogger.w('Unable to load hero movie format metadata', error: error, stackTrace: stackTrace);
       } finally {
@@ -1869,54 +1881,32 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     );
   }
 
-  /// Streams are already included in Plex movie hub metadata. Use the
-  /// first server-preferred version and its embedded stream flags; never fetch
-  /// each focused hero item just to paint these small badges.
-  List<MediaStream> _heroMovieStreams(MediaItem item) {
+  List<MediaStream> _heroMovieStreams(MediaItem item, int versionIndex) {
     final versions = item.mediaVersions;
-    if (versions == null || versions.isEmpty) return const [];
-    for (final part in versions.first.parts) {
+    if (versions == null || versionIndex < 0 || versionIndex >= versions.length) return const [];
+    for (final part in versions[versionIndex].parts) {
       if (part.streams.isNotEmpty) return part.streams;
     }
     return const [];
   }
 
-  String? _heroMovieAudioBadge(MediaItem item) {
-    final audio = _heroMovieStreams(item).where((stream) => stream.kind == MediaStreamKind.audio).toList();
-    MediaStream? selected;
-    for (final stream in audio) {
-      if (stream.selected) {
-        selected = stream;
-        break;
-      }
-    }
-    if (selected == null) {
-      for (final stream in audio) {
-        if (stream.isDefault) {
-          selected = stream;
-          break;
-        }
-      }
-    }
-    if (selected == null) return null;
-
-    final description = [
-      selected.profile,
-      selected.displayTitle,
-      selected.title,
-    ].whereType<String>().join(' ');
-    if (RegExp(r'\batmos\b', caseSensitive: false).hasMatch(description)) return 'Dolby Atmos';
-
-    final codec = selected.codec?.trim();
-    if (codec == null || codec.isEmpty) return null;
-    return CodecUtils.formatAudioCodec(codec, profile: selected.profile);
+  String? _heroMovieAudioBadge(MediaItem item, MediaSourceInfo? source) {
+    if (source == null) return null;
+    final preview = previewPlaybackTracks(
+      item,
+      source,
+      profile: context.read<AccountPreferencesController?>()?.activePreferences,
+    );
+    final label = preview?.audio?.label;
+    if (label == null) return null;
+    return [label.primary, label.secondary].whereType<String>().where((value) => value.isNotEmpty).join(' ');
   }
 
-  bool _heroMovieHasHdr10Plus(MediaItem item) => _heroMovieStreams(item).any(
+  bool _heroMovieHasHdr10Plus(MediaItem item, int versionIndex) => _heroMovieStreams(item, versionIndex).any(
     (stream) => stream.kind == MediaStreamKind.video && stream.hdr10Plus,
   );
 
-  bool _heroMovieHasDolbyVision(MediaItem item) => _heroMovieStreams(item).any(
+  bool _heroMovieHasDolbyVision(MediaItem item, int versionIndex) => _heroMovieStreams(item, versionIndex).any(
     (stream) => stream.kind == MediaStreamKind.video && stream.dolbyVision,
   );
 
@@ -1976,10 +1966,18 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     final heroLabel = isEpisode ? "${heroItem.grandparentTitle}, ${heroItem.title}" : heroItem.title;
     final isPlexClip = heroItem is PlexMediaItem && heroItem.subtype == 'clip';
     final isMovieForFormatBadges = heroItem.kind == MediaKind.movie && !isPlexClip;
-    final formatItem = _heroFormatMetadata[heroItem.globalKey] ?? heroItem;
-    final audioFormatBadge = isMovieForFormatBadges ? _heroMovieAudioBadge(formatItem) : null;
-    final hasHdr10Plus = isMovieForFormatBadges && _heroMovieHasHdr10Plus(formatItem);
-    final hasDolbyVision = isMovieForFormatBadges && _heroMovieHasDolbyVision(formatItem);
+    final formatMetadata = _heroFormatMetadata[heroItem.globalKey];
+    final formatItem = formatMetadata?.item ?? heroItem;
+    final formatVersionIndex = formatMetadata?.mediaIndex ?? 0;
+    final videoLabels = isMovieForFormatBadges
+        ? buildMediaVideoLabels(formatItem, versionIndex: formatVersionIndex)
+        : const <String>[];
+    final resolutionBadge = videoLabels.isNotEmpty ? videoLabels.first : null;
+    final audioFormatBadge = isMovieForFormatBadges
+        ? _heroMovieAudioBadge(formatItem, formatMetadata?.source)
+        : null;
+    final hasHdr10Plus = isMovieForFormatBadges && _heroMovieHasHdr10Plus(formatItem, formatVersionIndex);
+    final hasDolbyVision = isMovieForFormatBadges && _heroMovieHasDolbyVision(formatItem, formatVersionIndex);
     final hasBasicMetadata = heroItem.year != null || heroItem.contentRating != null || heroItem.rating != null;
 
     return Semantics(
@@ -2070,7 +2068,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
 
                             // Basic metadata and compact format wordmarks. The latter
                             // are deliberately movie-only; episodes may differ by file.
-                            if (hasBasicMetadata || audioFormatBadge != null || hasHdr10Plus || hasDolbyVision) ...[
+                            if (hasBasicMetadata || resolutionBadge != null || audioFormatBadge != null || hasHdr10Plus || hasDolbyVision) ...[
                               const SizedBox(height: 16),
                               Wrap(
                                 alignment: alignLeft ? WrapAlignment.start : WrapAlignment.center,
@@ -2092,6 +2090,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                                         fontWeight: .w600,
                                       ),
                                     ),
+                                  if (resolutionBadge != null) _buildHeroFormatBadge(resolutionBadge, isTv: isTv),
                                   if (audioFormatBadge != null) _buildHeroFormatBadge(audioFormatBadge, isTv: isTv),
                                   if (hasDolbyVision) _buildHeroFormatBadge('DOLBY VISION', isTv: isTv),
                                   if (hasHdr10Plus) _buildHeroFormatBadge('HDR10+', isTv: isTv),
