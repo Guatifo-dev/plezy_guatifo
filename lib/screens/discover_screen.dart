@@ -27,7 +27,6 @@ import '../media/media_source_info.dart';
 import '../media/media_hub.dart';
 import '../utils/media_image_helper.dart';
 import '../utils/content_utils.dart';
-import '../utils/codec_utils.dart';
 import '../utils/media_quality_labels.dart';
 import '../widgets/cycling_media_backdrop.dart';
 import '../widgets/hero_carousel_backdrop.dart';
