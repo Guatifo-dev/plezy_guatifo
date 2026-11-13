@@ -39,6 +39,7 @@ class TvSpotlightBackground extends StatelessWidget {
 
   /// Optional caller-owned fact appended to the existing metadata line.
   final Widget? metadataTrailing;
+  final Widget? metadataBelow;
 
   const TvSpotlightBackground({
     super.key,
@@ -54,6 +55,7 @@ class TvSpotlightBackground extends StatelessWidget {
     this.allowNetwork = true,
     this.allowTrailerPreview = true,
     this.metadataTrailing,
+    this.metadataBelow,
   });
 
   double _scale(BuildContext context) => TvLayoutConstants.scaleOf(context);
@@ -261,6 +263,10 @@ class TvSpotlightBackground extends StatelessWidget {
         _buildLogoOrTitle(context, media, title, width),
         SizedBox(height: _sectionGap(scale)),
         _buildMetadataLine(context, media),
+        if (metadataBelow != null) ...[
+          SizedBox(height: _sectionGap(scale) * 0.65),
+          metadataBelow!,
+        ],
         if (summary != null && summary.isNotEmpty) ...[
           SizedBox(height: _sectionGap(scale)),
           Text(
