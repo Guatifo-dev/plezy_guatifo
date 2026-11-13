@@ -1974,11 +1974,6 @@ class _DiscoverScreenState extends State<DiscoverScreen>
         : const <String>[];
     final resolutionBadge = videoLabels.where((label) =>
         RegExp(r'^(?:4K|8K|2160p|1440p|1080p|720p|576p|480p)
-    final audioFormatBadge = isMovieForFormatBadges
-        ? _heroMovieAudioBadge(formatItem, formatMetadata?.source)
-        : null;
-    final hasHdr10Plus = isMovieForFormatBadges && _heroMovieHasHdr10Plus(formatItem, formatVersionIndex);
-    final hasDolbyVision = isMovieForFormatBadges && _heroMovieHasDolbyVision(formatItem, formatVersionIndex);
     final hasBasicMetadata = heroItem.year != null || heroItem.contentRating != null || heroItem.rating != null;
 
     return Semantics(
@@ -2363,7 +2358,7 @@ class _DiscoverCatalogSource {
 
                             // Basic metadata and compact format wordmarks. The latter
                             // are deliberately movie-only; episodes may differ by file.
-                            if (hasBasicMetadata || resolutionBadge != null || audioFormatBadge != null || hasHdr10Plus || hasDolbyVision) ...[
+                            if (hasBasicMetadata || audioFormatBadge != null || hasHdr10Plus || hasDolbyVision) ...[
                               const SizedBox(height: 16),
                               Wrap(
                                 alignment: alignLeft ? WrapAlignment.start : WrapAlignment.center,
@@ -2385,7 +2380,6 @@ class _DiscoverCatalogSource {
                                         fontWeight: .w600,
                                       ),
                                     ),
-                                  if (resolutionBadge != null) _buildHeroFormatBadge(resolutionBadge, isTv: isTv),
                                   if (audioFormatBadge != null) _buildHeroFormatBadge(audioFormatBadge, isTv: isTv),
                                   if (hasDolbyVision) _buildHeroFormatBadge('DOLBY VISION', isTv: isTv),
                                   if (hasHdr10Plus) _buildHeroFormatBadge('HDR10+', isTv: isTv),
