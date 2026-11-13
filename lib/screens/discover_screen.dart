@@ -128,6 +128,36 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   final PageController _heroController = PageController();
   final ScrollController _scrollController = ScrollController();
   final ValueNotifier<int> _heroIndex = ValueNotifier<int>(0);
+  final Map<String, MediaItem> _heroFormatMetadata = {};
+  final Set<String> _heroFormatMetadataRequests = {};
+
+  /// Hub rows are intentionally lightweight on some Plex server versions and
+  /// may omit embedded media streams. Fetch the full item metadata once for a
+  /// focused movie so format badges use the actual selected/default tracks.
+  void _ensureHeroFormatMetadata(MediaItem item) {
+    if (item.kind != MediaKind.movie) return;
+    if (item is PlexMediaItem && item.subtype == 'clip') return;
+    if (_heroMovieStreams(item).isNotEmpty) return;
+
+    final key = item.globalKey;
+    if (_heroFormatMetadata.containsKey(key) || !_heroFormatMetadataRequests.add(key)) return;
+
+    Future<void>(() async {
+      try {
+        final client = _getMediaClientForItem(item);
+        if (client == null) return;
+        final detailedItem = await client.fetchItem(item.id);
+        if (!mounted || detailedItem == null) return;
+        if (_heroMovieStreams(detailedItem).isNotEmpty) {
+          setState(() => _heroFormatMetadata[key] = detailedItem);
+        }
+      } catch (error, stackTrace) {
+        appLogger.w('Unable to load hero movie format metadata', error: error, stackTrace: stackTrace);
+      } finally {
+        _heroFormatMetadataRequests.remove(key);
+      }
+    });
+  }
   Timer? _autoScrollTimer;
   Timer? _indicatorTimer;
   final ValueNotifier<double> _indicatorProgress = ValueNotifier(0.0);
@@ -1635,7 +1665,9 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                   }
                 },
                 itemBuilder: (context, index) {
-                  return _buildHeroItem(_onDeck[index], heroHeight);
+                  final item = _onDeck[index];
+                  if (index == _heroIndex.value) _ensureHeroFormatMetadata(item);
+                  return _buildHeroItem(item, heroHeight);
                 },
               ),
               // Page indicators with animated progress and pause/play button.
@@ -1944,9 +1976,10 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     final heroLabel = isEpisode ? "${heroItem.grandparentTitle}, ${heroItem.title}" : heroItem.title;
     final isPlexClip = heroItem is PlexMediaItem && heroItem.subtype == 'clip';
     final isMovieForFormatBadges = heroItem.kind == MediaKind.movie && !isPlexClip;
-    final audioFormatBadge = isMovieForFormatBadges ? _heroMovieAudioBadge(heroItem) : null;
-    final hasHdr10Plus = isMovieForFormatBadges && _heroMovieHasHdr10Plus(heroItem);
-    final hasDolbyVision = isMovieForFormatBadges && _heroMovieHasDolbyVision(heroItem);
+    final formatItem = _heroFormatMetadata[heroItem.globalKey] ?? heroItem;
+    final audioFormatBadge = isMovieForFormatBadges ? _heroMovieAudioBadge(formatItem) : null;
+    final hasHdr10Plus = isMovieForFormatBadges && _heroMovieHasHdr10Plus(formatItem);
+    final hasDolbyVision = isMovieForFormatBadges && _heroMovieHasDolbyVision(formatItem);
     final hasBasicMetadata = heroItem.year != null || heroItem.contentRating != null || heroItem.rating != null;
 
     return Semantics(
