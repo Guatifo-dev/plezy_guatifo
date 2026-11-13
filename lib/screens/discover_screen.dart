@@ -1979,6 +1979,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
         : null;
     final hasHdr10Plus = isMovieForFormatBadges && _heroMovieHasHdr10Plus(formatItem, formatVersionIndex);
     final hasDolbyVision = isMovieForFormatBadges && _heroMovieHasDolbyVision(formatItem, formatVersionIndex);
+    final hasHdr = isMovieForFormatBadges && videoLabels.contains('HDR') && !hasHdr10Plus && !hasDolbyVision;
     final hasBasicMetadata = heroItem.year != null || heroItem.contentRating != null || heroItem.rating != null;
 
     return Semantics(
@@ -2069,7 +2070,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
 
                             // Basic metadata and compact format wordmarks. The latter
                             // are deliberately movie-only; episodes may differ by file.
-                            if (hasBasicMetadata || resolutionBadge != null || audioFormatBadge != null || hasHdr10Plus || hasDolbyVision) ...[
+                            if (hasBasicMetadata || resolutionBadge != null || audioFormatBadge != null || hasHdr10Plus || hasDolbyVision || hasHdr) ...[
                               const SizedBox(height: 16),
                               Wrap(
                                 alignment: alignLeft ? WrapAlignment.start : WrapAlignment.center,
@@ -2095,6 +2096,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                                   if (audioFormatBadge != null) _buildHeroFormatBadge(audioFormatBadge, isTv: isTv),
                                   if (hasDolbyVision) _buildHeroFormatBadge('DOLBY VISION', isTv: isTv),
                                   if (hasHdr10Plus) _buildHeroFormatBadge('HDR10+', isTv: isTv),
+                                  if (hasHdr) _buildHeroFormatBadge('HDR', isTv: isTv),
                                 ],
                               ),
                             ],
