@@ -78,4 +78,4 @@ server/Caddyfile
 
 # Android release signing material (never commit)
 /android/key.properties
-/android/plezy-guatifo-release.jks
+/android/app/plezy-guatifo-release.jks

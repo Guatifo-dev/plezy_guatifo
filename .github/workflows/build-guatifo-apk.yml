@@ -44,7 +44,7 @@ jobs:
           test -n "$PLEZY_KEYSTORE_BASE64" || { echo "::error::Missing PLEZY_KEYSTORE_BASE64 secret"; exit 1; }
           test -n "$PLEZY_KEYSTORE_PASSWORD" || { echo "::error::Missing PLEZY_KEYSTORE_PASSWORD secret"; exit 1; }
           umask 077
-          printf '%s' "$PLEZY_KEYSTORE_BASE64" | base64 --decode > android/plezy-guatifo-release.jks
+          printf '%s' "$PLEZY_KEYSTORE_BASE64" | base64 --decode > android/app/plezy-guatifo-release.jks
           cat > android/key.properties <<EOF
           storePassword=$PLEZY_KEYSTORE_PASSWORD
           keyPassword=$PLEZY_KEYSTORE_PASSWORD
