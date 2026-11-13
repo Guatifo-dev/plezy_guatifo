@@ -13,6 +13,12 @@ class MediaStream {
   final String? title;
   final String? displayTitle;
 
+  /// Codec profile reported by the server (e.g. DTS-HD MA or Dolby Atmos).
+  final String? profile;
+
+  /// Explicit HDR10+ signal, distinct from generic HDR and Dolby Vision.
+  final bool hdr10Plus;
+
   /// The server's current pick for this user (Plex `selected`, Jellyfin's
   /// default-stream index). Distinct from [isDefault]: Plex marks the
   /// container's default track separately, and the player's selection ladder
@@ -48,6 +54,8 @@ class MediaStream {
     this.languageCode,
     this.title,
     this.displayTitle,
+    this.profile,
+    this.hdr10Plus = false,
     this.selected = false,
     this.isDefault = false,
     this.channels,

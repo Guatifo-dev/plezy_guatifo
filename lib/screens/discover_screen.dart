@@ -21,10 +21,12 @@ import '../media/media_item.dart';
 import '../media/media_item_types.dart';
 import '../media/media_kind.dart';
 import '../media/media_library.dart';
+import '../media/media_stream.dart';
 import '../media/media_server_client.dart';
 import '../media/media_hub.dart';
 import '../utils/media_image_helper.dart';
 import '../utils/content_utils.dart';
+import '../utils/codec_utils.dart';
 import '../widgets/cycling_media_backdrop.dart';
 import '../widgets/hero_carousel_backdrop.dart';
 import '../widgets/optimized_media_image.dart' show ClearLogoImage, OptimizedMediaImage, blurArtwork;
@@ -1835,6 +1837,78 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     );
   }
 
+  /// Streams are already included in Plex movie hub metadata. Use the
+  /// first server-preferred version and its embedded stream flags; never fetch
+  /// each focused hero item just to paint these small badges.
+  List<MediaStream> _heroMovieStreams(MediaItem item) {
+    final versions = item.mediaVersions;
+    if (versions == null || versions.isEmpty) return const [];
+    for (final part in versions.first.parts) {
+      if (part.streams.isNotEmpty) return part.streams;
+    }
+    return const [];
+  }
+
+  String? _heroMovieAudioBadge(MediaItem item) {
+    final audio = _heroMovieStreams(item).where((stream) => stream.kind == MediaStreamKind.audio).toList();
+    MediaStream? selected;
+    for (final stream in audio) {
+      if (stream.selected) {
+        selected = stream;
+        break;
+      }
+    }
+    if (selected == null) {
+      for (final stream in audio) {
+        if (stream.isDefault) {
+          selected = stream;
+          break;
+        }
+      }
+    }
+    if (selected == null) return null;
+
+    final description = [
+      selected.profile,
+      selected.displayTitle,
+      selected.title,
+    ].whereType<String>().join(' ');
+    if (RegExp(r'\\batmos\\b', caseSensitive: false).hasMatch(description)) return 'Dolby Atmos';
+
+    final codec = selected.codec?.trim();
+    if (codec == null || codec.isEmpty) return null;
+    return CodecUtils.formatAudioCodec(codec, profile: selected.profile);
+  }
+
+  bool _heroMovieHasHdr10Plus(MediaItem item) => _heroMovieStreams(item).any(
+    (stream) => stream.kind == MediaStreamKind.video && stream.hdr10Plus,
+  );
+
+  bool _heroMovieHasDolbyVision(MediaItem item) => _heroMovieStreams(item).any(
+    (stream) => stream.kind == MediaStreamKind.video && stream.dolbyVision,
+  );
+
+  Widget _buildHeroFormatBadge(String label, {required bool isTv}) {
+    final color = Theme.of(context).colorScheme.onSurface;
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: isTv ? 9 : 7, vertical: isTv ? 4 : 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.13),
+        border: Border.all(color: color.withValues(alpha: 0.48), width: 0.8),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: isTv ? 13 : 10,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.35,
+        ),
+      ),
+    );
+  }
+
   Widget _buildHeroItem(MediaItem heroItem, double heroHeight) {
     final heroClient = _getMediaClientForItem(heroItem);
     final isEpisode = heroItem.isEpisode;
@@ -1868,6 +1942,11 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     final shouldHideSpoiler = hideSpoilers && heroItem.shouldHideSpoiler;
 
     final heroLabel = isEpisode ? "${heroItem.grandparentTitle}, ${heroItem.title}" : heroItem.title;
+    final isMovieForFormatBadges = heroItem.kind == MediaKind.movie && heroItem.subtype != 'clip';
+    final audioFormatBadge = isMovieForFormatBadges ? _heroMovieAudioBadge(heroItem) : null;
+    final hasHdr10Plus = isMovieForFormatBadges && _heroMovieHasHdr10Plus(heroItem);
+    final hasDolbyVision = isMovieForFormatBadges && _heroMovieHasDolbyVision(heroItem);
+    final hasBasicMetadata = heroItem.year != null || heroItem.contentRating != null || heroItem.rating != null;
 
     return Semantics(
       label: heroLabel,
@@ -1955,22 +2034,34 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                               ),
                             ),
 
-                            // Metadata as dot-separated text with content type
-                            if (heroItem.year != null || heroItem.contentRating != null || heroItem.rating != null) ...[
+                            // Basic metadata and compact format wordmarks. The latter
+                            // are deliberately movie-only; episodes may differ by file.
+                            if (hasBasicMetadata || audioFormatBadge != null || hasHdr10Plus || hasDolbyVision) ...[
                               const SizedBox(height: 16),
-                              Text(
-                                [
-                                  contentTypeLabel,
-                                  if (heroItem.rating != null) '★ ${formatRating(heroItem.rating!)}',
-                                  if (heroItem.contentRating != null) formatContentRating(heroItem.contentRating!),
-                                  if (heroItem.year != null) heroItem.year.toString(),
-                                ].join(' • '),
-                                style: TextStyle(
-                                  color: colorScheme.onSurface,
-                                  fontSize: isTv ? 18 : 14,
-                                  fontWeight: .w600,
-                                ),
-                                textAlign: alignLeft ? TextAlign.left : TextAlign.center,
+                              Wrap(
+                                alignment: alignLeft ? WrapAlignment.start : WrapAlignment.center,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                spacing: 8,
+                                runSpacing: 6,
+                                children: [
+                                  if (hasBasicMetadata)
+                                    Text(
+                                      [
+                                        contentTypeLabel,
+                                        if (heroItem.rating != null) '★ ${formatRating(heroItem.rating!)}',
+                                        if (heroItem.contentRating != null) formatContentRating(heroItem.contentRating!),
+                                        if (heroItem.year != null) heroItem.year.toString(),
+                                      ].join(' • '),
+                                      style: TextStyle(
+                                        color: colorScheme.onSurface,
+                                        fontSize: isTv ? 18 : 14,
+                                        fontWeight: .w600,
+                                      ),
+                                    ),
+                                  if (audioFormatBadge != null) _buildHeroFormatBadge(audioFormatBadge, isTv: isTv),
+                                  if (hasDolbyVision) _buildHeroFormatBadge('DOLBY VISION', isTv: isTv),
+                                  if (hasHdr10Plus) _buildHeroFormatBadge('HDR10+', isTv: isTv),
+                                ],
                               ),
                             ],
 

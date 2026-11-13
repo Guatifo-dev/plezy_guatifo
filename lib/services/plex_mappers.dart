@@ -116,7 +116,21 @@ List<MediaStream> _mediaStreamsFromPlexPart(Object? raw, {Map<String, dynamic>? 
 
     final criteria = kind == MediaStreamKind.video ? PlexMappers.displayCriteriaFromJson(media, stream) : null;
     final isDolbyVision = kind == MediaStreamKind.video && _isDolbyVisionStream(stream);
-    final isHdr = criteria?.isHdr == true || isDolbyVision;
+    final isHdr10Plus = kind == MediaStreamKind.video &&
+        (flexibleBool(stream['hdr10PlusPresentFlag']) ||
+            flexibleBool(stream['HDR10PlusPresentFlag']) ||
+            flexibleBool(stream['hdr10Plus']) ||
+            _hasHdr10PlusHint([
+              stream['displayTitle'],
+              stream['extendedDisplayTitle'],
+              stream['title'],
+              stream['profile'],
+              media?['videoProfile'],
+              media?['displayTitle'],
+              media?['extendedDisplayTitle'],
+              part?['file'],
+            ]));
+    final isHdr = criteria?.isHdr == true || isDolbyVision || isHdr10Plus;
     final doviProfile = isDolbyVision ? flexibleInt(stream['DOVIProfile']) : null;
 
     result.add(
@@ -129,6 +143,8 @@ List<MediaStream> _mediaStreamsFromPlexPart(Object? raw, {Map<String, dynamic>? 
         languageCode: stream['languageCode']?.toString(),
         title: stream['title']?.toString(),
         displayTitle: stream['displayTitle']?.toString() ?? stream['extendedDisplayTitle']?.toString(),
+        profile: stream['profile']?.toString(),
+        hdr10Plus: isHdr10Plus,
         selected: flexibleBool(stream['selected']),
         isDefault: flexibleBool(stream['default']),
         channels: flexibleInt(stream['channels']),
@@ -153,9 +169,16 @@ List<MediaStream> _fallbackStreamsFromPlexMedia(Map<String, dynamic>? media, Map
 
   final result = <MediaStream>[];
   final displayHints = _mediaDisplayHintTokens(media, part);
+  final hasHdr10Plus = _hasHdr10PlusHint([
+    media['videoProfile'],
+    media['displayTitle'],
+    media['extendedDisplayTitle'],
+    part?['file'],
+  ]);
   final hasDolbyVision =
       displayHints.contains('dv') || displayHints.contains('dovi') || displayHints.contains('dolbyvision');
   final hasHdr =
+      hasHdr10Plus ||
       hasDolbyVision ||
       displayHints.contains('hdr') ||
       displayHints.contains('hdr10') ||
@@ -169,6 +192,7 @@ List<MediaStream> _fallbackStreamsFromPlexMedia(Map<String, dynamic>? media, Map
         kind: MediaStreamKind.video,
         codec: media['videoCodec']?.toString(),
         hdr: hasHdr,
+        hdr10Plus: hasHdr10Plus,
         dolbyVision: hasDolbyVision,
       ),
     );
@@ -189,6 +213,11 @@ List<MediaStream> _fallbackStreamsFromPlexMedia(Map<String, dynamic>? media, Map
   }
 
   return result;
+}
+
+bool _hasHdr10PlusHint(Iterable<Object?> values) {
+  final text = values.whereType<Object>().join(' ');
+  return RegExp(r'hdr[\\s._-]*10[\\s._-]*(?:\\+|plus)', caseSensitive: false).hasMatch(text);
 }
 
 Set<String> _mediaDisplayHintTokens(Map<String, dynamic> media, Map? part) {
