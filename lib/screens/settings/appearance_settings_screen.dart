@@ -146,6 +146,8 @@ class AppearanceSettingsScreen extends StatelessWidget {
               title: t.settings.showAllMySeriesDiscover,
               subtitle: t.settings.showAllMySeriesDiscoverDescription,
             ),
+            _discoverCatalogSortSelector(movies: true),
+            _discoverCatalogSortSelector(movies: false),
             _continueWatchingActionSelector(),
             _episodeActionSelector(),
             SettingSwitchTile(
@@ -338,6 +340,18 @@ class AppearanceSettingsScreen extends StatelessWidget {
       ButtonSegment(value: EpisodePosterMode.seriesPoster, label: Text(t.settings.seriesPoster)),
       ButtonSegment(value: EpisodePosterMode.seasonPoster, label: Text(t.settings.seasonPoster)),
       ButtonSegment(value: EpisodePosterMode.episodeThumbnail, label: Text(t.settings.episodeThumbnail)),
+    ],
+  );
+
+  Widget _discoverCatalogSortSelector({required bool movies}) => SettingSegmentedTile<DiscoverCatalogSort>(
+    pref: movies ? SettingsService.discoverMoviesSort : SettingsService.discoverSeriesSort,
+    icon: Symbols.sort_rounded,
+    title: movies ? t.settings.discoverMoviesSort : t.settings.discoverSeriesSort,
+    segments: [
+      ButtonSegment(value: DiscoverCatalogSort.original, label: Text(t.settings.discoverSortOriginal)),
+      ButtonSegment(value: DiscoverCatalogSort.dateAdded, label: Text(t.settings.discoverSortDateAdded)),
+      ButtonSegment(value: DiscoverCatalogSort.releaseDate, label: Text(t.settings.discoverSortReleaseDate)),
+      ButtonSegment(value: DiscoverCatalogSort.title, label: Text(t.settings.discoverSortTitle)),
     ],
   );
 
