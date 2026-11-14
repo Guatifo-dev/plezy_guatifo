@@ -103,7 +103,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   List<MediaHub> _catalogHubs = const [];
   Map<String, LibraryPageLoader<MediaItem>> _catalogPageLoaders = {};
   List<MediaHub>? _combinedHubsCache;
-  (List<MediaHub>, List<MediaHub>)? _combinedHubsCacheKey;
+  (List<MediaHub>, List<MediaHub>, bool, bool)? _combinedHubsCacheKey;
   late final LibrariesProvider _librariesProvider;
   late final HiddenLibrariesProvider _hiddenLibrariesProvider;
   String? _catalogLibrariesSignature;
@@ -111,7 +111,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   int _catalogLoadGeneration = 0;
 
   List<MediaHub> get _hubs {
-    final key = (_discover.hubs, _catalogHubs);
+    final key = (_discover.hubs, _catalogHubs, SettingsService.instance.read(SettingsService.showAllMyMoviesDiscover), SettingsService.instance.read(SettingsService.showAllMySeriesDiscover));
     if (_combinedHubsCache != null && key == _combinedHubsCacheKey) return _combinedHubsCache!;
     _combinedHubsCacheKey = key;
     // Plex may return collection shelves alongside ordinary movie/show hubs.
@@ -120,7 +120,13 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     final mediaHubs = _discover.hubs.where((hub) =>
         hub.type.toLowerCase() != MediaKind.collection.id &&
         hub.items.every((item) => item.kind != MediaKind.collection));
-    return _combinedHubsCache = [...mediaHubs, ..._catalogHubs];
+    return _combinedHubsCache = [
+      ...mediaHubs,
+      for (final hub in _catalogHubs)
+        if ((hub.id != 'discover.all.movie' || SettingsService.instance.read(SettingsService.showAllMyMoviesDiscover)) &&
+            (hub.id != 'discover.all.show' || SettingsService.instance.read(SettingsService.showAllMySeriesDiscover)))
+          hub,
+    ];
   }
   bool get _hasMoreContinueWatching => _discover.hasMoreContinueWatching;
   bool get _isLoading => _discover.isLoading;
@@ -580,7 +586,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       nextHubs.add(MediaHub(
         id: hubId,
         identifier: hubId,
-        title: kind == MediaKind.movie ? 'Todas las Películas' : 'Todas las Series',
+        title: kind == MediaKind.movie ? 'Todas mis Películas' : 'Todas mis Series',
         type: kind.id,
         size: totalCount,
         // The complete catalog is appended to this horizontal shelf in the
@@ -1428,6 +1434,8 @@ class _DiscoverScreenState extends State<DiscoverScreen>
         SettingsService.showHeroSection,
         SettingsService.hideSpoilers,
         SettingsService.showHeroFormatBadges,
+        SettingsService.showAllMyMoviesDiscover,
+        SettingsService.showAllMySeriesDiscover,
         SettingsService.libraryDensity,
         SettingsService.episodePosterMode,
       ],
