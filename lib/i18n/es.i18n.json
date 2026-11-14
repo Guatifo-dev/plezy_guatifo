@@ -525,7 +525,13 @@
     "showAllMyMoviesDiscover": "Mostrar «Todas mis Películas»",
     "showAllMyMoviesDiscoverDescription": "Mostrar u ocultar el apartado Todas mis Películas en Discover",
     "showAllMySeriesDiscover": "Mostrar «Todas mis Series»",
-    "showAllMySeriesDiscoverDescription": "Mostrar u ocultar el apartado Todas mis Series en Discover"
+    "showAllMySeriesDiscoverDescription": "Mostrar u ocultar el apartado Todas mis Series en Discover",
+    "discoverMoviesSort": "Ordenar Todas mis Películas",
+    "discoverSeriesSort": "Ordenar Todas mis Series",
+    "discoverSortOriginal": "Orden actual",
+    "discoverSortDateAdded": "Fecha de agregado",
+    "discoverSortReleaseDate": "Fecha de estreno",
+    "discoverSortTitle": "Título A-Z"
   },
   "themeEditor": {
     "builtIn": "Integrados",
