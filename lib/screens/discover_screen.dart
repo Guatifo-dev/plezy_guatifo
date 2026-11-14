@@ -301,6 +301,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       dolbyVision: _heroMovieHasDolbyVision(formatItem, versionIndex),
       hdr10Plus: _heroMovieHasHdr10Plus(formatItem, versionIndex),
       hdr10: _heroMovieHasHdr10(formatItem, versionIndex),
+      spanishForced: _heroHasSelectedSpanishForcedSubtitle(formatItem, metadata.source),
     );
   }
 
@@ -1950,6 +1951,22 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     return null;
   }
 
+  bool _heroHasSelectedSpanishForcedSubtitle(MediaItem item, MediaSourceInfo? source) {
+    if (source == null) return false;
+    final preview = previewPlaybackTracks(
+      item,
+      source,
+      profile: context.read<AccountPreferencesController?>()?.activePreferences,
+    );
+    final subtitle = preview?.subtitle;
+    if (subtitle == null || !subtitle.forced) return false;
+    final language = [
+      subtitle.languageCode,
+      subtitle.language,
+    ].whereType<String>().join(' ').toLowerCase();
+    return RegExp(r'(^|[^a-z])(es|es-es|spa|spanish|español|espanol|castellano)([^a-z]|$)').hasMatch(language);
+  }
+
   bool _heroMovieHasHdr10(MediaItem item, int versionIndex) =>
       _heroMovieStreams(item, versionIndex).any((stream) {
         if (stream.kind != MediaStreamKind.video || stream.dolbyVision || stream.hdr10Plus) return false;
@@ -1967,6 +1984,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       'Dolby Atmos' => const Color(0xFF12DCEB),
       'Dolby TrueHD' => const Color(0xFF24BFFF),
       'DTS:X' => const Color(0xFFFF9A28),
+      'FORZADO' => const Color(0xFFE85D49),
       _ => const Color(0xFFFFAA3B),
     };
     final fontSize = isTv ? 13.0 : 10.0;
@@ -1984,7 +2002,14 @@ class _DiscoverScreenState extends State<DiscoverScreen>
         borderRadius: BorderRadius.circular(isTv ? 7 : 5),
         boxShadow: [BoxShadow(color: color.withValues(alpha: 0.22), blurRadius: 5)],
       ),
-      child: Text(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (label == 'FORZADO') ...[
+            Text('🇪🇸', style: TextStyle(fontSize: isTv ? 16 : 12, height: 1)),
+            const SizedBox(width: 5),
+          ],
+          Text(
         label,
         maxLines: 1,
         softWrap: false,
@@ -1995,6 +2020,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
           letterSpacing: -0.2,
           height: 1,
         ),
+        ],
       ),
     );
   }
@@ -2006,6 +2032,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     required bool dolbyVision,
     required bool hdr10Plus,
     required bool hdr10,
+    required bool spanishForced,
   }) {
     final labels = <String>[
       if (is4K) '4K UHD',
@@ -2013,6 +2040,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       if (hdr10Plus) 'HDR10+',
       if (hdr10) 'HDR10',
       if (_heroAudioLogoName(audio) case final String audioLabel) audioLabel,
+      if (spanishForced) 'FORZADO',
     ];
     if (labels.isEmpty) return null;
     return FittedBox(
@@ -2080,6 +2108,8 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     final hasHdr10Plus = isMovieForFormatBadges && _heroMovieHasHdr10Plus(formatItem, formatVersionIndex);
     final hasDolbyVision = isMovieForFormatBadges && _heroMovieHasDolbyVision(formatItem, formatVersionIndex);
     final hasHdr10 = isMovieForFormatBadges && _heroMovieHasHdr10(formatItem, formatVersionIndex);
+    final hasSpanishForcedSubtitle = isMovieForFormatBadges &&
+        _heroHasSelectedSpanishForcedSubtitle(formatItem, formatMetadata?.source);
     final formatLogoLine = isMovieForFormatBadges
         ? _buildHeroLogoLine(
             isTv: isTv,
@@ -2088,6 +2118,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
             dolbyVision: hasDolbyVision,
             hdr10Plus: hasHdr10Plus,
             hdr10: hasHdr10,
+            spanishForced: hasSpanishForcedSubtitle,
           )
         : null;
     final hasBasicMetadata = heroItem.year != null || heroItem.contentRating != null || heroItem.rating != null;
