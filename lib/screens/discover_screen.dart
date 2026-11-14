@@ -213,6 +213,56 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   bool _isAutoScrollPaused = false;
   bool _heroFocusPausedAutoScroll = false;
   final TvSpotlightController _spotlight = TvSpotlightController();
+
+  // A Plex recently-added hub may carry a partial show record, unlike the
+  // library catalog. Hydrate only focused shows and cache the full metadata.
+  final Map<String, MediaItem> _recentShowDetails = {};
+  final Set<String> _recentShowPending = {};
+  final Set<String> _recentShowAttempted = {};
+
+  bool _isRecentlyAddedShow(MediaItem item) => item is PlexMediaItem &&
+      item.kind == MediaKind.show &&
+      _discover.hubs.any((hub) {
+        final identity = '${hub.identifier ?? hub.id} ${hub.title}'.toLowerCase();
+        return (identity.contains('recent') || identity.contains('reciente')) &&
+            hub.items.any((entry) => entry.globalKey == item.globalKey);
+      });
+
+  void _ensureRecentShowDetails(MediaItem item) {
+    if (!_isRecentlyAddedShow(item)) return;
+    final key = item.globalKey;
+    if (_recentShowDetails.containsKey(key) ||
+        _recentShowAttempted.contains(key) ||
+        !_recentShowPending.add(key)) return;
+    Future<void>(() async {
+      try {
+        final client = _getMediaClientForItem(item);
+        final fetched = await client?.fetchItem(item.id);
+        if (!mounted || fetched == null || fetched.kind != MediaKind.show) return;
+        final detailed = fetched.copyWith(
+          serverId: item.serverId ?? fetched.serverId,
+          serverName: item.serverName ?? fetched.serverName,
+          libraryId: fetched.libraryId ?? item.libraryId,
+        );
+        setState(() => _recentShowDetails[key] = detailed);
+      } catch (error, stackTrace) {
+        appLogger.w('Unable to load recently added series details',
+            error: error, stackTrace: stackTrace);
+      } finally {
+        _recentShowPending.remove(key);
+        _recentShowAttempted.add(key);
+      }
+    });
+  }
+
+  MediaItem? _resolveTvSpotlight(List<MediaHub> hubs) {
+    final item = _spotlight.resolve(hubs);
+    if (item == null) return null;
+    _ensureHeroFormatMetadata(item);
+    _ensureRecentShowDetails(item);
+    return _recentShowDetails[item.globalKey] ?? item;
+  }
+
   MediaItem? _synopsisPanelItem;
   final ScrollController _synopsisScrollController = ScrollController();
   late final FocusNode _synopsisFocusNode = FocusNode(debugLabel: 'discover_synopsis_panel');
@@ -321,6 +371,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   void _setSpotlightItem(MediaItem item) {
     _spotlight.select(item);
     _ensureHeroFormatMetadata(item);
+    _ensureRecentShowDetails(item);
   }
 
   Widget? _buildTvSpotlightFormatMetadata(MediaItem? item) {
@@ -345,6 +396,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   }
 
   void _openSynopsisPanel(MediaItem item) {
+    item = _recentShowDetails[item.globalKey] ?? item;
     debugPrint('[SynopsisDebug] Discover synopsis callback entered for ${item.displayTitle}; mounted=$mounted');
     if (!mounted) return;
     if (_synopsisScrollController.hasClients) _synopsisScrollController.jumpTo(0);
@@ -1669,7 +1721,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     return TvSpotlightScaffold(
       hubs: browseHubs,
       spotlightListenable: _spotlight,
-      resolveSpotlight: () { final item = _spotlight.resolve(browseHubs); if (item != null) _ensureHeroFormatMetadata(item); return item; },
+      resolveSpotlight: () => _resolveTvSpotlight(browseHubs),
       metadataBelowBuilder: _buildTvSpotlightFormatMetadata,
       resolveClient: _getMediaClientForItem,
       hideSpoilers: hideSpoilers,
