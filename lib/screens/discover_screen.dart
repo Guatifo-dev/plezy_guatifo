@@ -4,6 +4,7 @@ import 'dart:io' show Platform;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter/services.dart';
 import 'package:plezy/widgets/app_icon.dart';
 import '../widgets/server_activities_button.dart';
@@ -305,9 +306,9 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       runSpacing: 6,
       children: [
         if (resolution != null) _buildHeroFormatBadge(resolution, isTv: true),
-        if (audio != null) _buildHeroFormatBadge(audio, isTv: true),
-        if (hasDolbyVision) _buildHeroFormatBadge('DOLBY VISION', isTv: true),
-        if (hasHdr10Plus) _buildHeroFormatBadge('HDR10+', isTv: true),
+        if (audio != null) _buildHeroAudioFormatBadge(audio, isTv: true),
+        if (hasDolbyVision) _buildHeroFormatSymbolBadge('dolby_vision', isTv: true),
+        if (hasHdr10Plus) _buildHeroFormatSymbolBadge('hdr10plus', isTv: true),
         if (hasHdr) _buildHeroFormatBadge('HDR', isTv: true),
       ],
     );
@@ -1942,6 +1943,45 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     (stream) => stream.kind == MediaStreamKind.video && stream.dolbyVision,
   );
 
+  Widget _buildHeroAudioFormatBadge(String label, {required bool isTv}) {
+    final normalized = label.toUpperCase();
+    final symbol = normalized.contains('ATMOS')
+        ? 'dolby_atmos'
+        : (normalized.contains('DTS:X') || normalized.contains('DTS X'))
+            ? 'dtsx'
+            : normalized.contains('TRUEHD')
+                ? 'truehd'
+                : null;
+    if (symbol != null) return _buildHeroFormatSymbolBadge(symbol, isTv: isTv);
+    return _buildHeroFormatBadge(label, isTv: isTv);
+  }
+
+  Widget _buildHeroFormatSymbolBadge(String name, {required bool isTv}) {
+    const glowColors = <String, Color>{
+      'dolby_atmos': Color(0xFF36D7FF),
+      'truehd': Color(0xFFB66BFF),
+      'dtsx': Color(0xFFFFA64D),
+      'dolby_vision': Color(0xFFEE70C8),
+      'hdr10plus': Color(0xFF8DEB77),
+    };
+    final glow = glowColors[name] ?? Colors.white;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          boxShadow: [BoxShadow(color: glow.withValues(alpha: 0.24), blurRadius: isTv ? 13 : 9, spreadRadius: 1)],
+        ),
+        child: SvgPicture.asset(
+          'assets/format_badges/$name.svg',
+          width: isTv ? 48 : 36,
+          height: isTv ? 29 : 22,
+          fit: BoxFit.contain,
+          semanticsLabel: name.replaceAll('_', ' '),
+        ),
+      ),
+    );
+  }
+
   Widget _buildHeroFormatBadge(String label, {required bool isTv}) {
     final color = Theme.of(context).colorScheme.onSurface;
     return Container(
@@ -2128,9 +2168,9 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                                       ),
                                     ),
                                   if (resolutionBadge != null) _buildHeroFormatBadge(resolutionBadge, isTv: isTv),
-                                  if (audioFormatBadge != null) _buildHeroFormatBadge(audioFormatBadge, isTv: isTv),
-                                  if (hasDolbyVision) _buildHeroFormatBadge('DOLBY VISION', isTv: isTv),
-                                  if (hasHdr10Plus) _buildHeroFormatBadge('HDR10+', isTv: isTv),
+                                  if (audioFormatBadge != null) _buildHeroAudioFormatBadge(audioFormatBadge, isTv: isTv),
+                                  if (hasDolbyVision) _buildHeroFormatSymbolBadge('dolby_vision', isTv: isTv),
+                                  if (hasHdr10Plus) _buildHeroFormatSymbolBadge('hdr10plus', isTv: isTv),
                                   if (hasHdr) _buildHeroFormatBadge('HDR', isTv: isTv),
                                 ],
                               ),
