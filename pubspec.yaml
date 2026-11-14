@@ -181,6 +181,7 @@ flutter:
     - assets/player_icons/
     - assets/rating_icons/
     - assets/format_badges/
+    - assets/hero_badges/
     # App icon picker thumbnails; scripts/codegen/generate_app_icons.py renders them from
     # assets/app_icons/source, which stays out of the bundle.
     - assets/app_icons/previews/
