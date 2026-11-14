@@ -141,19 +141,14 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     if (sort == DiscoverCatalogSort.original) return hub;
     final items = List<MediaItem>.of(hub.items);
     int compare(MediaItem a, MediaItem b) {
-      switch (sort) {
-        case DiscoverCatalogSort.original:
-          return 0;
-        case DiscoverCatalogSort.dateAdded:
-          final date = (b.addedAt ?? 0).compareTo(a.addedAt ?? 0);
-          if (date != 0) return date;
-        case DiscoverCatalogSort.releaseDate:
-          final date = (b.originallyAvailableAt ?? '').compareTo(a.originallyAvailableAt ?? '');
-          if (date != 0) return date;
-          final year = (b.year ?? 0).compareTo(a.year ?? 0);
-          if (year != 0) return year;
-        case DiscoverCatalogSort.title:
-          break;
+      if (sort == DiscoverCatalogSort.dateAdded) {
+        final date = (b.addedAt ?? 0).compareTo(a.addedAt ?? 0);
+        if (date != 0) return date;
+      } else if (sort == DiscoverCatalogSort.releaseDate) {
+        final date = (b.originallyAvailableAt ?? '').compareTo(a.originallyAvailableAt ?? '');
+        if (date != 0) return date;
+        final year = (b.year ?? 0).compareTo(a.year ?? 0);
+        if (year != 0) return year;
       }
       final title = (a.titleSort ?? a.title ?? '').toLowerCase()
           .compareTo((b.titleSort ?? b.title ?? '').toLowerCase());
