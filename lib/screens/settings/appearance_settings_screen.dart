@@ -119,21 +119,36 @@ class AppearanceSettingsScreen extends StatelessWidget {
                 title: t.settings.plexTrailerPreview,
                 subtitle: t.settings.plexTrailerPreviewDescription,
               ),
-              SettingSelectionTile<TrailerPreviewDelay>(
-                pref: SettingsService.plexTrailerPreviewDelay,
-                icon: Symbols.timer_rounded,
-                title: t.settings.plexTrailerPreviewDelay,
-                subtitleBuilder: (v) => '${_trailerDelaySeconds(v)} s',
-                options: [
-                  for (final v in TrailerPreviewDelay.values)
-                    DialogOption(value: v, title: '${_trailerDelaySeconds(v)} s'),
-                ],
-              ),
-              SettingSwitchTile(
-                pref: SettingsService.plexTrailerPreviewAudio,
-                icon: Symbols.volume_up_rounded,
-                title: t.settings.plexTrailerPreviewAudio,
-                subtitle: t.settings.plexTrailerPreviewAudioDescription,
+              SettingValueBuilder<bool>(
+                pref: SettingsService.plexTrailerPreview,
+                builder: (context, enabled, _) => ExcludeFocus(
+                  excluding: !enabled,
+                  child: IgnorePointer(
+                    ignoring: !enabled,
+                    child: Opacity(
+                      opacity: enabled ? 1 : 0.45,
+                      child: Column(children: [
+                        SettingSelectionTile<TrailerPreviewDelay>(
+                          pref: SettingsService.plexTrailerPreviewDelay,
+                          icon: Symbols.timer_rounded,
+                          title: t.settings.plexTrailerPreviewDelay,
+                          subtitleBuilder: (v) => '${_trailerDelaySeconds(v)} s',
+                          options: [
+                            for (final v in TrailerPreviewDelay.values)
+                              DialogOption(value: v, title: '${_trailerDelaySeconds(v)} s'),
+                          ],
+                        ),
+                        SettingSwitchTile(
+                          pref: SettingsService.plexTrailerPreviewAudio,
+                          icon: Symbols.volume_up_rounded,
+                          title: t.settings.plexTrailerPreviewAudio,
+                          subtitle: t.settings.plexTrailerPreviewAudioDescription,
+                          enabled: enabled,
+                        ),
+                      ]),
+                    ),
+                  ),
+                ),
               ),
             if (PlatformDetector.isTV())
               SettingSwitchTile(
