@@ -297,6 +297,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     return _buildHeroLogoLine(
       isTv: true,
       is4K: _heroIs4K(videoLabels),
+      isFullHd: videoLabels.any((label) => RegExp(r'1080p|Full HD', caseSensitive: false).hasMatch(label)),
       audio: _heroMovieAudioBadge(formatItem, metadata.source),
       dolbyVision: _heroMovieHasDolbyVision(formatItem, versionIndex),
       hdr10Plus: _heroMovieHasHdr10Plus(formatItem, versionIndex),
@@ -1948,6 +1949,11 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       return 'DTS-HD Master Audio';
     }
     if (value.contains('TRUEHD') || value.contains('TRUE HD')) return 'Dolby TrueHD';
+    if (value.contains('EAC3') || value.contains('E-AC3') || value.contains('E AC3') || value.contains('DOLBY DIGITAL PLUS') || value.contains('DD+')) return 'Dolby Digital Plus 5.1';
+    if (value.contains('AC3') || value.contains('AC-3') || value.contains('DOLBY DIGITAL')) return 'Dolby Digital 5.1';
+    if (value.contains('DTS')) return 'DTS 5.1';
+    if (value.contains('AAC')) return 'AAC 5.1';
+    if (value.contains('STEREO') || value.contains('2.0')) return 'Stereo 2.0';
     return null;
   }
 
@@ -1976,59 +1982,37 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       });
 
   Widget _buildHeroStyledBadge(String label, {required bool isTv}) {
-    final color = switch (label) {
-      '4K UHD' => const Color(0xFFF1D523),
-      'Dolby Vision' => const Color(0xFFB75BFF),
-      'HDR10' => const Color(0xFFFFBD27),
-      'HDR10+' => const Color(0xFFFF3D80),
-      'Dolby Atmos' => const Color(0xFF12DCEB),
-      'Dolby TrueHD' => const Color(0xFF24BFFF),
-      'DTS:X' => const Color(0xFFFF9A28),
-      'FORZADO' => const Color(0xFFE85D49),
-      _ => const Color(0xFFFFAA3B),
+    final filename = switch (label) {
+      '4K UHD' => '4k_uhd.png',
+      'FULL HD' => 'full_hd.png',
+      'Dolby Vision' => 'dolby_vision.png',
+      'HDR10' => 'hdr10.png',
+      'HDR10+' => 'hdr10_plus.png',
+      'Dolby Atmos' => 'dolby_atmos.png',
+      'Dolby TrueHD' => 'dolby_truehd.png',
+      'DTS:X' => 'dts_x.png',
+      'DTS-HD Master Audio' => 'dts_hd_master_audio.png',
+      'Dolby Digital 5.1' => 'dolby_digital_5_1.png',
+      'Dolby Digital Plus 5.1' => 'dolby_digital_plus_5_1.png',
+      'DTS 5.1' => 'dts_5_1.png',
+      'AAC 5.1' => 'aac_5_1.png',
+      'Stereo 2.0' => 'stereo_2_0.png',
+      'FORZADO' => 'forzado_es.png',
+      _ => null,
     };
-    final fontSize = isTv ? 13.0 : 10.0;
-    return Container(
+    if (filename == null) return const SizedBox.shrink();
+    return Image.asset(
+      'assets/hero_badges/$filename',
       height: isTv ? 30 : 24,
-      padding: EdgeInsets.symmetric(horizontal: isTv ? 9 : 6),
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [color.withValues(alpha: 0.22), const Color(0xFF090C16)],
-        ),
-        border: Border.all(color: color, width: isTv ? 1.5 : 1.1),
-        borderRadius: BorderRadius.circular(isTv ? 7 : 5),
-        boxShadow: [BoxShadow(color: color.withValues(alpha: 0.22), blurRadius: 5)],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (label == 'FORZADO') ...[
-            Text('🇪🇸', style: TextStyle(fontSize: isTv ? 16 : 12, height: 1)),
-            const SizedBox(width: 5),
-          ],
-          Text(
-        label,
-        maxLines: 1,
-        softWrap: false,
-        style: TextStyle(
-          color: Colors.white,
-          fontSize: label == 'DTS-HD Master Audio' ? fontSize - 1 : fontSize,
-          fontWeight: FontWeight.w900,
-          letterSpacing: -0.2,
-          height: 1,
-        ),
-          ),
-        ],
-      ),
+      fit: BoxFit.contain,
+      filterQuality: FilterQuality.medium,
     );
   }
 
   Widget? _buildHeroLogoLine({
     required bool isTv,
     required bool is4K,
+    required bool isFullHd,
     required String? audio,
     required bool dolbyVision,
     required bool hdr10Plus,
@@ -2037,6 +2021,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   }) {
     final labels = <String>[
       if (is4K) '4K UHD',
+      if (!is4K && isFullHd) 'FULL HD',
       if (dolbyVision) 'Dolby Vision',
       if (hdr10Plus) 'HDR10+',
       if (hdr10) 'HDR10',
@@ -2115,6 +2100,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
         ? _buildHeroLogoLine(
             isTv: isTv,
             is4K: is4K,
+            isFullHd: !is4K && videoLabels.any((label) => RegExp(r'1080p|Full HD', caseSensitive: false).hasMatch(label)),
             audio: audioFormatBadge,
             dolbyVision: hasDolbyVision,
             hdr10Plus: hasHdr10Plus,
