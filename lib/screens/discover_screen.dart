@@ -2003,7 +2003,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     if (filename == null) return const SizedBox.shrink();
     return Image.asset(
       'assets/hero_badges/$filename',
-      height: isTv ? 30 : 24,
+      height: isTv ? 20 : 20,
       fit: BoxFit.contain,
       filterQuality: FilterQuality.medium,
     );
@@ -2029,9 +2029,9 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       if (spanishForced) 'FORZADO',
     ];
     if (labels.isEmpty) return null;
-    return FittedBox(
-      fit: BoxFit.scaleDown,
-      alignment: Alignment.centerLeft,
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      physics: const NeverScrollableScrollPhysics(),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
