@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - feature/plex-trailer-preview
+      - feature/plezy-vision-icon-183
 
 permissions:
   contents: read
