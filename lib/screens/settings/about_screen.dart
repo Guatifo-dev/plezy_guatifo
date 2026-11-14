@@ -85,7 +85,7 @@ class AboutScreen extends StatelessWidget {
                     'Incluye mejoras de navegación, presentación de contenido, tráileres e información de audio y vídeo. '
                     'Estas modificaciones se han desarrollado y probado exclusivamente con Plex Media Server. '
                     'El código original conserva soporte para Jellyfin y Emby, pero las nuevas funcionalidades no se han verificado con esos servidores. '
-                    'Es un proyecto independiente, no afiliado oficialmente a Plex ni desarrollado, respaldado o mantenido por el autor original de Plezy.'
+                    'Es un proyecto independiente, no afiliado oficialmente a Plex ni desarrollado, respaldado o mantenido por el autor original de Plezy.',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
