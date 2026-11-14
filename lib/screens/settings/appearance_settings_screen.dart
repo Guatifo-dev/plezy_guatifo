@@ -348,7 +348,6 @@ class AppearanceSettingsScreen extends StatelessWidget {
     icon: Symbols.sort_rounded,
     title: movies ? t.settings.discoverMoviesSort : t.settings.discoverSeriesSort,
     segments: [
-      ButtonSegment(value: DiscoverCatalogSort.original, label: Text(t.settings.discoverSortOriginal)),
       ButtonSegment(value: DiscoverCatalogSort.dateAdded, label: Text(t.settings.discoverSortDateAdded)),
       ButtonSegment(value: DiscoverCatalogSort.releaseDate, label: Text(t.settings.discoverSortReleaseDate)),
       ButtonSegment(value: DiscoverCatalogSort.title, label: Text(t.settings.discoverSortTitle)),
