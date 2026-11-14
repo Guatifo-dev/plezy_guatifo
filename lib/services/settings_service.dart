@@ -104,6 +104,9 @@ enum ViewMode { grid, list }
 
 enum EpisodePosterMode { seriesPoster, seasonPoster, episodeThumbnail }
 
+/// Order for the two complete Discover library shelves.
+enum DiscoverCatalogSort { original, dateAdded, releaseDate, title }
+
 enum ContinueWatchingAction { play, details }
 
 enum EpisodeAction { play, details }
@@ -1028,6 +1031,8 @@ class SettingsService extends BaseSharedPreferencesService {
   static const showHeroFormatBadges = BoolPref('show_hero_format_badges', defaultValue: true);
   static const showAllMyMoviesDiscover = BoolPref('show_all_my_movies_discover', defaultValue: true);
   static const showAllMySeriesDiscover = BoolPref('show_all_my_series_discover', defaultValue: true);
+  static const discoverMoviesSort = EnumPref<DiscoverCatalogSort>('discover_movies_sort', values: DiscoverCatalogSort.values, defaultValue: DiscoverCatalogSort.original);
+  static const discoverSeriesSort = EnumPref<DiscoverCatalogSort>('discover_series_sort', values: DiscoverCatalogSort.values, defaultValue: DiscoverCatalogSort.original);
   static const episodePosterMode = _EpisodePosterModePref();
   static const continueWatchingAction = EnumPref<ContinueWatchingAction>(
     'continue_watching_action',
