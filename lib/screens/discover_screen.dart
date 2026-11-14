@@ -260,7 +260,30 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     if (item == null) return null;
     _ensureHeroFormatMetadata(item);
     _ensureRecentShowDetails(item);
-    return _recentShowDetails[item.globalKey] ?? item;
+    return _resolveRecentShowMetadata(item);
+  }
+
+  /// The full-library rail is already known to have complete metadata for
+  /// shows that arrive as sparse entries in Plex's recently-added hub.
+  /// Prefer that exact show (same server and title) when the hub omits its
+  /// synopsis. Its canonical rating key also drives trailer extras lookup.
+  MediaItem _resolveRecentShowMetadata(MediaItem item) {
+    if (!_isRecentlyAddedShow(item)) return item;
+    final fetched = _recentShowDetails[item.globalKey] ?? item;
+    if (fetched.summary?.trim().isNotEmpty == true) return fetched;
+    final catalogTitle = (item.title ?? '').trim().toLowerCase();
+    if (catalogTitle.isEmpty) return fetched;
+    for (final hub in _catalogHubs) {
+      if (hub.id != 'discover.all.show') continue;
+      for (final candidate in hub.items) {
+        if (candidate.kind != MediaKind.show ||
+            candidate.serverId != item.serverId ||
+            (candidate.title ?? '').trim().toLowerCase() != catalogTitle ||
+            candidate.summary?.trim().isNotEmpty != true) continue;
+        return candidate;
+      }
+    }
+    return fetched;
   }
 
   MediaItem? _synopsisPanelItem;
@@ -396,7 +419,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   }
 
   void _openSynopsisPanel(MediaItem item) {
-    item = _recentShowDetails[item.globalKey] ?? item;
+    item = _resolveRecentShowMetadata(item);
     debugPrint('[SynopsisDebug] Discover synopsis callback entered for ${item.displayTitle}; mounted=$mounted');
     if (!mounted) return;
     if (_synopsisScrollController.hasClients) _synopsisScrollController.jumpTo(0);
