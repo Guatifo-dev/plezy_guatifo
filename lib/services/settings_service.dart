@@ -105,6 +105,8 @@ enum ViewMode { grid, list }
 enum EpisodePosterMode { seriesPoster, seasonPoster, episodeThumbnail }
 
 /// Order for the two complete Discover library shelves.
+enum TrailerPreviewDelay { s1, s2, s3, s4, s5, s7, s10, s15 }
+
 enum DiscoverCatalogSort { original, dateAdded, releaseDate, title } // 'original' retained to read older saved settings
 
 enum ContinueWatchingAction { play, details }
@@ -1027,6 +1029,7 @@ class SettingsService extends BaseSharedPreferencesService {
   static const automotiveUiScale = _AutomotiveUiScalePref();
   static const tvCornerSpotlightBackdrop = BoolPref('tv_corner_spotlight_backdrop', defaultValue: true);
   static const plexTrailerPreview = BoolPref('plex_trailer_preview', defaultValue: true);
+  static const plexTrailerPreviewDelay = EnumPref<TrailerPreviewDelay>('plex_trailer_preview_delay', values: TrailerPreviewDelay.values, defaultValue: TrailerPreviewDelay.s3);
   static const plexTrailerPreviewAudio = BoolPref('plex_trailer_preview_audio', defaultValue: true);
   static const showHeroFormatBadges = BoolPref('show_hero_format_badges', defaultValue: true);
   static const showAllMyMoviesDiscover = BoolPref('show_all_my_movies_discover', defaultValue: true);
@@ -1607,6 +1610,7 @@ class SettingsService extends BaseSharedPreferencesService {
     tvFullCardLayout,
     plexTrailerPreview,
     plexTrailerPreviewAudio,
+    plexTrailerPreviewDelay,
     focusGlow,
     useGlobalHubs,
     showServerNameOnHubs,
