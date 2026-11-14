@@ -518,6 +518,7 @@
     "exportDialogTitle": "Export Plezy settings",
     "plexTrailerPreview": "Play Plex trailers automatically",
     "plexTrailerPreviewDescription": "After a short pause, play the selected movie or series trailer in the corner artwork area (Android TV only)",
+    "plexTrailerPreviewDelay": "Trailer wait time",
     "plexTrailerPreviewAudio": "Trailer preview audio",
     "plexTrailerPreviewAudioDescription": "Play trailer sound in the corner preview",
     "showHeroFormatBadges": "Show audio and video badges for movies and episodes",
