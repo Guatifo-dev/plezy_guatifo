@@ -14,6 +14,7 @@ import '../utils/layout_constants.dart';
 import '../utils/formatters.dart';
 import 'tv_browse_rail.dart';
 import 'tv_spotlight_background.dart';
+import 'selected_media_format_badges.dart';
 
 class TvSpotlightController extends ValueNotifier<MediaItem?> {
   TvSpotlightController({Duration settleDelay = const Duration(milliseconds: 150)})
@@ -142,7 +143,9 @@ class TvSpotlightScaffold extends StatelessWidget {
                         contentLeft: spotlightLeft + foregroundLeft,
                         targetWidthPx: (size.width * MediaQuery.devicePixelRatioOf(context)).ceil(),
                         allowTrailerPreview: spotlightPreviewActive,
-                        metadataBelow: metadataBelowBuilder?.call(spotlight),
+                        metadataBelow: metadataBelowBuilder != null
+                            ? metadataBelowBuilder!.call(spotlight)
+                            : SelectedMediaFormatBadges(item: spotlight),
                       );
                     },
                   ),
