@@ -94,6 +94,7 @@ import '../utils/deletion_notifier.dart';
 import '../utils/library_content_notifier.dart';
 import '../utils/tone_mapped_logo_image.dart';
 import '../widgets/episode_card.dart';
+import '../widgets/selected_media_format_badges.dart';
 import '../widgets/fitting_title_text.dart';
 import '../utils/media_navigation_helper.dart';
 import '../widgets/focusable_tab_chip.dart';
@@ -3911,6 +3912,9 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     // show's name, so without this line the episode title exists only on the
     // (usually truncated) rail card (#2217).
     final episodeTitle = _tvDetailFocusedEpisode.value?.title;
+    final badgeItem = _tvDetailFocusedEpisode.value ?? metadata;
+    final showFormatBadges = (badgeItem.kind == MediaKind.movie || badgeItem.kind == MediaKind.episode) &&
+        SettingsService.instance.read(SettingsService.showHeroFormatBadges);
     final foregroundColor = _tvDetailForegroundColor(context);
     final mutedForegroundColor = foregroundColor.withValues(alpha: 0.78);
 
@@ -3934,6 +3938,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
         final hasDescription = description != null && description.isNotEmpty;
         final hasEpisodeTitle = episodeTitle != null && episodeTitle.isNotEmpty;
         final episodeTitleBlockHeight = hasEpisodeTitle ? episodeTitleLineHeight + episodeTitleGap : 0.0;
+        final formatBadgesHeight = showFormatBadges ? 26.0 : 0.0;
         // Genres belong to the show, not the focused episode, and do not change
         // while browsing; they live in the details sheet (#2217).
         final genres = metadata.genres ?? const <String>[];
@@ -3946,6 +3951,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
               logoMetadataGap +
               episodeTitleBlockHeight +
               metadataLineHeight +
+              formatBadgesHeight +
               descriptionHeight +
               actionGap +
               actionHeight;
@@ -3963,6 +3969,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
             (showLogo ? logoHeight + logoMetadataGap : 0) +
             episodeTitleBlockHeight +
             metadataLineHeight +
+            formatBadgesHeight +
             descriptionHeight +
             actionGap +
             actionHeight;
@@ -4065,6 +4072,14 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                                         child: _buildTvDetailMetadataLine(context, metadata, scale),
                                       ),
                                     ),
+                                    if (showFormatBadges)
+                                      SizedBox(
+                                        height: formatBadgesHeight,
+                                        child: Align(
+                                          alignment: Alignment.centerLeft,
+                                          child: SelectedMediaFormatBadges(key: ValueKey(badgeItem.globalKey), item: badgeItem),
+                                        ),
+                                      ),
                                     if (hasDescription && summaryMaxLines > 0) ...[
                                       SizedBox(height: summaryGap),
                                       SizedBox(
