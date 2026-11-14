@@ -81,9 +81,11 @@ class AboutScreen extends StatelessWidget {
 
                   const SizedBox(height: 24),
                   Text(
-                    'Plezy Vision es una versión personalizada basada en el proyecto de código abierto Plezy, creado por edde746. '
-                    'Incorpora modificaciones en la interfaz, los tráileres, la navegación y la información multimedia. '
-                    'Es una modificación independiente, no desarrollada, respaldada ni mantenida por el autor original.',
+                    'Plezy Vision es un cliente multimedia orientado a Plex Media Server, basado en el proyecto de código abierto Plezy, creado por edde746. '
+                    'Incluye mejoras de navegación, presentación de contenido, tráileres e información de audio y vídeo. '
+                    'Estas modificaciones se han desarrollado y probado exclusivamente con Plex Media Server. '
+                    'El código original conserva soporte para Jellyfin y Emby, pero las nuevas funcionalidades no se han verificado con esos servidores. '
+                    'Es un proyecto independiente, no afiliado oficialmente a Plex ni desarrollado, respaldado o mantenido por el autor original de Plezy.'
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
