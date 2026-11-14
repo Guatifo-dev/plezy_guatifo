@@ -134,6 +134,18 @@ class AppearanceSettingsScreen extends StatelessWidget {
                 title: t.settings.showHeroSection,
                 subtitle: t.settings.showHeroSectionDescription,
               ),
+            SettingSwitchTile(
+              pref: SettingsService.showAllMyMoviesDiscover,
+              icon: Symbols.movie_rounded,
+              title: t.settings.showAllMyMoviesDiscover,
+              subtitle: t.settings.showAllMyMoviesDiscoverDescription,
+            ),
+            SettingSwitchTile(
+              pref: SettingsService.showAllMySeriesDiscover,
+              icon: Symbols.tv_rounded,
+              title: t.settings.showAllMySeriesDiscover,
+              subtitle: t.settings.showAllMySeriesDiscoverDescription,
+            ),
             _continueWatchingActionSelector(),
             _episodeActionSelector(),
             SettingSwitchTile(
