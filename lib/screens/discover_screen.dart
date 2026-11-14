@@ -286,6 +286,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   }
 
   Widget? _buildTvSpotlightFormatMetadata(MediaItem? item) {
+    if (!SettingsService.instance.read(SettingsService.showHeroFormatBadges)) return null;
     if (item == null || item.kind != MediaKind.movie) return null;
     if (item is PlexMediaItem && item.subtype == 'clip') return null;
     final metadata = _heroFormatMetadata[item.globalKey];
@@ -1433,6 +1434,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
         SettingsService.showServerNameOnHubs,
         SettingsService.showHeroSection,
         SettingsService.hideSpoilers,
+        SettingsService.showHeroFormatBadges,
         SettingsService.libraryDensity,
         SettingsService.episodePosterMode,
       ],
@@ -1995,7 +1997,9 @@ class _DiscoverScreenState extends State<DiscoverScreen>
 
     final heroLabel = isEpisode ? "${heroItem.grandparentTitle}, ${heroItem.title}" : heroItem.title;
     final isPlexClip = heroItem is PlexMediaItem && heroItem.subtype == 'clip';
-    final isMovieForFormatBadges = heroItem.kind == MediaKind.movie && !isPlexClip;
+    final isMovieForFormatBadges = heroItem.kind == MediaKind.movie &&
+        !isPlexClip &&
+        SettingsService.instance.read(SettingsService.showHeroFormatBadges);
     final formatMetadata = _heroFormatMetadata[heroItem.globalKey];
     final formatItem = formatMetadata?.item ?? heroItem;
     final formatVersionIndex = formatMetadata?.mediaIndex ?? 0;
