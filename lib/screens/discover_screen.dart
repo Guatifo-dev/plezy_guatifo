@@ -138,7 +138,8 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   /// The paginated loader retains its own unsorted offset, so background
   /// loading continues correctly as each new page arrives.
   MediaHub _sortedCatalogHub(MediaHub hub, DiscoverCatalogSort sort) {
-    if (sort == DiscoverCatalogSort.original) return hub;
+    // Older installations may still have 'original' saved; treat it as date added.
+    if (sort == DiscoverCatalogSort.original) sort = DiscoverCatalogSort.dateAdded;
     final items = List<MediaItem>.of(hub.items);
     int compare(MediaItem a, MediaItem b) {
       if (sort == DiscoverCatalogSort.dateAdded) {
