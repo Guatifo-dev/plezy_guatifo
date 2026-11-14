@@ -521,7 +521,11 @@
     "plexTrailerPreviewAudio": "Trailer preview audio",
     "plexTrailerPreviewAudioDescription": "Play trailer sound in the corner preview",
     "showHeroFormatBadges": "Show audio and video badges for movies and episodes",
-    "showHeroFormatBadgesDescription": "Display resolution, HDR, Dolby Vision and audio formats on individual movies and episodes"
+    "showHeroFormatBadgesDescription": "Display resolution, HDR, Dolby Vision and audio formats on individual movies and episodes",
+    "showAllMyMoviesDiscover": "Show All My Movies",
+    "showAllMyMoviesDiscoverDescription": "Show or hide the All My Movies shelf in Discover",
+    "showAllMySeriesDiscover": "Show All My Series",
+    "showAllMySeriesDiscoverDescription": "Show or hide the All My Series shelf in Discover"
   },
   "themeEditor": {
     "builtIn": "Built-in",
