@@ -103,7 +103,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   List<MediaHub> _catalogHubs = const [];
   Map<String, LibraryPageLoader<MediaItem>> _catalogPageLoaders = {};
   List<MediaHub>? _combinedHubsCache;
-  (List<MediaHub>, List<MediaHub>, bool, bool)? _combinedHubsCacheKey;
+  (List<MediaHub>, List<MediaHub>, bool, bool, DiscoverCatalogSort, DiscoverCatalogSort)? _combinedHubsCacheKey;
   late final LibrariesProvider _librariesProvider;
   late final HiddenLibrariesProvider _hiddenLibrariesProvider;
   String? _catalogLibrariesSignature;
@@ -111,7 +111,12 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   int _catalogLoadGeneration = 0;
 
   List<MediaHub> get _hubs {
-    final key = (_discover.hubs, _catalogHubs, SettingsService.instance.read(SettingsService.showAllMyMoviesDiscover), SettingsService.instance.read(SettingsService.showAllMySeriesDiscover));
+    final settings = SettingsService.instance;
+    final movieSort = settings.read(SettingsService.discoverMoviesSort);
+    final seriesSort = settings.read(SettingsService.discoverSeriesSort);
+    final key = (_discover.hubs, _catalogHubs,
+        settings.read(SettingsService.showAllMyMoviesDiscover),
+        settings.read(SettingsService.showAllMySeriesDiscover), movieSort, seriesSort);
     if (_combinedHubsCache != null && key == _combinedHubsCacheKey) return _combinedHubsCache!;
     _combinedHubsCacheKey = key;
     // Plex may return collection shelves alongside ordinary movie/show hubs.
@@ -125,9 +130,40 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       for (final hub in _catalogHubs)
         if ((hub.id != 'discover.all.movie' || SettingsService.instance.read(SettingsService.showAllMyMoviesDiscover)) &&
             (hub.id != 'discover.all.show' || SettingsService.instance.read(SettingsService.showAllMySeriesDiscover)))
-          hub,
+          _sortedCatalogHub(hub, hub.id == 'discover.all.movie' ? movieSort : seriesSort),
     ];
   }
+
+  /// Sort the entire accumulated catalog, not just its initial preview page.
+  /// The paginated loader retains its own unsorted offset, so background
+  /// loading continues correctly as each new page arrives.
+  MediaHub _sortedCatalogHub(MediaHub hub, DiscoverCatalogSort sort) {
+    if (sort == DiscoverCatalogSort.original) return hub;
+    final items = List<MediaItem>.of(hub.items);
+    int compare(MediaItem a, MediaItem b) {
+      switch (sort) {
+        case DiscoverCatalogSort.original:
+          return 0;
+        case DiscoverCatalogSort.dateAdded:
+          final date = (b.addedAt ?? 0).compareTo(a.addedAt ?? 0);
+          if (date != 0) return date;
+        case DiscoverCatalogSort.releaseDate:
+          final date = (b.originallyAvailableAt ?? '').compareTo(a.originallyAvailableAt ?? '');
+          if (date != 0) return date;
+          final year = (b.year ?? 0).compareTo(a.year ?? 0);
+          if (year != 0) return year;
+        case DiscoverCatalogSort.title:
+          break;
+      }
+      final title = (a.titleSort ?? a.title ?? '').toLowerCase()
+          .compareTo((b.titleSort ?? b.title ?? '').toLowerCase());
+      if (title != 0) return title;
+      return a.globalKey.compareTo(b.globalKey);
+    }
+    items.sort(compare);
+    return hub.copyWith(items: items);
+  }
+
   bool get _hasMoreContinueWatching => _discover.hasMoreContinueWatching;
   bool get _isLoading => _discover.isLoading;
   bool get _areHubsLoading => _discover.areHubsLoading;
@@ -1436,6 +1472,8 @@ class _DiscoverScreenState extends State<DiscoverScreen>
         SettingsService.showHeroFormatBadges,
         SettingsService.showAllMyMoviesDiscover,
         SettingsService.showAllMySeriesDiscover,
+        SettingsService.discoverMoviesSort,
+        SettingsService.discoverSeriesSort,
         SettingsService.libraryDensity,
         SettingsService.episodePosterMode,
       ],
