@@ -4,7 +4,6 @@ import 'dart:io' show Platform;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter/services.dart';
 import 'package:plezy/widgets/app_icon.dart';
 import '../widgets/server_activities_button.dart';
@@ -295,22 +294,12 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     final formatItem = metadata.item;
     final versionIndex = metadata.mediaIndex;
     final videoLabels = buildMediaVideoLabels(formatItem, versionIndex: versionIndex);
-    final resolution = videoLabels.isNotEmpty ? videoLabels.first : null;
-    final audio = _heroMovieAudioBadge(formatItem, metadata.source);
-    final hasDolbyVision = _heroMovieHasDolbyVision(formatItem, versionIndex);
-    final hasHdr10Plus = _heroMovieHasHdr10Plus(formatItem, versionIndex);
-    final hasHdr = videoLabels.contains('HDR') && !hasDolbyVision && !hasHdr10Plus;
-    if (resolution == null && audio == null && !hasDolbyVision && !hasHdr10Plus && !hasHdr) return null;
-    return Wrap(
-      spacing: 8,
-      runSpacing: 6,
-      children: [
-        if (resolution != null) _buildHeroFormatBadge(resolution, isTv: true),
-        if (audio != null) _buildHeroAudioFormatBadge(audio, isTv: true),
-        if (hasDolbyVision) _buildHeroFormatSymbolBadge('dolby_vision', isTv: true),
-        if (hasHdr10Plus) _buildHeroFormatSymbolBadge('hdr10plus', isTv: true),
-        if (hasHdr) _buildHeroFormatBadge('HDR', isTv: true),
-      ],
+    return _buildHeroLogoLine(
+      isTv: true,
+      is4K: _heroIs4K(videoLabels),
+      audio: _heroMovieAudioBadge(formatItem, metadata.source),
+      dolbyVision: _heroMovieHasDolbyVision(formatItem, versionIndex),
+      hdr10Plus: _heroMovieHasHdr10Plus(formatItem, versionIndex),
     );
   }
 
@@ -1943,62 +1932,55 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     (stream) => stream.kind == MediaStreamKind.video && stream.dolbyVision,
   );
 
-  Widget _buildHeroAudioFormatBadge(String label, {required bool isTv}) {
-    final normalized = label.toUpperCase();
-    final symbol = normalized.contains('ATMOS')
-        ? 'dolby_atmos'
-        : (normalized.contains('DTS:X') || normalized.contains('DTS X'))
-            ? 'dtsx'
-            : normalized.contains('TRUEHD')
-                ? 'truehd'
-                : null;
-    if (symbol != null) return _buildHeroFormatSymbolBadge(symbol, isTv: isTv);
-    return _buildHeroFormatBadge(label, isTv: isTv);
+  bool _heroIs4K(List<String> labels) => labels.any(
+    (label) => RegExp(r'^(4K|2160p)$', caseSensitive: false).hasMatch(label.trim()),
+  );
+
+  String? _heroAudioLogoName(String? label) {
+    if (label == null) return null;
+    final value = label.toUpperCase();
+    if (value.contains('ATMOS')) return 'dolby atmos.jfif';
+    if (value.contains('DTS:X') || value.contains('DTS X')) return 'dts-x.jfif';
+    if (value.contains('DTS-HD') || value.contains('DTS HD')) return 'dts-hd.jfif';
+    if (value.contains('TRUEHD') || value.contains('TRUE HD')) return 'dolby true hd.jfif';
+    return null;
   }
 
-  Widget _buildHeroFormatSymbolBadge(String name, {required bool isTv}) {
-    const glowColors = <String, Color>{
-      'dolby_atmos': Color(0xFF36D7FF),
-      'truehd': Color(0xFFB66BFF),
-      'dtsx': Color(0xFFFFA64D),
-      'dolby_vision': Color(0xFFEE70C8),
-      'hdr10plus': Color(0xFF8DEB77),
-    };
-    final glow = glowColors[name] ?? Colors.white;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          boxShadow: [BoxShadow(color: glow.withValues(alpha: 0.24), blurRadius: isTv ? 13 : 9, spreadRadius: 1)],
-        ),
-        child: SvgPicture.asset(
-          'assets/format_badges/$name.svg',
-          width: isTv ? 48 : 36,
-          height: isTv ? 29 : 22,
-          fit: BoxFit.contain,
-          semanticsLabel: name.replaceAll('_', ' '),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeroFormatBadge(String label, {required bool isTv}) {
-    final color = Theme.of(context).colorScheme.onSurface;
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: isTv ? 9 : 7, vertical: isTv ? 4 : 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.13),
-        border: Border.all(color: color.withValues(alpha: 0.48), width: 0.8),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: isTv ? 13 : 10,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.35,
-        ),
+  Widget? _buildHeroLogoLine({
+    required bool isTv,
+    required bool is4K,
+    required String? audio,
+    required bool dolbyVision,
+    required bool hdr10Plus,
+  }) {
+    final assets = <String>[
+      if (is4K) '4K.jfif',
+      if (dolbyVision) 'dolby vision.jfif',
+      if (hdr10Plus) 'HDR10+.jfif',
+      if (_heroAudioLogoName(audio) case final String audioAsset) audioAsset,
+    ];
+    if (assets.isEmpty) return null;
+    final height = isTv ? 30.0 : 23.0;
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var index = 0; index < assets.length; index++) ...[
+            if (index > 0) SizedBox(width: isTv ? 9 : 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(3),
+              child: Image.asset(
+                'assets/format_badges/${assets[index]}',
+                height: height,
+                width: isTv ? 84 : 64,
+                fit: BoxFit.contain,
+                semanticLabel: assets[index].replaceAll('.jfif', ''),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -2046,15 +2028,21 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     final videoLabels = isMovieForFormatBadges
         ? buildMediaVideoLabels(formatItem, versionIndex: formatVersionIndex)
         : const <String>[];
-    final resolutionBadge = videoLabels.where((label) =>
-        RegExp(r'^(?:4K|8K|2160p|1440p|1080p|720p|576p|480p)$', caseSensitive: false).hasMatch(label.trim()),
-      ).firstOrNull;
+    final is4K = isMovieForFormatBadges && _heroIs4K(videoLabels);
     final audioFormatBadge = isMovieForFormatBadges
         ? _heroMovieAudioBadge(formatItem, formatMetadata?.source)
         : null;
     final hasHdr10Plus = isMovieForFormatBadges && _heroMovieHasHdr10Plus(formatItem, formatVersionIndex);
     final hasDolbyVision = isMovieForFormatBadges && _heroMovieHasDolbyVision(formatItem, formatVersionIndex);
-    final hasHdr = isMovieForFormatBadges && videoLabels.contains('HDR') && !hasHdr10Plus && !hasDolbyVision;
+    final formatLogoLine = isMovieForFormatBadges
+        ? _buildHeroLogoLine(
+            isTv: isTv,
+            is4K: is4K,
+            audio: audioFormatBadge,
+            dolbyVision: hasDolbyVision,
+            hdr10Plus: hasHdr10Plus,
+          )
+        : null;
     final hasBasicMetadata = heroItem.year != null || heroItem.contentRating != null || heroItem.rating != null;
 
     return Semantics(
@@ -2145,7 +2133,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
 
                             // Basic metadata and compact format wordmarks. The latter
                             // are deliberately movie-only; episodes may differ by file.
-                            if (hasBasicMetadata || resolutionBadge != null || audioFormatBadge != null || hasHdr10Plus || hasDolbyVision || hasHdr) ...[
+                            if (hasBasicMetadata || formatLogoLine != null) ...[
                               const SizedBox(height: 16),
                               Wrap(
                                 alignment: alignLeft ? WrapAlignment.start : WrapAlignment.center,
@@ -2167,11 +2155,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                                         fontWeight: .w600,
                                       ),
                                     ),
-                                  if (resolutionBadge != null) _buildHeroFormatBadge(resolutionBadge, isTv: isTv),
-                                  if (audioFormatBadge != null) _buildHeroAudioFormatBadge(audioFormatBadge, isTv: isTv),
-                                  if (hasDolbyVision) _buildHeroFormatSymbolBadge('dolby_vision', isTv: isTv),
-                                  if (hasHdr10Plus) _buildHeroFormatSymbolBadge('hdr10plus', isTv: isTv),
-                                  if (hasHdr) _buildHeroFormatBadge('HDR', isTv: isTv),
+                                  if (formatLogoLine != null) formatLogoLine,
                                 ],
                               ),
                             ],
