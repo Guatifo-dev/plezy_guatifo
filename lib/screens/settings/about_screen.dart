@@ -9,6 +9,7 @@ import '../../widgets/settings_section.dart';
 import '../../i18n/strings.g.dart';
 import '../../theme/mono_tokens.dart';
 import 'licenses_screen.dart';
+import '../../utils/external_url.dart';
 
 class AboutScreen extends StatelessWidget {
   const AboutScreen({super.key});
@@ -17,7 +18,7 @@ class AboutScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final appName = t.app.title;
+    const appName = 'Plezy Vision';
 
     return FutureBuilder<PackageInfo>(
       future: _packageInfoFuture,
@@ -76,6 +77,48 @@ class AboutScreen extends StatelessWidget {
                         ),
                       ],
                     ),
+                  ),
+
+                  const SizedBox(height: 24),
+                  Text(
+                    'Plezy Vision es una versión personalizada basada en el proyecto de código abierto Plezy, creado por edde746. '
+                    'Incorpora modificaciones en la interfaz, los tráileres, la navegación y la información multimedia. '
+                    'Es una modificación independiente, no desarrollada, respaldada ni mantenida por el autor original.',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 12),
+                  Text('Código bajo licencia GNU GPL-3.0. Se conservan los avisos legales y la licencia del proyecto original.',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: tokens(context).textMuted),
+                  ),
+                  const SizedBox(height: 24),
+                  SettingsGroup(
+                    margin: EdgeInsets.zero,
+                    children: [
+                      for (final entry in const [
+                        ('Proyecto original: Plezy — edde746', 'https://github.com/edde746/plezy'),
+                        ('Código fuente: Plezy Vision — Guatifo-dev', 'https://github.com/Guatifo-dev/plezy_guatifo'),
+                        ('Licencia GNU GPL-3.0', 'https://github.com/edde746/plezy/blob/main/LICENSE'),
+                      ])
+                        FocusableListTile(
+                          leading: const AppIcon(Symbols.open_in_new_rounded, fill: 1),
+                          title: Text(entry.$1),
+                          subtitle: Text(entry.$2),
+                          trailing: const AppIcon(Symbols.chevron_right_rounded, fill: 1),
+                          onTap: () async {
+                            final opened = await openExternalUrl(Uri.parse(entry.$2));
+                            if (!opened && context.mounted) {
+                              await Clipboard.setData(ClipboardData(text: entry.$2));
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('No se pudo abrir el enlace; URL copiada')),
+                                );
+                              }
+                            }
+                          },
+                        ),
+                    ],
                   ),
 
                   const SizedBox(height: 40),
