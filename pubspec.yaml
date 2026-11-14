@@ -162,6 +162,7 @@ flutter:
     - assets/licenses/SpatialAudioBridge.txt
     - assets/plezy.png
     - assets/plezy_adaptive_foreground.svg
+    - assets/plezyvision_logo.png
     - assets/plex_chevron.svg
     - assets/jellyfin_icon.svg
     - assets/emby_icon.svg
