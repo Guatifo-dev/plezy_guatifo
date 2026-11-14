@@ -413,7 +413,20 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     _spotlight.select(item);
     _ensureHeroFormatMetadata(item);
     _ensureRecentShowDetails(item);
-    if (_isRecentlyAddedShow(item)) _logRecentShowDiagnostic('focus', item);
+    // Log every focused Plex item, including seasons/episodes that may
+    // visually represent a complete series in the recently-added rail.
+    if (item is PlexMediaItem) {
+      _logRecentShowDiagnostic('focusAnyPlex', item);
+      final matchingHubs = _tvBrowseHubs.where(
+        (hub) => hub.items.any((entry) => entry.globalKey == item.globalKey),
+      );
+      for (final hub in matchingHubs) {
+        appLogger.i('[RecentShowDebug] focusedHub id=${hub.id} '
+            'identifier=${hub.identifier} title="${hub.title}" '
+            'itemId=${item.id} kind=${item.kind.id} '
+            'parentId=${item.parentId} grandparentId=${item.grandparentId}');
+      }
+    }
   }
 
   Widget? _buildTvSpotlightFormatMetadata(MediaItem? item) {
