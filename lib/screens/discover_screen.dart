@@ -139,7 +139,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   /// audio track and matching media version. This read-only lookup never starts
   /// playback or a transcode.
   void _ensureHeroFormatMetadata(MediaItem item) {
-    if (item.kind != MediaKind.movie) return;
+    if (item.kind != MediaKind.movie && item.kind != MediaKind.episode) return;
     if (item is PlexMediaItem && item.subtype == 'clip') return;
 
     final key = item.globalKey;
@@ -163,7 +163,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
           mediaIndex: source?.mediaIndex ?? 0,
         ));
       } catch (error, stackTrace) {
-        appLogger.w('Unable to load hero movie format metadata', error: error, stackTrace: stackTrace);
+        appLogger.w('Unable to load hero movie or episode format metadata', error: error, stackTrace: stackTrace);
       } finally {
         _heroFormatMetadataRequests.remove(key);
       }
@@ -287,7 +287,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
 
   Widget? _buildTvSpotlightFormatMetadata(MediaItem? item) {
     if (!SettingsService.instance.read(SettingsService.showHeroFormatBadges)) return null;
-    if (item == null || item.kind != MediaKind.movie) return null;
+    if (item == null || (item.kind != MediaKind.movie && item.kind != MediaKind.episode)) return null;
     if (item is PlexMediaItem && item.subtype == 'clip') return null;
     final metadata = _heroFormatMetadata[item.globalKey];
     if (metadata == null) return null;
@@ -2078,7 +2078,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
 
     final heroLabel = isEpisode ? "${heroItem.grandparentTitle}, ${heroItem.title}" : heroItem.title;
     final isPlexClip = heroItem is PlexMediaItem && heroItem.subtype == 'clip';
-    final isMovieForFormatBadges = heroItem.kind == MediaKind.movie &&
+    final isMovieForFormatBadges = (heroItem.kind == MediaKind.movie || heroItem.kind == MediaKind.episode) &&
         !isPlexClip &&
         SettingsService.instance.read(SettingsService.showHeroFormatBadges);
     final formatMetadata = _heroFormatMetadata[heroItem.globalKey];
