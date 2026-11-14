@@ -4515,7 +4515,26 @@ class PlexClient
     HubFetchDiagnostics? diagnostics,
   }) async {
     final hubs = await _getGlobalHubs(limit: limit, diagnostics: diagnostics);
-    return hubs.map((h) => PlexMappers.mediaHub(h)).toList();
+    // Plex's recently-added hubs can omit show/episode logos even when the
+    // owning show's full metadata includes one. Use the same bulk lookup as
+    // Continue Watching, without changing item ids, kinds or summaries.
+    final enriched = await Future.wait(hubs.map((hub) async {
+      final identity = '${hub.hubIdentifier ?? ''} ${hub.title}'.toLowerCase();
+      if (!identity.contains('recent')) return hub;
+      final items = await _backfillMissingLogos(List.of(hub.items));
+      return PlexHubDto(
+        hubKey: hub.hubKey,
+        title: hub.title,
+        type: hub.type,
+        hubIdentifier: hub.hubIdentifier,
+        size: hub.size,
+        more: hub.more,
+        items: items,
+        serverId: hub.serverId,
+        serverName: hub.serverName,
+      );
+    }));
+    return enriched.map((h) => PlexMappers.mediaHub(h)).toList();
   }
 
   @override
