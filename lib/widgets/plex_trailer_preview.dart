@@ -15,7 +15,7 @@ import '../services/settings_service.dart';
 import 'settings_builder.dart';
 
 /// A single logical trailer session shared by the Discover and detail routes.
-/// Multiple corner surfaces may attach to it, but extras lookup, the 3-second
+/// Multiple surfaces may attach to it, but extras lookup, the configurable
 /// settle delay and URL resolution happen only once for each selected title.
 class PlexTrailerPreview extends StatefulWidget {
   const PlexTrailerPreview({super.key, required this.item, required this.client});
@@ -105,7 +105,16 @@ class _PlexTrailerPreviewState extends State<PlexTrailerPreview> with WidgetsBin
 }
 
 abstract final class _TrailerPreviewSession {
-  static const _settleDelay = Duration(seconds: 3);
+  static Duration get _settleDelay => Duration(seconds: switch (SettingsService.instance.read(SettingsService.plexTrailerPreviewDelay)) {
+    TrailerPreviewDelay.s1 => 1,
+    TrailerPreviewDelay.s2 => 2,
+    TrailerPreviewDelay.s3 => 3,
+    TrailerPreviewDelay.s4 => 4,
+    TrailerPreviewDelay.s5 => 5,
+    TrailerPreviewDelay.s7 => 7,
+    TrailerPreviewDelay.s10 => 10,
+    TrailerPreviewDelay.s15 => 15,
+  });
   static const _controlChannel = MethodChannel('com.guatifo.plezy/trailer_preview_control');
   static final ValueNotifier<String?> url = ValueNotifier<String?>(null);
   static final ValueNotifier<bool> surfaceReady = ValueNotifier<bool>(true);
