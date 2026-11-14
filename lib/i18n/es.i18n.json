@@ -521,7 +521,11 @@
     "plexTrailerPreviewAudio": "Sonido de los tráileres",
     "plexTrailerPreviewAudioDescription": "Reproducir el sonido del tráiler en la vista previa de la esquina",
     "showHeroFormatBadges": "Mostrar insignias de audio y vídeo en películas y episodios",
-    "showHeroFormatBadgesDescription": "Mostrar resolución, HDR, Dolby Vision y formatos de audio en películas y episodios individuales"
+    "showHeroFormatBadgesDescription": "Mostrar resolución, HDR, Dolby Vision y formatos de audio en películas y episodios individuales",
+    "showAllMyMoviesDiscover": "Mostrar «Todas mis Películas»",
+    "showAllMyMoviesDiscoverDescription": "Mostrar u ocultar el apartado Todas mis Películas en Discover",
+    "showAllMySeriesDiscover": "Mostrar «Todas mis Series»",
+    "showAllMySeriesDiscoverDescription": "Mostrar u ocultar el apartado Todas mis Series en Discover"
   },
   "themeEditor": {
     "builtIn": "Integrados",
