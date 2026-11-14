@@ -300,6 +300,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       audio: _heroMovieAudioBadge(formatItem, metadata.source),
       dolbyVision: _heroMovieHasDolbyVision(formatItem, versionIndex),
       hdr10Plus: _heroMovieHasHdr10Plus(formatItem, versionIndex),
+      hdr10: _heroMovieHasHdr10(formatItem, versionIndex),
     );
   }
 
@@ -1939,11 +1940,63 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   String? _heroAudioLogoName(String? label) {
     if (label == null) return null;
     final value = label.toUpperCase();
-    if (value.contains('ATMOS')) return 'dolby atmos.jfif';
-    if (value.contains('DTS:X') || value.contains('DTS X')) return 'dts-x.jfif';
-    if (value.contains('DTS-HD') || value.contains('DTS HD')) return 'dts-hd.jfif';
-    if (value.contains('TRUEHD') || value.contains('TRUE HD')) return 'dolby true hd.jfif';
+    if (value.contains('ATMOS')) return 'Dolby Atmos';
+    if (value.contains('DTS:X') || value.contains('DTS X')) return 'DTS:X';
+    if ((value.contains('DTS-HD') || value.contains('DTS HD')) &&
+        (value.contains('MASTER') || value.contains(' MA'))) {
+      return 'DTS-HD Master Audio';
+    }
+    if (value.contains('TRUEHD') || value.contains('TRUE HD')) return 'Dolby TrueHD';
     return null;
+  }
+
+  bool _heroMovieHasHdr10(MediaItem item, int versionIndex) =>
+      _heroMovieStreams(item, versionIndex).any((stream) {
+        if (stream.kind != MediaStreamKind.video || stream.dolbyVision || stream.hdr10Plus) return false;
+        final details = [stream.profile, stream.title, stream.displayTitle]
+            .whereType<String>().join(' ').toUpperCase();
+        return RegExp(r'HDR[ -]?10(?!\\+)').hasMatch(details);
+      });
+
+  Widget _buildHeroStyledBadge(String label, {required bool isTv}) {
+    final color = switch (label) {
+      '4K UHD' => const Color(0xFFF1D523),
+      'Dolby Vision' => const Color(0xFFB75BFF),
+      'HDR10' => const Color(0xFFFFBD27),
+      'HDR10+' => const Color(0xFFFF3D80),
+      'Dolby Atmos' => const Color(0xFF12DCEB),
+      'Dolby TrueHD' => const Color(0xFF24BFFF),
+      'DTS:X' => const Color(0xFFFF9A28),
+      _ => const Color(0xFFFFAA3B),
+    };
+    final fontSize = isTv ? 13.0 : 10.0;
+    return Container(
+      height: isTv ? 30 : 24,
+      padding: EdgeInsets.symmetric(horizontal: isTv ? 9 : 6),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [color.withValues(alpha: 0.22), const Color(0xFF090C16)],
+        ),
+        border: Border.all(color: color, width: isTv ? 1.5 : 1.1),
+        borderRadius: BorderRadius.circular(isTv ? 7 : 5),
+        boxShadow: [BoxShadow(color: color.withValues(alpha: 0.22), blurRadius: 5)],
+      ),
+      child: Text(
+        label,
+        maxLines: 1,
+        softWrap: false,
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: label == 'DTS-HD Master Audio' ? fontSize - 1 : fontSize,
+          fontWeight: FontWeight.w900,
+          letterSpacing: -0.2,
+          height: 1,
+        ),
+      ),
+    );
   }
 
   Widget? _buildHeroLogoLine({
@@ -1952,33 +2005,25 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     required String? audio,
     required bool dolbyVision,
     required bool hdr10Plus,
+    required bool hdr10,
   }) {
-    final assets = <String>[
-      if (is4K) '4K.jfif',
-      if (dolbyVision) 'dolby vision.jfif',
-      if (hdr10Plus) 'HDR10+.jfif',
-      if (_heroAudioLogoName(audio) case final String audioAsset) audioAsset,
+    final labels = <String>[
+      if (is4K) '4K UHD',
+      if (dolbyVision) 'Dolby Vision',
+      if (hdr10Plus) 'HDR10+',
+      if (hdr10) 'HDR10',
+      if (_heroAudioLogoName(audio) case final String audioLabel) audioLabel,
     ];
-    if (assets.isEmpty) return null;
-    final height = isTv ? 30.0 : 23.0;
+    if (labels.isEmpty) return null;
     return FittedBox(
       fit: BoxFit.scaleDown,
       alignment: Alignment.centerLeft,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          for (var index = 0; index < assets.length; index++) ...[
-            if (index > 0) SizedBox(width: isTv ? 9 : 6),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(3),
-              child: Image.asset(
-                'assets/format_badges/${assets[index]}',
-                height: height,
-                width: isTv ? 84 : 64,
-                fit: BoxFit.contain,
-                semanticLabel: assets[index].replaceAll('.jfif', ''),
-              ),
-            ),
+          for (var index = 0; index < labels.length; index++) ...[
+            if (index > 0) SizedBox(width: isTv ? 8 : 5),
+            _buildHeroStyledBadge(labels[index], isTv: isTv),
           ],
         ],
       ),
@@ -2034,6 +2079,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
         : null;
     final hasHdr10Plus = isMovieForFormatBadges && _heroMovieHasHdr10Plus(formatItem, formatVersionIndex);
     final hasDolbyVision = isMovieForFormatBadges && _heroMovieHasDolbyVision(formatItem, formatVersionIndex);
+    final hasHdr10 = isMovieForFormatBadges && _heroMovieHasHdr10(formatItem, formatVersionIndex);
     final formatLogoLine = isMovieForFormatBadges
         ? _buildHeroLogoLine(
             isTv: isTv,
@@ -2041,6 +2087,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
             audio: audioFormatBadge,
             dolbyVision: hasDolbyVision,
             hdr10Plus: hasHdr10Plus,
+            hdr10: hasHdr10,
           )
         : null;
     final hasBasicMetadata = heroItem.year != null || heroItem.contentRating != null || heroItem.rating != null;
