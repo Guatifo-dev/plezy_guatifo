@@ -525,7 +525,13 @@
     "showAllMyMoviesDiscover": "Show All My Movies",
     "showAllMyMoviesDiscoverDescription": "Show or hide the All My Movies shelf in Discover",
     "showAllMySeriesDiscover": "Show All My Series",
-    "showAllMySeriesDiscoverDescription": "Show or hide the All My Series shelf in Discover"
+    "showAllMySeriesDiscoverDescription": "Show or hide the All My Series shelf in Discover",
+    "discoverMoviesSort": "Sort All My Movies",
+    "discoverSeriesSort": "Sort All My Series",
+    "discoverSortOriginal": "Current order",
+    "discoverSortDateAdded": "Date added",
+    "discoverSortReleaseDate": "Release date",
+    "discoverSortTitle": "Title A-Z"
   },
   "themeEditor": {
     "builtIn": "Built-in",
