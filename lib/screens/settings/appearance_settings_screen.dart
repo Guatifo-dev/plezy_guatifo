@@ -21,6 +21,17 @@ import 'app_icon_setting.dart';
 import 'settings_utils.dart';
 import 'theme_settings_screen.dart';
 
+int _trailerDelaySeconds(TrailerPreviewDelay value) => switch (value) {
+  TrailerPreviewDelay.s1 => 1,
+  TrailerPreviewDelay.s2 => 2,
+  TrailerPreviewDelay.s3 => 3,
+  TrailerPreviewDelay.s4 => 4,
+  TrailerPreviewDelay.s5 => 5,
+  TrailerPreviewDelay.s7 => 7,
+  TrailerPreviewDelay.s10 => 10,
+  TrailerPreviewDelay.s15 => 15,
+};
+
 class AppearanceSettingsScreen extends StatelessWidget {
   const AppearanceSettingsScreen({super.key});
 
@@ -107,6 +118,16 @@ class AppearanceSettingsScreen extends StatelessWidget {
                 icon: Symbols.movie_rounded,
                 title: t.settings.plexTrailerPreview,
                 subtitle: t.settings.plexTrailerPreviewDescription,
+              ),
+              SettingSelectionTile<TrailerPreviewDelay>(
+                pref: SettingsService.plexTrailerPreviewDelay,
+                icon: Symbols.timer_rounded,
+                title: t.settings.plexTrailerPreviewDelay,
+                subtitleBuilder: (v) => '${_trailerDelaySeconds(v)} s',
+                options: [
+                  for (final v in TrailerPreviewDelay.values)
+                    DialogOption(value: v, title: '${_trailerDelaySeconds(v)} s'),
+                ],
               ),
               SettingSwitchTile(
                 pref: SettingsService.plexTrailerPreviewAudio,
