@@ -518,6 +518,7 @@
     "exportDialogTitle": "Exportar ajustes de Plezy",
     "plexTrailerPreview": "Reproducir tráileres de Plex automáticamente",
     "plexTrailerPreviewDescription": "Tras una breve pausa, se reproduce automáticamente el tráiler de la película o serie seleccionada.",
+    "plexTrailerPreviewDelay": "Tiempo de espera del tráiler",
     "plexTrailerPreviewAudio": "Sonido de los tráileres",
     "plexTrailerPreviewAudioDescription": "Reproducir el sonido del tráiler en la vista previa de la esquina",
     "showHeroFormatBadges": "Mostrar insignias de audio y vídeo en películas y episodios",
