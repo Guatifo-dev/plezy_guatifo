@@ -9,11 +9,13 @@ import '../../../focus/locked_hub_controller.dart';
 import '../../../i18n/strings.g.dart';
 import '../../../media/media_hub.dart';
 import '../../../media/media_item.dart';
+import '../../../media/media_kind.dart';
 import '../../../media/media_server_client.dart';
 import '../../../mixins/deletion_aware.dart';
 import '../../../mixins/item_updatable.dart';
 import '../../../mixins/watch_state_aware.dart';
 import '../../../services/settings_service.dart';
+import '../../../utils/app_logger.dart';
 import '../../../utils/deletion_notifier.dart';
 import '../../../utils/hub_icons.dart';
 import '../../../utils/media_event_keys.dart';
@@ -55,7 +57,65 @@ class _LibraryRecommendedTabState extends BaseLibraryTabState<MediaHub, LibraryR
   final TvSpotlightController _spotlight = TvSpotlightController();
   HubFocusMemory _hubFocusMemory = HubFocusMemory();
 
-  void _setSpotlightItem(MediaItem item) => _spotlight.select(item);
+  // Recently-added Plex hubs may contain seasons rather than their parent
+  // shows. Resolve the show on focus, just as Discover does, without changing
+  // the original hub entries or the other recommendation rows.
+  final Map<String, MediaItem> _recentShowDetails = {};
+  final Set<String> _recentShowPending = {};
+  final Set<String> _recentShowAttempted = {};
+
+  bool _isRecentlyAddedShow(MediaItem item) =>
+      item is PlexMediaItem &&
+      (item.kind == MediaKind.show ||
+          (item.kind == MediaKind.season && item.parentId != null)) &&
+      items.any((hub) {
+        final identity = '${hub.identifier ?? hub.id} ${hub.title}'.toLowerCase();
+        return (identity.contains('recent') || identity.contains('reciente')) &&
+            hub.items.any((entry) => entry.globalKey == item.globalKey);
+      });
+
+  void _ensureRecentShowDetails(MediaItem item) {
+    if (!_isRecentlyAddedShow(item)) return;
+    final key = item.globalKey;
+    if (_recentShowDetails.containsKey(key) ||
+        _recentShowAttempted.contains(key) ||
+        !_recentShowPending.add(key)) return;
+    Future<void>(() async {
+      try {
+        final client = context.tryGetMediaClientForServer(
+            serverIdOrNull(item.serverId ?? widget.library.serverId));
+        final lookupId = item.kind == MediaKind.season ? item.parentId! : item.id;
+        final fetched = await client?.fetchItem(lookupId);
+        if (!mounted || fetched == null || fetched.kind != MediaKind.show) return;
+        final detailed = fetched.copyWith(
+          serverId: item.serverId ?? fetched.serverId,
+          serverName: item.serverName ?? fetched.serverName,
+          libraryId: fetched.libraryId ?? item.libraryId,
+        );
+        setState(() => _recentShowDetails[key] = detailed);
+      } catch (error, stackTrace) {
+        appLogger.w('Unable to load recommended recently added series details',
+            error: error, stackTrace: stackTrace);
+      } finally {
+        _recentShowPending.remove(key);
+        _recentShowAttempted.add(key);
+      }
+    });
+  }
+
+  void _setSpotlightItem(MediaItem item) {
+    _spotlight.select(item);
+    _ensureRecentShowDetails(item);
+  }
+
+  MediaItem? _resolveRecommendedSpotlight(List<MediaHub> hubs) {
+    final item = _spotlight.resolve(hubs);
+    if (item == null) return null;
+    _ensureRecentShowDetails(item);
+    return _isRecentlyAddedShow(item)
+        ? (_recentShowDetails[item.globalKey] ?? item)
+        : item;
+  }
 
   @override
   void didUpdateWidget(LibraryRecommendedTab oldWidget) {
@@ -63,6 +123,9 @@ class _LibraryRecommendedTabState extends BaseLibraryTabState<MediaHub, LibraryR
     if (oldWidget.library.globalKey != widget.library.globalKey) {
       _hubKeysByIdentity.clear();
       _hubFocusMemory = HubFocusMemory();
+      _recentShowDetails.clear();
+      _recentShowPending.clear();
+      _recentShowAttempted.clear();
     }
   }
 
@@ -329,7 +392,7 @@ class _LibraryRecommendedTabState extends BaseLibraryTabState<MediaHub, LibraryR
     return TvSpotlightScaffold(
       hubs: tvHubs,
       spotlightListenable: _spotlight,
-      resolveSpotlight: () => _spotlight.resolve(tvHubs),
+      resolveSpotlight: () => _resolveRecommendedSpotlight(tvHubs),
       resolveClient: (spotlight) =>
           context.tryGetMediaClientForServer(serverIdOrNull(spotlight?.serverId ?? widget.library.serverId)),
       foreground: tvHubs.isEmpty
