@@ -1955,7 +1955,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
         if (stream.kind != MediaStreamKind.video || stream.dolbyVision || stream.hdr10Plus) return false;
         final details = [stream.profile, stream.title, stream.displayTitle]
             .whereType<String>().join(' ').toUpperCase();
-        return RegExp(r'HDR[ -]?10(?!\\+)').hasMatch(details);
+        return RegExp(r'HDR[ -]?10(?![+])').hasMatch(details);
       });
 
   Widget _buildHeroStyledBadge(String label, {required bool isTv}) {
