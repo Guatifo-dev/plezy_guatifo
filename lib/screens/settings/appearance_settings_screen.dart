@@ -17,9 +17,21 @@ import '../../widgets/setting_tile.dart';
 import '../../widgets/settings_page.dart';
 import '../../widgets/settings_builder.dart';
 import '../../widgets/settings_section.dart';
+import '../../widgets/settings_builder.dart';
 import 'app_icon_setting.dart';
 import 'settings_utils.dart';
 import 'theme_settings_screen.dart';
+
+int _trailerDelaySeconds(TrailerPreviewDelay value) => switch (value) {
+  TrailerPreviewDelay.s1 => 1,
+  TrailerPreviewDelay.s2 => 2,
+  TrailerPreviewDelay.s3 => 3,
+  TrailerPreviewDelay.s4 => 4,
+  TrailerPreviewDelay.s5 => 5,
+  TrailerPreviewDelay.s7 => 7,
+  TrailerPreviewDelay.s10 => 10,
+  TrailerPreviewDelay.s15 => 15,
+};
 
 class AppearanceSettingsScreen extends StatelessWidget {
   const AppearanceSettingsScreen({super.key});
@@ -108,11 +120,36 @@ class AppearanceSettingsScreen extends StatelessWidget {
                 title: t.settings.plexTrailerPreview,
                 subtitle: t.settings.plexTrailerPreviewDescription,
               ),
-              SettingSwitchTile(
-                pref: SettingsService.plexTrailerPreviewAudio,
-                icon: Symbols.volume_up_rounded,
-                title: t.settings.plexTrailerPreviewAudio,
-                subtitle: t.settings.plexTrailerPreviewAudioDescription,
+              SettingValueBuilder<bool>(
+                pref: SettingsService.plexTrailerPreview,
+                builder: (context, enabled, _) => ExcludeFocus(
+                  excluding: !enabled,
+                  child: IgnorePointer(
+                    ignoring: !enabled,
+                    child: Opacity(
+                      opacity: enabled ? 1 : 0.45,
+                      child: Column(children: [
+                        SettingSelectionTile<TrailerPreviewDelay>(
+                          pref: SettingsService.plexTrailerPreviewDelay,
+                          icon: Symbols.timer_rounded,
+                          title: t.settings.plexTrailerPreviewDelay,
+                          subtitleBuilder: (v) => '${_trailerDelaySeconds(v)} s',
+                          options: [
+                            for (final v in TrailerPreviewDelay.values)
+                              DialogOption(value: v, title: '${_trailerDelaySeconds(v)} s'),
+                          ],
+                        ),
+                        SettingSwitchTile(
+                          pref: SettingsService.plexTrailerPreviewAudio,
+                          icon: Symbols.volume_up_rounded,
+                          title: t.settings.plexTrailerPreviewAudio,
+                          subtitle: t.settings.plexTrailerPreviewAudioDescription,
+                          enabled: enabled,
+                        ),
+                      ]),
+                    ),
+                  ),
+                ),
               ),
             if (PlatformDetector.isTV())
               SettingSwitchTile(
