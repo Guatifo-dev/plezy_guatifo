@@ -219,6 +219,17 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   final Map<String, MediaItem> _recentShowDetails = {};
   final Set<String> _recentShowPending = {};
   final Set<String> _recentShowAttempted = {};
+  final Set<String> _recentShowDiagnosticSignatures = {};
+
+  void _logRecentShowDiagnostic(String stage, MediaItem item) {
+    final signature = '$stage|${item.globalKey}|${item.summary?.length ?? 0}|${item.clearLogoPath ?? ''}';
+    if (!_recentShowDiagnosticSignatures.add(signature)) return;
+    appLogger.i('[RecentShowDebug] stage=$stage id=${item.id} key=${item.globalKey} '
+        'kind=${item.kind.id} server=${item.serverId} title="${item.title}" '
+        'summaryLength=${item.summary?.length ?? 0} '
+        'logo=${item.clearLogoPath?.isNotEmpty == true}');
+  }
+
 
   bool _isRecentlyAddedShow(MediaItem item) => item is PlexMediaItem &&
       item.kind == MediaKind.show &&
@@ -238,6 +249,9 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       try {
         final client = _getMediaClientForItem(item);
         final fetched = await client?.fetchItem(item.id);
+        appLogger.i('[RecentShowDebug] fetchItem id=${item.id} result=${fetched?.kind.id} '
+            'summaryLength=${fetched?.summary?.length ?? 0} '
+            'logo=${fetched?.clearLogoPath?.isNotEmpty == true}');
         if (!mounted || fetched == null || fetched.kind != MediaKind.show) return;
         final detailed = fetched.copyWith(
           serverId: item.serverId ?? fetched.serverId,
@@ -269,7 +283,9 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   /// synopsis. Its canonical rating key also drives trailer extras lookup.
   MediaItem _resolveRecentShowMetadata(MediaItem item) {
     if (!_isRecentlyAddedShow(item)) return item;
+    _logRecentShowDiagnostic('hub', item);
     final fetched = _recentShowDetails[item.globalKey] ?? item;
+    _logRecentShowDiagnostic('fetchedOrHub', fetched);
     if (fetched.summary?.trim().isNotEmpty == true) return fetched;
     final catalogTitle = (item.title ?? '').trim().toLowerCase();
     if (catalogTitle.isEmpty) return fetched;
@@ -280,9 +296,11 @@ class _DiscoverScreenState extends State<DiscoverScreen>
             candidate.serverId != item.serverId ||
             (candidate.title ?? '').trim().toLowerCase() != catalogTitle ||
             candidate.summary?.trim().isNotEmpty != true) continue;
+        _logRecentShowDiagnostic('catalogMatch', candidate);
         return candidate;
       }
     }
+    _logRecentShowDiagnostic('noCatalogMatch', fetched);
     return fetched;
   }
 
@@ -395,6 +413,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     _spotlight.select(item);
     _ensureHeroFormatMetadata(item);
     _ensureRecentShowDetails(item);
+    if (_isRecentlyAddedShow(item)) _logRecentShowDiagnostic('focus', item);
   }
 
   Widget? _buildTvSpotlightFormatMetadata(MediaItem? item) {
