@@ -2020,6 +2020,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
           letterSpacing: -0.2,
           height: 1,
         ),
+          ),
         ],
       ),
     );
