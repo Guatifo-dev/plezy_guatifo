@@ -232,7 +232,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
 
 
   bool _isRecentlyAddedShow(MediaItem item) => item is PlexMediaItem &&
-      item.kind == MediaKind.show &&
+      (item.kind == MediaKind.show || (item.kind == MediaKind.season && item.parentId != null)) &&
       _discover.hubs.any((hub) {
         final identity = '${hub.identifier ?? hub.id} ${hub.title}'.toLowerCase();
         return (identity.contains('recent') || identity.contains('reciente')) &&
@@ -248,8 +248,9 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     Future<void>(() async {
       try {
         final client = _getMediaClientForItem(item);
-        final fetched = await client?.fetchItem(item.id);
-        appLogger.i('[RecentShowDebug] fetchItem id=${item.id} result=${fetched?.kind.id} '
+        final lookupId = item.kind == MediaKind.season ? item.parentId! : item.id;
+        final fetched = await client?.fetchItem(lookupId);
+        appLogger.i('[RecentShowDebug] fetchItem id=$lookupId result=${fetched?.kind.id} '
             'summaryLength=${fetched?.summary?.length ?? 0} '
             'logo=${fetched?.clearLogoPath?.isNotEmpty == true}');
         if (!mounted || fetched == null || fetched.kind != MediaKind.show) return;
@@ -286,7 +287,8 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     _logRecentShowDiagnostic('hub', item);
     final fetched = _recentShowDetails[item.globalKey] ?? item;
     _logRecentShowDiagnostic('fetchedOrHub', fetched);
-    if (fetched.summary?.trim().isNotEmpty == true) return fetched;
+    if (fetched.kind == MediaKind.show && fetched.summary?.trim().isNotEmpty == true) return fetched;
+    if (item.kind == MediaKind.season) return fetched;
     final catalogTitle = (item.title ?? '').trim().toLowerCase();
     if (catalogTitle.isEmpty) return fetched;
     for (final hub in _catalogHubs) {
