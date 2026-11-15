@@ -25,6 +25,7 @@ import '../media/media_stream.dart';
 import '../media/media_server_client.dart';
 import '../media/media_source_info.dart';
 import '../media/media_hub.dart';
+import '../utils/library_content_notifier.dart';
 import '../utils/media_image_helper.dart';
 import '../utils/content_utils.dart';
 import '../utils/media_quality_labels.dart';
@@ -109,6 +110,10 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   String? _catalogLibrariesSignature;
   String? _catalogLoadingSignature;
   int _catalogLoadGeneration = 0;
+  StreamSubscription<dynamic>? _catalogChangesSubscription;
+  Timer? _catalogChangeDebounce;
+  DateTime? _lastCatalogRefresh;
+  static const _catalogRefreshInterval = Duration(minutes: 2);
 
   List<MediaHub> get _hubs {
     final settings = SettingsService.instance;
@@ -574,7 +579,21 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     );
   }
 
-  void _onCatalogLibrariesChanged() => unawaited(_refreshCatalogHubs());
+  void _onCatalogLibrariesChanged() => unawaited(_refreshCatalogHubs(force: true));
+
+  void _onCatalogContentChanged() {
+    _catalogChangeDebounce?.cancel();
+    _catalogChangeDebounce = Timer(const Duration(seconds: 2), () {
+      if (mounted) unawaited(_refreshCatalogHubs(force: true));
+    });
+  }
+
+  void _refreshCatalogIfDue() {
+    final last = _lastCatalogRefresh;
+    if (last == null || DateTime.now().difference(last) >= _catalogRefreshInterval) {
+      unawaited(_refreshCatalogHubs(force: true));
+    }
+  }
 
   /// Reconcile an edited or otherwise changed item in both backend-provided
   /// Discover hubs and the locally synthesized complete library shelves.
@@ -628,7 +647,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   /// Add one complete, paginated movie catalog and one series catalog to
   /// Discover. Each catalog can span several libraries and servers; its
   /// global offsets are translated into the corresponding per-library page.
-  Future<void> _refreshCatalogHubs() async {
+  Future<void> _refreshCatalogHubs({bool force = false}) async {
     await _hiddenLibrariesProvider.ensureInitialized();
     if (!mounted) return;
 
@@ -641,7 +660,8 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     final signature = libraries
         .map((library) => '${library.globalKey}:${library.kind.name}:${library.title}')
         .join('|');
-    if (signature == _catalogLibrariesSignature || signature == _catalogLoadingSignature) return;
+    if (signature == _catalogLoadingSignature) return;
+    if (!force && signature == _catalogLibrariesSignature) return;
 
     _catalogLoadingSignature = signature;
     final generation = ++_catalogLoadGeneration;
@@ -735,6 +755,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
 
     if (!mounted || generation != _catalogLoadGeneration) return;
     _catalogLibrariesSignature = signature;
+    _lastCatalogRefresh = DateTime.now();
     _catalogLoadingSignature = null;
     setState(() {
       _catalogHubs = nextHubs;
@@ -952,6 +973,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     _hiddenLibrariesProvider = context.read<HiddenLibrariesProvider>();
     _librariesProvider.addListener(_onCatalogLibrariesChanged);
     _hiddenLibrariesProvider.addListener(_onCatalogLibrariesChanged);
+    _catalogChangesSubscription = LibraryContentNotifier().stream.listen((_) => _onCatalogContentChanged());
     unawaited(_refreshCatalogHubs());
     _updateHubKeys();
     unawaited(_discover.load());
@@ -1068,6 +1090,8 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     _discover.removeListener(_onDiscoverChanged);
     _librariesProvider.removeListener(_onCatalogLibrariesChanged);
     _hiddenLibrariesProvider.removeListener(_onCatalogLibrariesChanged);
+    _catalogChangesSubscription?.cancel();
+    _catalogChangeDebounce?.cancel();
     _catalogLoadGeneration++;
     WidgetsBinding.instance.removeObserver(this);
     _autoScrollTimer?.cancel();
@@ -1091,6 +1115,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       if (_isTabVisible && !_isAutoScrollPaused) _startAutoScroll();
       // Stale hubs refetch on every resume — cheap timestamp check, and a
       // desktop window-focus gain after hours away should refresh too (#1646).
+      _refreshCatalogIfDue();
       final startedFullPass = _discover.refreshIfStale();
       // Refresh continue watching on mobile only
       // (on desktop, "resumed" fires on every window focus gain)
@@ -1184,6 +1209,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   void onTabShown() {
     _isTabVisible = true;
     _discover.refreshIfStale();
+    _refreshCatalogIfDue();
     if (!_isAutoScrollPaused) {
       _startAutoScroll();
     }
@@ -1237,6 +1263,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   void manualRefresh() => unawaited(_refreshFromToolbar());
 
   Future<void> _refreshFromToolbar() async {
+    unawaited(_refreshCatalogHubs(force: true));
     final outcome = await _discover.refreshNow();
     if (!mounted) return;
     switch (outcome) {
@@ -1253,6 +1280,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   // Public method to refresh content (for normal navigation)
   @override
   void refresh() {
+    _refreshCatalogIfDue();
     // A stale-resume refresh must also refetch the home hubs; otherwise new
     // server-side media never appears until a restart (#1646). When fresh,
     // only Continue Watching refetches — one on-deck call, zero hub calls.
@@ -1263,6 +1291,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   // Public method to fully reload all content (for profile switches)
   @override
   void fullRefresh() {
+    unawaited(_refreshCatalogHubs(force: true));
     unawaited(_discover.load());
   }
 
