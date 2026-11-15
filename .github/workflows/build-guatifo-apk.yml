@@ -58,6 +58,23 @@ jobs:
           storeFile=plezy-guatifo-release.jks
           EOF
 
+      - name: Resize Fire TV banner to 320x180 for Amazon Home test
+        run: |
+          python3 -m pip install --user Pillow
+          python3 - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+          base = Path("android/app/src/main/res")
+          for density in ("xhdpi", "xxhdpi", "xxxhdpi"):
+              path = base / f"drawable-{density}" / "tv_banner.png"
+              with Image.open(path) as original:
+                  resized = original.convert("RGBA").resize((320, 180), Image.Resampling.LANCZOS)
+                  resized.save(path, optimize=True)
+              with Image.open(path) as check:
+                  assert check.size == (320, 180), path
+                  print(f"{path}: {check.size}")
+          PY
+
       - name: Build release APK (persistent signing)
         env:
           GUA_ARM32: "1"
