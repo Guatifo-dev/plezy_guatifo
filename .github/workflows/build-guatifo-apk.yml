@@ -101,18 +101,18 @@ jobs:
           if not bbox:
               raise RuntimeError("Icon transparency extraction produced an empty image")
           symbol = source.crop(bbox)
-          # Center a larger triangle on transparent square launcher icons.
+          # Fit the triangle to 96% of the square, centered with minimal transparent margins.
           for density, size in (("mdpi",48),("hdpi",72),("xhdpi",96),("xxhdpi",144),("xxxhdpi",192)):
               canvas = Image.new("RGBA",(size,size),(0,0,0,0))
-              scale = min((size*0.88)/symbol.width,(size*0.88)/symbol.height)
+              scale = min((size*0.96)/symbol.width,(size*0.96)/symbol.height)
               art = symbol.resize((max(1,round(symbol.width*scale)),max(1,round(symbol.height*scale))),Image.Resampling.LANCZOS)
               canvas.alpha_composite(art,((size-art.width)//2,(size-art.height)//2))
               canvas.save(root / f"mipmap-{density}/ic_launcher.png")
-          # Android TV banners: proper 16:9 canvas, no text, one centered triangle.
+          # Android TV banners: fill up to 96% of both dimensions while preserving aspect ratio; centered, no text.
           for density, dims in (("xhdpi",(320,180)),("xxhdpi",(480,270)),("xxxhdpi",(640,360))):
               bw,bh=dims
               canvas=Image.new("RGBA",dims,(15,20,32,255))
-              scale=min(bw*0.44/symbol.width,bh*0.76/symbol.height)
+              scale=min(bw*0.96/symbol.width,bh*0.96/symbol.height)
               art=symbol.resize((round(symbol.width*scale),round(symbol.height*scale)),Image.Resampling.LANCZOS)
               canvas.alpha_composite(art,((bw-art.width)//2,(bh-art.height)//2))
               canvas.convert("RGB").save(root / f"drawable-{density}/tv_banner.png")
