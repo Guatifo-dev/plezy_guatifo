@@ -1,0 +1,31 @@
+name: Publish PlezyVision stable APK
+on:
+  push:
+    branches:
+      - publish-plezyvision-v1
+permissions:
+  contents: write
+  actions: read
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download verified stable APK artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh run download 43706004160 --repo "${{ github.repository }}" --name plezy-guatifo-android-arm32 --dir ./release
+          test -s ./release/app-release.apk
+          mv ./release/app-release.apk ./release/PlezyVison.apk
+      - name: Publish stable GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create v1.0.0 ./release/PlezyVison.apk \
+            --repo "${{ github.repository }}" \
+            --target e9d2e821f3b572770dd714eb03a75472ab864bfc \
+            --title "PlezyVision 1.0 Estable" \
+            --notes "Versión estable probada de PlezyVision para Fire TV Stick 4K (ARM32). APK: PlezyVison.apk. Basada en el commit e9d2e82." \
+            --latest
