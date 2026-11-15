@@ -1,4 +1,7 @@
-# PlezyVision 🎬
+<h1>
+  <img src="https://raw.githubusercontent.com/Guatifo-dev/plezy_guatifo/e9d2e821f3b572770dd714eb03a75472ab864bfc/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png" alt="Icono de PlezyVision" width="48" height="48" style="vertical-align: middle;" />
+  PlezyVision
+</h1>
 
 **PlezyVision** es una versión personalizada (*fork*) del proyecto de código abierto [Plezy](https://github.com/edde746/plezy), adaptada especialmente para disfrutar de una biblioteca multimedia en **Fire TV y Android TV**, con una presentación visual más cinematográfica.
 
