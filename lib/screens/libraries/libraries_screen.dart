@@ -1,3 +1,4 @@
+import '../../widgets/plex_trailer_preview.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -208,8 +209,20 @@ class _LibrariesScreenState extends State<LibrariesScreen>
     }
   }
 
+  int? _lastTrailerTabIndex;
+
   @override
   void onTabChanged() {
+    // TabBarView keeps Recommended mounted while Browse is selected. The
+    // native ExoPlayer can therefore outlive the visible Recommended route.
+    // Stop on the controller's actual index change, not didUpdateWidget:
+    // the latter is not guaranteed to run for a kept-alive page.
+    final selectedIndex = tabController.index;
+    final previousIndex = _lastTrailerTabIndex;
+    _lastTrailerTabIndex = selectedIndex;
+    if (previousIndex != null && previousIndex != selectedIndex) {
+      unawaited(PlexTrailerPreview.stop());
+    }
     if (_selectedLibraryGlobalKey != null && !tabController.indexIsChanging) {
       if (!_isRestoringTab) {
         // Resolve both now: by the time storage resolves, a library switch may
