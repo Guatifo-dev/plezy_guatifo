@@ -13,7 +13,7 @@ on:
       - fix/discover-catalog-live-refresh
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-android:
@@ -149,3 +149,19 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish PlezyVision v1.0.1 release
+        if: ${{ github.ref == 'refs/heads/fix/discover-catalog-live-refresh' && contains(github.event.head_commit.message, '[publish-v1.0.1]') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create v1.0.1 build/app/outputs/flutter-apk/app-release.apk#PlezyVision.apk \
+            --target "$GITHUB_SHA" \
+            --title "PlezyVision 1.0.1" \
+            --notes "### Mejoras
+          - **Todas mis Películas** y **Todas mis Series** actualizan su contenido cuando se producen cambios en las bibliotecas del servidor Plex.
+          - Las películas y series eliminadas dejan de aparecer en esos apartados y se incorporan las nuevas sin tener que reiniciar la aplicación.
+          - Actualización al regresar a la aplicación y al refrescar manualmente.
+
+          Actualización instalable sobre PlezyVision 1.0 sin perder los ajustes. APK para Fire TV ARM32."
