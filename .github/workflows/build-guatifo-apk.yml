@@ -131,6 +131,9 @@ jobs:
               art=banner_symbol.resize((max(1,round(banner_symbol.width*scale)),max(1,round(banner_symbol.height*scale))),Image.Resampling.LANCZOS)
               canvas.alpha_composite(art,((bw-art.width)//2,(bh-art.height)//2))
               canvas.convert("RGB").save(root / f"drawable-{density}/tv_banner.png")
+          # Reuse the approved launcher artwork in the Flutter About screen.
+          # The icon is generated before flutter build; no new artwork is introduced.
+          launcher.save(Path("assets/plezyvision_about.png"))
           print("Generated 5 transparent launcher icons and 3 centered 16:9 banners")
           PY
 
