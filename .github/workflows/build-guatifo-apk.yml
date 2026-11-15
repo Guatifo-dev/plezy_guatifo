@@ -10,6 +10,7 @@ on:
       - test-firetv-explicit-launcher-icon
       - test-plezyvision-centered-logo-banner
       - plezyvision-hide-original-updates
+      - fix/discover-catalog-live-refresh
 
 permissions:
   contents: read
