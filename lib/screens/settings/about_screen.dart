@@ -6,7 +6,7 @@ import '../../theme/mono_tokens.dart';
 class AboutScreen extends StatelessWidget {
   const AboutScreen({super.key});
 
-  static const String _visionVersion = '1.0.1';
+  static const String _visionVersion = '1.0.2';
 
   @override
   Widget build(BuildContext context) {
