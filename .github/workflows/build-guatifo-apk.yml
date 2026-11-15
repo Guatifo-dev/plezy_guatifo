@@ -7,6 +7,7 @@ on:
       - feature/plex-trailer-preview
       - feature/plezy-vision-icon-183
       - test-firetv-home-banner
+      - test-firetv-explicit-launcher-icon
       - plezyvision-hide-original-updates
 
 permissions:
