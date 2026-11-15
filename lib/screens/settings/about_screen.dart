@@ -1,14 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:material_symbols_icons/symbols.dart';
-import 'package:plezy/widgets/app_icon.dart';
 import '../../widgets/focused_scroll_scaffold.dart';
-import '../../widgets/focusable_list_tile.dart';
-import '../../widgets/settings_section.dart';
 import '../../i18n/strings.g.dart';
 import '../../theme/mono_tokens.dart';
-import 'licenses_screen.dart';
-import '../../utils/external_url.dart';
 
 class AboutScreen extends StatelessWidget {
   const AboutScreen({super.key});
@@ -20,73 +13,81 @@ class AboutScreen extends StatelessWidget {
     const gitCommit = String.fromEnvironment('GIT_COMMIT');
     final shortCommit = gitCommit.length >= 7 ? gitCommit.substring(0, 7) : gitCommit;
     final muted = tokens(context).textMuted;
+    final theme = Theme.of(context);
+    Widget feature(IconData icon, String title, String detail) => Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+          Row(children: [
+            Icon(icon, size: 19, color: theme.colorScheme.primary),
+            const SizedBox(width: 6),
+            Expanded(child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.bold))),
+          ]),
+          const SizedBox(height: 4),
+          Text(detail, maxLines: 2, overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall?.copyWith(color: muted)),
+        ]),
+      ),
+    );
+
     return FocusedScrollScaffold(
-      title: Text(t.about.title),
+      title: const Text('Acerca de'),
       slivers: [
-        SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          sliver: SliverList(
-            delegate: SliverChildListDelegate([
-              Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Image.asset('assets/plezyvision_about.png', width: 72, height: 72),
-                    const SizedBox(height: 6),
-                    Text('Plezy Vision', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 2),
-                    Text('Versión $_visionVersion', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: muted)),
-                    if (shortCommit.isNotEmpty)
-                      Text('Commit: $shortCommit', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: muted)),
-                    const SizedBox(height: 10),
-                    Text(
-                      'Cliente para Plex basado en Plezy, con navegación visual, tráileres automáticos e insignias multimedia.\n'
-                      'Proyecto independiente de código abierto, basado en Plezy de edde746.',
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Center(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: SizedBox(
+                  width: 650,
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      Image.asset('assets/plezyvision_about.png', width: 76, height: 76),
+                      const SizedBox(width: 16),
+                      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text('PlezyVision', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+                        Text('Versión ' + _visionVersion + (shortCommit.isEmpty ? '' : ' · Commit: ' + shortCommit),
+                          style: theme.textTheme.bodySmall?.copyWith(color: muted)),
+                        Text('Cliente multimedia para Plex',
+                          style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.primary)),
+                      ]),
+                    ]),
+                    const SizedBox(height: 18),
+                    Text('Tu biblioteca, otra forma de disfrutarla',
                       textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    const SizedBox(height: 5),
-                    Text('Licencia GNU GPL-3.0', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: muted)),
-                  ],
+                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Text('PlezyVision es una adaptación personalizada de Plezy, diseñada para ofrecer '
+                      'una experiencia cinematográfica en Fire TV, con navegación visual y acceso '
+                      'directo a tu biblioteca Plex.',
+                      textAlign: TextAlign.center, style: theme.textTheme.bodyMedium),
+                    const SizedBox(height: 18),
+                    Row(children: [
+                      feature(Icons.play_circle_outline, 'Tráileres automáticos', 'Vista previa al seleccionar títulos'),
+                      const SizedBox(width: 10),
+                      feature(Icons.photo_library_outlined, 'Exploración visual', 'Fanart, películas y series'),
+                    ]),
+                    const SizedBox(height: 10),
+                    Row(children: [
+                      feature(Icons.high_quality_outlined, 'Insignias multimedia', '4K, HDR y audio avanzado'),
+                      const SizedBox(width: 10),
+                      feature(Icons.tv_outlined, 'Experiencia Fire TV', 'Navegación adaptada al mando'),
+                    ]),
+                    const SizedBox(height: 16),
+                    Text('Proyecto independiente basado en Plezy de edde746 · GNU GPL-3.0',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodySmall?.copyWith(color: muted)),
+                  ]),
                 ),
               ),
-              const SizedBox(height: 12),
-              SettingsGroup(
-                margin: EdgeInsets.zero,
-                children: [
-                  for (final entry in const [
-                    ('Proyecto original · Plezy', 'https://github.com/edde746/plezy'),
-                    ('Código fuente · PlezyVision', 'https://github.com/Guatifo-dev/plezy_guatifo'),
-                    ('Licencia GNU GPL-3.0', 'https://github.com/edde746/plezy/blob/main/LICENSE'),
-                  ])
-                    FocusableListTile(
-                      leading: const AppIcon(Symbols.open_in_new_rounded, fill: 1),
-                      title: Text(entry.$1),
-                      trailing: const AppIcon(Symbols.chevron_right_rounded, fill: 1),
-                      onTap: () async {
-                        final opened = await openExternalUrl(Uri.parse(entry.$2));
-                        if (!opened && context.mounted) {
-                          await Clipboard.setData(ClipboardData(text: entry.$2));
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('No se pudo abrir el enlace; URL copiada')),
-                            );
-                          }
-                        }
-                      },
-                    ),
-                  FocusableListTile(
-                    dense: true,
-                    leading: const AppIcon(Symbols.description_rounded, fill: 1),
-                    title: Text(t.about.openSourceLicenses),
-                    trailing: const AppIcon(Symbols.chevron_right_rounded, fill: 1),
-                    onTap: () {
-                      Navigator.push(context, MaterialPageRoute(builder: (context) => const LicensesScreen()));
-                    },
-                  ),
-                ],
-              ),
-            ]),
+            ),
           ),
         ),
       ],
