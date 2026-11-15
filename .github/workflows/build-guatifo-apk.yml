@@ -166,3 +166,14 @@ jobs:
           - Actualización al regresar a la aplicación y al refrescar manualmente.
 
           Actualización instalable sobre PlezyVision 1.0 sin perder los ajustes. APK para Fire TV ARM32."
+
+      - name: Publish PlezyVision v1.0.2 release
+        if: ${{ github.ref == 'refs/heads/fix/trailer-audio-on-navigation' && contains(github.event.head_commit.message, '[publish-v1.0.2]') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create v1.0.2 build/app/outputs/flutter-apk/app-release.apk#PlezyVision.apk \
+            --target "$GITHUB_SHA" \
+            --title "PlezyVision 1.0.2" \
+            --notes-file docs/PLEZYVISION-1.0.2.md
