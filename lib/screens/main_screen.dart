@@ -1,3 +1,4 @@
+import '../widgets/plex_trailer_preview.dart';
 import 'dart:async';
 import '../media/ids.dart';
 import '../media/media_server_client.dart';
@@ -1779,6 +1780,9 @@ class _MainScreenState extends State<MainScreen>
     if (!_getVisibleTabs(_isOffline).any((t) => t.id == tab)) return;
 
     final previousTab = _currentTab;
+    // Main sections are kept alive: stop the native trailer explicitly before
+    // switching, otherwise audio from the hidden spotlight can survive.
+    if (previousTab != tab) unawaited(PlexTrailerPreview.stop());
     final wasMounted = _mountedTabs.contains(tab);
     setState(() {
       _currentTab = tab;
