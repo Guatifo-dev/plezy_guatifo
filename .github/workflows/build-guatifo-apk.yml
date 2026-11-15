@@ -6,6 +6,7 @@ on:
     branches:
       - feature/plex-trailer-preview
       - feature/plezy-vision-icon-183
+      - test-firetv-home-banner
       - plezyvision-hide-original-updates
 
 permissions:
