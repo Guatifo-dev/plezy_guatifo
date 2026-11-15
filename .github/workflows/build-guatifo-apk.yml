@@ -116,12 +116,18 @@ jobs:
               art = symbol.resize((max(1,round(symbol.width*scale)),max(1,round(symbol.height*scale))),Image.Resampling.LANCZOS)
               canvas.alpha_composite(art,((size-art.width)//2,(size-art.height)//2))
               canvas.save(root / f"mipmap-{density}/ic_launcher.png")
-          # Android TV banners: fill up to 96% of both dimensions while preserving aspect ratio; centered, no text.
+          # Use the EXACT generated transparent launcher icon for Projectivy banners.
+          # Do not re-extract, redraw, recolor or alter the icon artwork.
+          launcher = Image.open(root / "mipmap-xxxhdpi/ic_launcher.png").convert("RGBA")
+          launcher_bbox = launcher.getchannel("A").getbbox()
+          if not launcher_bbox:
+              raise RuntimeError("Transparent launcher icon is empty")
+          banner_symbol = launcher.crop(launcher_bbox)
           for density, dims in (("xhdpi",(320,180)),("xxhdpi",(480,270)),("xxxhdpi",(640,360))):
               bw,bh=dims
               canvas=Image.new("RGBA",dims,(15,20,32,255))
-              scale=min(bw*0.96/symbol.width,bh*0.96/symbol.height)
-              art=symbol.resize((round(symbol.width*scale),round(symbol.height*scale)),Image.Resampling.LANCZOS)
+              scale=min(bw*0.96/banner_symbol.width,bh*0.96/banner_symbol.height)
+              art=banner_symbol.resize((max(1,round(banner_symbol.width*scale)),max(1,round(banner_symbol.height*scale))),Image.Resampling.LANCZOS)
               canvas.alpha_composite(art,((bw-art.width)//2,(bh-art.height)//2))
               canvas.convert("RGB").save(root / f"drawable-{density}/tv_banner.png")
           print("Generated 5 transparent launcher icons and 3 centered 16:9 banners")
