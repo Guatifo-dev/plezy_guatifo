@@ -34,11 +34,9 @@ import '../../services/settings_service.dart' as settings;
 import '../../services/settings_mutation_service.dart';
 import '../../services/supporter/supporter_mode.dart';
 import '../../widgets/background_download_warning_banner.dart';
-import '../../services/update_service.dart';
 import '../../utils/dialogs.dart';
 import '../../utils/snackbar_helper.dart';
 import '../../utils/platform_detector.dart';
-import '../../utils/update_dialog.dart';
 import '../../widgets/desktop_app_bar.dart';
 import '../../widgets/dialog_action_button.dart';
 import '../../widgets/focusable_list_tile.dart';
@@ -64,7 +62,6 @@ import 'services_settings_screen.dart';
 import 'settings_utils.dart';
 import 'supporter_settings_tile.dart';
 import 'tracker_service_info.dart';
-import '../../widgets/loading_indicator_box.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
@@ -116,8 +113,6 @@ class _SettingsScreenState extends State<SettingsScreen> with FocusableTab, Moun
   static const _kViewLogs = 'view_logs';
   static const _kClearImageCache = 'clear_image_cache';
   static const _kResetSettings = 'reset_settings';
-  static const _kCheckForUpdates = 'check_for_updates';
-  static const _kAutoCheckUpdatesOnStartup = 'auto_check_updates_on_startup';
   static const _kAbout = 'about';
   static const _kWatchTogetherRelay = 'watch_together_relay';
   static const _kExportSettings = 'export_settings';
@@ -126,10 +121,6 @@ class _SettingsScreenState extends State<SettingsScreen> with FocusableTab, Moun
 
   KeyboardShortcutsService? _keyboardService;
   late final bool _keyboardShortcutsSupported = KeyboardShortcutsService.isPlatformSupported();
-
-  // Update checking state
-  bool _isCheckingForUpdate = false;
-  Map<String, dynamic>? _updateInfo;
 
   @override
   void initState() {
@@ -233,8 +224,6 @@ class _SettingsScreenState extends State<SettingsScreen> with FocusableTab, Moun
                     _buildControlsSection(sheetContext),
 
                   _buildAdvancedSection(),
-
-                  if (UpdateService.isUpdateCheckAvailable) ...[_buildUpdateSection()],
 
                   // Hidden on Android TV / tvOS (no document picker); desktop in
                   // force-TV mode keeps it — FilePickerService works there.
@@ -647,62 +636,6 @@ class _SettingsScreenState extends State<SettingsScreen> with FocusableTab, Moun
     );
   }
 
-  Widget _buildAutoCheckUpdatesOnStartupTile() => SettingSwitchTile(
-    focusNode: _focusTracker.get(_kAutoCheckUpdatesOnStartup),
-    pref: settings.SettingsService.autoCheckUpdatesOnStartup,
-    icon: Symbols.notifications_active_rounded,
-    title: t.settings.autoCheckUpdatesOnStartup,
-    subtitle: t.settings.autoCheckUpdatesOnStartupDescription,
-  );
-
-  Widget _buildUpdateSection() {
-    if (UpdateService.useNativeUpdater) {
-      return SettingsGroup(
-        title: t.settings.updates,
-        children: [
-          SettingNavigationTile(
-            focusNode: _focusTracker.get(_kCheckForUpdates),
-            icon: Symbols.system_update_rounded,
-            title: t.settings.checkForUpdates,
-            onTap: () => UpdateService.checkForUpdatesNative(inBackground: false),
-          ),
-          _buildAutoCheckUpdatesOnStartupTile(),
-        ],
-      );
-    }
-
-    final hasUpdate = _updateInfo != null && _updateInfo!['hasUpdate'] == true;
-
-    return SettingsGroup(
-      title: t.settings.updates,
-      children: [
-        FocusableListTile(
-          focusNode: _focusTracker.get(_kCheckForUpdates),
-          leading: AppIcon(
-            hasUpdate ? Symbols.system_update_rounded : Symbols.check_circle_rounded,
-            fill: 1,
-            color: hasUpdate ? Colors.orange : null,
-          ),
-          title: Text(hasUpdate ? t.settings.updateAvailable : t.settings.checkForUpdates),
-          subtitle: hasUpdate ? Text(t.update.versionAvailable(version: _updateInfo!['latestVersion'])) : null,
-          trailing: _isCheckingForUpdate
-              ? const LoadingIndicatorBox(size: 24)
-              : const AppIcon(Symbols.chevron_right_rounded, fill: 1),
-          onTap: _isCheckingForUpdate
-              ? null
-              : () {
-                  if (hasUpdate) {
-                    _showUpdateDialog();
-                  } else {
-                    _checkForUpdates();
-                  }
-                },
-        ),
-        _buildAutoCheckUpdatesOnStartupTile(),
-      ],
-    );
-  }
-
   Future<void> _showDownloadLocationDialog() async {
     final storageService = DownloadStorageService.instance;
     final isCustom = storageService.isUsingCustomPath();
@@ -920,37 +853,7 @@ class _SettingsScreenState extends State<SettingsScreen> with FocusableTab, Moun
     );
   }
 
-  Future<void> _checkForUpdates() async {
-    setState(() => _isCheckingForUpdate = true);
 
-    try {
-      final updateInfo = await UpdateService.checkForUpdates();
-
-      if (mounted) {
-        setState(() {
-          _updateInfo = updateInfo;
-          _isCheckingForUpdate = false;
-        });
-
-        if (updateInfo == null || updateInfo['hasUpdate'] != true) {
-          showAppSnackBar(context, t.update.latestVersion);
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isCheckingForUpdate = false);
-        showErrorSnackBar(context, t.update.checkFailed);
-      }
-    }
-  }
-
-  void _showUpdateDialog() {
-    final updateInfo = _updateInfo;
-    if (updateInfo == null) return;
-    unawaited(
-      showUpdateAvailableDialog(context, updateInfo, title: t.settings.updateAvailable, dismissLabel: t.common.close),
-    );
-  }
 }
 
 class _RelayUrlDialog extends StatefulWidget {
