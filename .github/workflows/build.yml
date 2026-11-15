@@ -1,4 +1,4 @@
-name: Build
+﻿name: Build PlezyVision
 run-name: ${{ inputs.release_tag != '' && format('Release {0}', inputs.release_tag) || format('Build {0}', github.sha) }}
 
 on:
