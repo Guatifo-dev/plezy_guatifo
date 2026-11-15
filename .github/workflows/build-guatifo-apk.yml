@@ -6,6 +6,7 @@ on:
     branches:
       - feature/plex-trailer-preview
       - feature/plezy-vision-icon-183
+      - plezyvision-hide-original-updates
 
 permissions:
   contents: read
