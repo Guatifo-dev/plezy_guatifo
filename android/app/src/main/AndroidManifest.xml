@@ -83,6 +83,7 @@
         <activity-alias
             android:name=".MainActivity"
             android:exported="true"
+            android:icon="@mipmap/ic_launcher"
             android:banner="@drawable/tv_banner"
             android:targetActivity=".PlezyActivity">
             <meta-data
