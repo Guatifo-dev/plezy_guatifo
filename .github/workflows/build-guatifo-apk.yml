@@ -11,6 +11,7 @@ on:
       - test-plezyvision-centered-logo-banner
       - plezyvision-hide-original-updates
       - fix/discover-catalog-live-refresh
+      - fix/trailer-audio-on-navigation
 
 permissions:
   contents: write
