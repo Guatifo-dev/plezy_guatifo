@@ -60,7 +60,27 @@ Las insignias dependen de los metadatos disponibles para cada archivo; no implic
 
 ## 📸 Capturas y demostración
 
-Se están preparando capturas de **Inicio**, **Detalles de película** y **Apariencia**, junto con un vídeo de demostración. Se incorporarán aquí cuando estén subidos al repositorio.
+Así se ve PlezyVision en funcionamiento, con su navegación centrada en el fanart, los detalles de cada título y las opciones de personalización.
+
+### Pantalla de inicio
+
+![Pantalla de inicio de PlezyVision con fanart y distintivos técnicos](media/01-inicio.jpg)
+
+### Detalles de una película
+
+![Ficha de película en PlezyVision con información y distintivos de vídeo y audio](media/02-detalles-pelicula.jpg)
+
+### Opciones de apariencia
+
+![Opciones de apariencia de PlezyVision: insignias y tráileres automáticos](media/03-ajustes.jpg)
+
+### 🎥 Vídeo de demostración
+
+**[▶ Ver la demostración de PlezyVision (MP4, unos 41 segundos)](media/04-demo.mp4)**
+
+[Descargar el vídeo](https://github.com/Guatifo-dev/plezy_guatifo/raw/refs/heads/main/media/04-demo.mp4)
+
+*Las capturas y el vídeo muestran una biblioteca personal de ejemplo; PlezyVision no distribuye contenido multimedia.*
 
 ## ℹ️ Notas importantes
 
