@@ -1,0 +1,71 @@
+﻿name: Build Plezy Guatifo APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/plex-trailer-preview
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build-android:
+    name: Build Android ARM32 APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Java
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          flutter-version: '3.47.1'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get --enforce-lockfile --no-example
+
+      - name: Generate localized strings
+        run: dart run slang
+
+      - name: Configure persistent release signing
+        env:
+          PLEZY_KEYSTORE_BASE64: ${{ secrets.PLEZY_KEYSTORE_BASE64 }}
+          PLEZY_KEYSTORE_PASSWORD: ${{ secrets.PLEZY_KEYSTORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$PLEZY_KEYSTORE_BASE64" || { echo "::error::Missing PLEZY_KEYSTORE_BASE64 secret"; exit 1; }
+          test -n "$PLEZY_KEYSTORE_PASSWORD" || { echo "::error::Missing PLEZY_KEYSTORE_PASSWORD secret"; exit 1; }
+          umask 077
+          printf '%s' "$PLEZY_KEYSTORE_BASE64" | base64 --decode > android/app/plezy-guatifo-release.jks
+          cat > android/key.properties <<EOF
+          storePassword=$PLEZY_KEYSTORE_PASSWORD
+          keyPassword=$PLEZY_KEYSTORE_PASSWORD
+          keyAlias=plezy-guatifo
+          storeFile=plezy-guatifo-release.jks
+          EOF
+
+      - name: Build release APK (persistent signing)
+        env:
+          GUA_ARM32: "1"
+        run: flutter build apk --release --target-platform android-arm --build-number="$((160 + GITHUB_RUN_NUMBER))" --dart-define=GIT_COMMIT=${{ github.sha }}
+
+      - name: Publish APK artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: plezy-guatifo-android-arm32
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
+
