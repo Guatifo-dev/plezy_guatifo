@@ -71,6 +71,7 @@ class TvSpotlightScaffold extends StatelessWidget {
     required this.resolveClient,
     required this.foreground,
     this.hideSpoilers,
+    this.allowTrailerPreview = true,
     this.metadataBelowBuilder,
   });
 
@@ -80,6 +81,7 @@ class TvSpotlightScaffold extends StatelessWidget {
   final TvSpotlightClientResolver resolveClient;
   final Widget foreground;
   final bool? hideSpoilers;
+  final bool allowTrailerPreview;
   final Widget? Function(MediaItem?)? metadataBelowBuilder;
 
   @override
@@ -94,7 +96,7 @@ class TvSpotlightScaffold extends StatelessWidget {
     // restarting the 3-second delay or trailer.
     final routeIsCurrent = ModalRoute.of(context)?.isCurrent ?? true;
     final spotlightPreviewActive =
-        MainScreenFocusScope.spotlightPreviewActiveOf(context) && routeIsCurrent && TickerMode.of(context);
+        allowTrailerPreview && MainScreenFocusScope.spotlightPreviewActiveOf(context) && routeIsCurrent && TickerMode.of(context);
     final fullBleedWidth = MainScreenFocusScope.fullBleedWidthOf(context);
     final railHeight = hubs.isEmpty
         ? 0.0
