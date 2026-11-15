@@ -397,6 +397,7 @@ class _LibraryRecommendedTabState extends BaseLibraryTabState<MediaHub, LibraryR
   Widget _buildTvContent(List<MediaHub> items) {
     final tvHubs = items.where((hub) => hub.items.isNotEmpty).toList();
     return TvSpotlightScaffold(
+      allowTrailerPreview: widget.isActive,
       hubs: tvHubs,
       spotlightListenable: _spotlight,
       resolveSpotlight: () => _resolveRecommendedSpotlight(tvHubs),
