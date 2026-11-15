@@ -1,3 +1,4 @@
+import '../../../widgets/plex_trailer_preview.dart';
 import 'dart:async';
 import '../../../media/ids.dart';
 
@@ -120,6 +121,12 @@ class _LibraryRecommendedTabState extends BaseLibraryTabState<MediaHub, LibraryR
   @override
   void didUpdateWidget(LibraryRecommendedTab oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // The recommended tab is kept alive when Browse/Collections is selected.
+    // A hidden spotlight must not retain or resume its native trailer audio.
+    if ((oldWidget.isActive && !widget.isActive) ||
+        oldWidget.library.globalKey != widget.library.globalKey) {
+      unawaited(PlexTrailerPreview.stop());
+    }
     if (oldWidget.library.globalKey != widget.library.globalKey) {
       _hubKeysByIdentity.clear();
       _hubFocusMemory = HubFocusMemory();
