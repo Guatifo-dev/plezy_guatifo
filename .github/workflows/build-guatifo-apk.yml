@@ -64,43 +64,51 @@ jobs:
         run: |
           python -m pip install --quiet pillow
           python - <<'PY'
-          from PIL import Image
-          from collections import deque
+          from PIL import Image, ImageDraw, ImageFilter
           from pathlib import Path
 
           root = Path("android/app/src/main/res")
           source = Image.open(root / "mipmap-xxxhdpi/ic_launcher.png").convert("RGBA")
-          # Remove only the dark background connected to the image border,
-          # preserving the black filmstrip details inside the yellow triangle.
+          # The source contains a rounded black/navy square, not a flat dark background.
+          # Identify the yellow/orange triangle by its warm color, then reconstruct
+          # its silhouette row-by-row. This fills over the black filmstrip cutouts
+          # WITHOUT removing the black filmstrip pixels inside the triangle.
           w, h = source.size
-          pixels = source.load()
-          outside = bytearray(w*h)
-          q = deque()
-          for x in range(w):
-              q.extend(((x, 0), (x, h-1)))
+          p = source.load()
+          rows = {}
           for y in range(h):
-              q.extend(((0, y), (w-1, y)))
-          while q:
-              x, y = q.popleft()
-              i = y*w+x
-              if outside[i]:
-                  continue
-              r, g, b, a = pixels[x,y]
-              if max(r,g,b) > 75 or max(r,g,b)-min(r,g,b) > 24:
-                  continue
-              outside[i] = 1
-              if x: q.append((x-1,y))
-              if x+1<w: q.append((x+1,y))
-              if y: q.append((x,y-1))
-              if y+1<h: q.append((x,y+1))
-          for y in range(h):
+              xs = []
               for x in range(w):
-                  if outside[y*w+x]:
-                      pixels[x,y] = (0,0,0,0)
-          bbox = source.getbbox()
+                  r,g,b,a = p[x,y]
+                  if a > 0 and r > 130 and g > 45 and r > g*1.22 and g > b*1.22:
+                      xs.append(x)
+              if len(xs) >= 2:
+                  rows[y] = (min(xs), max(xs))
+          if len(rows) < h//4:
+              raise RuntimeError("Unable to identify the warm-colored triangle silhouette")
+          mask = Image.new("L",(w,h),0)
+          draw = ImageDraw.Draw(mask)
+          ys = sorted(rows)
+          for y in range(ys[0],ys[-1]+1):
+              if y in rows:
+                  left,right = rows[y]
+              else:
+                  prev = max(k for k in ys if k < y)
+                  nex = min(k for k in ys if k > y)
+                  t = (y-prev)/(nex-prev)
+                  left = round(rows[prev][0]*(1-t)+rows[nex][0]*t)
+                  right = round(rows[prev][1]*(1-t)+rows[nex][1]*t)
+              draw.line((left,y,right,y),fill=255)
+          # Smooth only the alpha edge; the original orange/black artwork remains.
+          mask = mask.filter(ImageFilter.GaussianBlur(0.7))
+          source.putalpha(mask)
+          bbox = mask.getbbox()
           if not bbox:
-              raise RuntimeError("Icon transparency extraction produced an empty image")
+              raise RuntimeError("Empty triangle mask")
           symbol = source.crop(bbox)
+          # Guard against accidentally shipping a dark rectangular background.
+          if symbol.getpixel((0,0))[3] > 10 or symbol.getpixel((symbol.width-1,0))[3] > 10:
+              raise RuntimeError("Triangle extraction still has opaque square corners")
           # Fit the triangle to 96% of the square, centered with minimal transparent margins.
           for density, size in (("mdpi",48),("hdpi",72),("xhdpi",96),("xxhdpi",144),("xxxhdpi",192)):
               canvas = Image.new("RGBA",(size,size),(0,0,0,0))
