@@ -79,9 +79,11 @@ Así se ve PlezyVision en funcionamiento, con su navegación centrada en el fana
 
 ### 🎥 Vídeo de demostración
 
-**[▶ Ver la demostración de PlezyVision (MP4, unos 41 segundos)](media/04-demo.mp4)**
+**[▶ Abrir vídeo de demostración (MP4, 41 segundos)](https://raw.githubusercontent.com/Guatifo-dev/plezy_guatifo/main/media/04-demo.mp4)**
 
-[Descargar el vídeo](https://github.com/Guatifo-dev/plezy_guatifo/raw/refs/heads/main/media/04-demo.mp4)
+[Ver archivo en GitHub](https://github.com/Guatifo-dev/plezy_guatifo/blob/main/media/04-demo.mp4) · [Descargar MP4 directamente](https://raw.githubusercontent.com/Guatifo-dev/plezy_guatifo/main/media/04-demo.mp4)
+
+*Según el navegador, el enlace directo puede reproducir el vídeo o iniciar su descarga.*
 
 *Las capturas y el vídeo muestran una biblioteca personal de ejemplo; PlezyVision no distribuye contenido multimedia.*
 
