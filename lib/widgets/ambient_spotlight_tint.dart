@@ -28,8 +28,6 @@ class AmbientSpotlightTint extends StatefulWidget {
 
 class _AmbientSpotlightTintState extends State<AmbientSpotlightTint> {
   Color? _accent;
-  Color? _preparedAccent;
-  Future<void>? _paletteTask;
   int _generation = 0;
 
   @override
@@ -49,15 +47,13 @@ class _AmbientSpotlightTintState extends State<AmbientSpotlightTint> {
 
   void _schedule() {
     final generation = ++_generation;
-    _paletteTask = null;
-    _preparedAccent = null;
     final media = widget.item;
     final path = media?.heroArtCandidates(containerAspectRatio: 16 / 9).firstOrNull ?? media?.thumbPath;
     if (path == null || path.isEmpty) {
       _accent = null;
       return;
     }
-    _paletteTask = (() async {
+    (() async {
       final color = await AmbientArtworkPalette.resolve(
         path: path,
         client: widget.client,
@@ -65,7 +61,6 @@ class _AmbientSpotlightTintState extends State<AmbientSpotlightTint> {
         localPath: widget.localArtworkPathResolver?.call(path),
       );
       if (!mounted || generation != _generation) return;
-      _preparedAccent = color;
       setState(() => _accent = color);
     })();
   }
@@ -82,17 +77,45 @@ class _AmbientSpotlightTintState extends State<AmbientSpotlightTint> {
     builder: (context, enabled, _) {
       final theme = Theme.of(context);
       final base = theme.scaffoldBackgroundColor;
-      final tint = enabled && _accent != null
-          ? Color.alphaBlend(_accent!.withValues(alpha: 0.28), base)
-          : base;
+      final accent = enabled ? _accent : null;
+      // A localized, multi-stop wash rather than a uniform 28% tint.
+      // Keep the artwork widget in the tree: only the paint colors animate.
+      final tint = accent == null
+          ? base
+          : Color.alphaBlend(accent.withValues(alpha: 0.43), base);
       return TweenAnimationBuilder<Color?>(
         tween: ColorTween(end: tint),
         duration: const Duration(milliseconds: 280),
         curve: Curves.easeInOutCubic,
-        builder: (context, color, _) => Theme(
-          data: theme.copyWith(scaffoldBackgroundColor: color ?? base),
-          child: Builder(builder: widget.childBuilder),
-        ),
+        builder: (context, color, _) {
+          final ambient = color ?? base;
+          final strength = accent == null ? 0.0 : 1.0;
+          return Theme(
+            data: theme.copyWith(scaffoldBackgroundColor: ambient),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                ColoredBox(color: base),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      stops: const [0.0, 0.38, 0.78, 1.0],
+                      colors: [
+                        Color.lerp(base, ambient, 0.94 * strength)!,
+                        Color.lerp(base, ambient, 0.65 * strength)!,
+                        Color.lerp(base, ambient, 0.27 * strength)!,
+                        base,
+                      ],
+                    ),
+                  ),
+                ),
+                Builder(builder: widget.childBuilder),
+              ],
+            ),
+          );
+        },
       );
     },
   );
