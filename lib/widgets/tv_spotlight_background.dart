@@ -183,15 +183,17 @@ class TvSpotlightBackground extends StatelessWidget {
                           return Align(alignment: .bottomLeft, child: _buildInfo(context, media, constraints.maxWidth));
                         }
 
-                        // Keep the information at its configured text size.
-                        // Scaling the entire column made short summaries look
-                        // larger and shifted the logo/metadata between titles.
+                        // Reserve the lower rows at their native sizes. Only
+                        // the logo may shrink to fit the remaining upper slot.
                         return ClipRect(
-                          child: Align(
-                            alignment: .bottomLeft,
-                            child: SizedBox(
-                              width: constraints.maxWidth,
-                              child: _buildInfo(context, media, constraints.maxWidth),
+                          child: SizedBox(
+                            width: constraints.maxWidth,
+                            height: constraints.maxHeight,
+                            child: _buildInfo(
+                              context,
+                              media,
+                              constraints.maxWidth,
+                              fixedHeight: true,
                             ),
                           ),
                         );
@@ -259,7 +261,7 @@ class TvSpotlightBackground extends StatelessWidget {
     );
   }
 
-  Widget _buildInfo(BuildContext context, MediaItem media, double width) {
+  Widget _buildInfo(BuildContext context, MediaItem media, double width, {bool fixedHeight = false}) {
     final scale = _scale(context);
     final colorScheme = Theme.of(context).colorScheme;
     final shouldHideSpoiler = hideSpoilers && media.shouldHideSpoiler;
@@ -268,14 +270,42 @@ class TvSpotlightBackground extends StatelessWidget {
 
     return Column(
       crossAxisAlignment: .start,
-      mainAxisSize: .min,
+      mainAxisSize: fixedHeight ? MainAxisSize.max : MainAxisSize.min,
       children: [
-        _buildLogoOrTitle(context, media, title, width),
+        if (fixedHeight)
+          Expanded(
+            child: Align(
+              alignment: .bottomLeft,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: .bottomLeft,
+                child: SizedBox(
+                  width: width,
+                  height: _logoHeight(scale),
+                  child: _buildLogoOrTitle(context, media, title, width),
+                ),
+              ),
+            ),
+          )
+        else
+          _buildLogoOrTitle(context, media, title, width),
         SizedBox(height: _sectionGap(scale)),
-        _buildMetadataLine(context, media),
+        if (fixedHeight)
+          SizedBox(
+            height: _metadataFontSize(scale) * 1.5,
+            child: Align(alignment: .centerLeft, child: _buildMetadataLine(context, media)),
+          )
+        else
+          _buildMetadataLine(context, media),
         if (metadataBelow != null) ...[
           SizedBox(height: _sectionGap(scale) * 0.65),
-          metadataBelow!,
+          if (fixedHeight)
+            SizedBox(
+              height: 20,
+              child: Align(alignment: .centerLeft, child: metadataBelow!),
+            )
+          else
+            metadataBelow!,
         ],
         // Reserve the same synopsis area for every selection, even when the
         // synopsis is shorter or hidden. The logo, metadata and format badges
