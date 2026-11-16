@@ -1027,6 +1027,7 @@ class SettingsService extends BaseSharedPreferencesService {
     defaultValueProvider: _tvAwareGridSpacingDefault,
   );
   static const automotiveUiScale = _AutomotiveUiScalePref();
+  static const tvDynamicAmbientBackground = BoolPref('tv_dynamic_ambient_background', defaultValue: true);
   static const tvCornerSpotlightBackdrop = BoolPref('tv_corner_spotlight_backdrop', defaultValue: true);
   static const plexTrailerPreview = BoolPref('plex_trailer_preview', defaultValue: true);
   static const plexTrailerPreviewAudio = BoolPref('plex_trailer_preview_audio', defaultValue: true);
@@ -1593,6 +1594,7 @@ class SettingsService extends BaseSharedPreferencesService {
     libraryDensity,
     gridSpacing,
     automotiveUiScale,
+    tvDynamicAmbientBackground,
     tvCornerSpotlightBackdrop,
     episodePosterMode,
     continueWatchingAction,
