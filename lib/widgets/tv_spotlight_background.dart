@@ -274,17 +274,29 @@ class TvSpotlightBackground extends StatelessWidget {
       children: [
         if (fixedHeight)
           Expanded(
-            child: Align(
-              alignment: .bottomLeft,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: .bottomLeft,
-                child: SizedBox(
-                  width: width,
-                  height: _logoHeight(scale),
-                  child: _buildLogoOrTitle(context, media, title, width),
-                ),
-              ),
+            child: LayoutBuilder(
+              builder: (context, logoSpace) {
+                // Use spare room above the fixed information rows for the
+                // artwork. Only the logo scales; metadata and synopsis do not.
+                final logoWidth = math.min(logoSpace.maxWidth, 650 * scale);
+                final logoHeight = math.min(logoSpace.maxHeight, 220 * scale);
+                return Align(
+                  alignment: .bottomLeft,
+                  child: SizedBox(
+                    width: logoWidth,
+                    height: logoHeight,
+                    child: FittedBox(
+                      fit: BoxFit.contain,
+                      alignment: .bottomLeft,
+                      child: SizedBox(
+                        width: _logoWidth(scale),
+                        height: _logoHeight(scale),
+                        child: _buildLogoOrTitle(context, media, title, _logoWidth(scale)),
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
           )
         else
@@ -501,5 +513,5 @@ class TvSpotlightBackground extends StatelessWidget {
 
   double _metadataFontSize(double scale) => (compact ? 16 : 18) * scale;
 
-  double _summaryFontSize(double scale) => (compact ? 18 : 20) * scale;
+  double _summaryFontSize(double scale) => (compact ? 16 : 18) * scale;
 }
