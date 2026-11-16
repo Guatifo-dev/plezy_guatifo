@@ -49,6 +49,8 @@ class _AmbientSpotlightTintState extends State<AmbientSpotlightTint> {
 
   void _schedule() {
     final generation = ++_generation;
+    _paletteTask = null;
+    _preparedAccent = null;
     final media = widget.item;
     final path = media?.heroArtCandidates(containerAspectRatio: 16 / 9).firstOrNull ?? media?.thumbPath;
     if (path == null || path.isEmpty) {
