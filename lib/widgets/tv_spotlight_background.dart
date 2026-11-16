@@ -70,7 +70,7 @@ class TvSpotlightBackground extends StatelessWidget {
     childBuilder: _buildSpotlight,
   );
 
-  Widget _buildSpotlight(BuildContext context, Future<void> Function() prepareAmbient, VoidCallback startAmbient) {
+  Widget _buildSpotlight(BuildContext context) {
     final media = item;
     final bgColor = Theme.of(context).scaffoldBackgroundColor;
 
@@ -88,8 +88,6 @@ class TvSpotlightBackground extends StatelessWidget {
         final backdropSize = cornerBackdrop ? Size(size.width * 0.68, size.height * 0.72) : size;
         final backdrop = CyclingMediaBackdrop(
           mediaKey: media?.globalKey,
-          beforeArtworkFade: prepareAmbient,
-          onArtworkFadeStart: startAmbient,
           imagePaths: media?.heroRotationPaths(containerAspectRatio: containerAspect) ?? const [],
           fallbackImagePaths: fallbackPaths,
           client: client,
