@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../media/media_server_client.dart';
 import '../services/device_performance.dart';
+import '../services/settings_service.dart';
 import '../utils/media_image_helper.dart';
 import 'optimized_media_image.dart';
 
@@ -264,7 +265,15 @@ class _CyclingMediaBackdropState extends State<CyclingMediaBackdrop> with Widget
     final pending = localResolution == LocalFileResolution.pending;
     final provider = path == null || pending ? null : _providerFor(context, path, localFile);
     if (path != null && provider == null && !pending) _reportMissingProvider(path);
-    final fadeDuration = _disableAnimations ? Duration.zero : DevicePerformance.reducedDuration(widget.fadeDuration);
+    // The ambient backdrop needs an actual artwork crossfade even on 32-bit
+    // Fire TV hardware, which normally collapses reducedDuration to zero.
+    // Keep the accessibility disable-animations preference authoritative.
+    final ambientEnabled = SettingsService.instance.read(SettingsService.tvDynamicAmbientBackground);
+    final fadeDuration = _disableAnimations
+        ? Duration.zero
+        : ambientEnabled
+            ? widget.fadeDuration
+            : DevicePerformance.reducedDuration(widget.fadeDuration);
 
     return _BackdropArtworkCrossfade(
       artworkKey: (widget.mediaKey, path),
