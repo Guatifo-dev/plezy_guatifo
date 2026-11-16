@@ -51,7 +51,7 @@ class _AmbientSpotlightTintState extends State<AmbientSpotlightTint> {
     _debounce?.cancel();
     final generation = ++_generation;
     final media = widget.item;
-    final path = media?.heroArtCandidates().firstOrNull ?? media?.thumbPath;
+    final path = media?.heroArtCandidates(containerAspectRatio: 16 / 9).firstOrNull ?? media?.thumbPath;
     if (path == null || path.isEmpty) {
       _accent = null;
       return;
