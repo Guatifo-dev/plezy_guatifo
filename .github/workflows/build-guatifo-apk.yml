@@ -12,6 +12,7 @@ on:
       - plezyvision-hide-original-updates
       - fix/discover-catalog-live-refresh
       - fix/trailer-audio-on-navigation
+      - feature/dynamic-ambient-background
 
 permissions:
   contents: write
