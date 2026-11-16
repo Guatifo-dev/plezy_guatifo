@@ -56,7 +56,7 @@ class AmbientArtworkPalette {
       final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
       if (data == null) return null;
       final bytes = data.buffer.asUint8List();
-      final buckets = <int, (double, int)>{};
+      final buckets = <int, (double, double, double, double)>{};
       for (var i = 0; i + 3 < bytes.length; i += 4) {
         if (bytes[i + 3] < 180) continue;
         final r = bytes[i], g = bytes[i + 1], b = bytes[i + 2];
@@ -65,13 +65,25 @@ class AmbientArtworkPalette {
         if (max < 45 || min > 220 || max - min < 22) continue;
         final key = ((r ~/ 32) << 6) | ((g ~/ 32) << 3) | (b ~/ 32);
         final previous = buckets[key];
-        final score = (max - min) / 255.0 + 0.15;
-        buckets[key] = ((previous?.$1 ?? 0) + score, (previous?.$2 ?? 0) + 1);
+        // Prefer saturated, luminous colors that occupy substantial regions.
+        // Do not let a tiny vivid highlight dominate the whole background.
+        final saturation = (max - min) / (max == 0 ? 1 : max);
+        final luminance = (r * 0.2126 + g * 0.7152 + b * 0.0722) / 255;
+        final weight = (0.45 + saturation * 0.55) *
+            (luminance < 0.12 || luminance > 0.88 ? 0.35 : 1.0);
+        buckets[key] = (
+          (previous?.$1 ?? 0) + weight,
+          (previous?.$2 ?? 0) + r * weight,
+          (previous?.$3 ?? 0) + g * weight,
+          (previous?.$4 ?? 0) + b * weight,
+        );
       }
       if (buckets.isEmpty) return null;
-      final best = buckets.entries.reduce((a, b) => a.value.$1 > b.value.$1 ? a : b).key;
-      final color = Color.fromARGB(255, ((best >> 6) & 7) * 32 + 16,
-        ((best >> 3) & 7) * 32 + 16, (best & 7) * 32 + 16);
+      final best = buckets.values.reduce((a, b) => a.$1 > b.$1 ? a : b);
+      final color = Color.fromARGB(255,
+        (best.$2 / best.$1).round().clamp(0, 255),
+        (best.$3 / best.$1).round().clamp(0, 255),
+        (best.$4 / best.$1).round().clamp(0, 255));
       if (_cache.length >= maxEntries) _cache.remove(_cache.keys.first);
       _cache[path] = color;
       return color;
