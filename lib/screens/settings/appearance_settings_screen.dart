@@ -107,6 +107,13 @@ class AppearanceSettingsScreen extends StatelessWidget {
               ),
             if (PlatformDetector.isTV())
               SettingSwitchTile(
+                pref: SettingsService.tvDynamicAmbientBackground,
+                icon: Symbols.palette_rounded,
+                title: 'Fondo ambiental dinámico',
+                subtitle: 'Adapta suavemente el fondo a los colores del fanart seleccionado',
+              ),
+            if (PlatformDetector.isTV())
+              SettingSwitchTile(
                 pref: SettingsService.tvCornerSpotlightBackdrop,
                 icon: Symbols.picture_in_picture_alt_rounded,
                 title: t.settings.tvCornerSpotlightBackdrop,
