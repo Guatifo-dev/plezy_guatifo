@@ -20,7 +20,7 @@ class AmbientSpotlightTint extends StatefulWidget {
   final MediaServerClient? client;
   final bool allowNetwork;
   final String? Function(String?)? localArtworkPathResolver;
-  final Widget Function(BuildContext, Future<void> Function(), VoidCallback) childBuilder;
+  final Widget Function(BuildContext) childBuilder;
 
   @override
   State<AmbientSpotlightTint> createState() => _AmbientSpotlightTintState();
@@ -66,6 +66,7 @@ class _AmbientSpotlightTintState extends State<AmbientSpotlightTint> {
       );
       if (!mounted || generation != _generation) return;
       _preparedAccent = color;
+      setState(() => _accent = color);
     })();
   }
 
@@ -73,13 +74,6 @@ class _AmbientSpotlightTintState extends State<AmbientSpotlightTint> {
   void dispose() {
     _generation++;
     super.dispose();
-  }
-
-  Future<void> _prepare() => _paletteTask ?? Future<void>.value();
-
-  void _start() {
-    if (!mounted) return;
-    setState(() => _accent = _preparedAccent);
   }
 
   @override
@@ -97,7 +91,7 @@ class _AmbientSpotlightTintState extends State<AmbientSpotlightTint> {
         curve: Curves.easeInOutCubic,
         builder: (context, color, _) => Theme(
           data: theme.copyWith(scaffoldBackgroundColor: color ?? base),
-          child: Builder(builder: (context) => widget.childBuilder(context, _prepare, _start)),
+          child: Builder(builder: widget.childBuilder),
         ),
       );
     },
