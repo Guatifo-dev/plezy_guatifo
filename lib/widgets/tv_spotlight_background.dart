@@ -16,6 +16,7 @@ import '../utils/media_image_helper.dart';
 import '../services/settings_service.dart';
 import '../utils/tone_mapped_logo_image.dart';
 import 'cycling_media_backdrop.dart';
+import 'ambient_spotlight_tint.dart';
 import 'fitting_title_text.dart';
 import 'fitted_metadata_line.dart';
 import 'settings_builder.dart';
@@ -61,7 +62,15 @@ class TvSpotlightBackground extends StatelessWidget {
   double _scale(BuildContext context) => TvLayoutConstants.scaleOf(context);
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => AmbientSpotlightTint(
+    item: item,
+    client: client,
+    allowNetwork: allowNetwork,
+    localArtworkPathResolver: localArtworkPathResolver,
+    childBuilder: _buildSpotlight,
+  );
+
+  Widget _buildSpotlight(BuildContext context) {
     final media = item;
     final bgColor = Theme.of(context).scaffoldBackgroundColor;
 
