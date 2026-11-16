@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import '../media/media_item.dart';
 import '../media/media_server_client.dart';
@@ -21,7 +20,7 @@ class AmbientSpotlightTint extends StatefulWidget {
   final MediaServerClient? client;
   final bool allowNetwork;
   final String? Function(String?)? localArtworkPathResolver;
-  final Widget Function(BuildContext) childBuilder;
+  final Widget Function(BuildContext, Future<void> Function(), VoidCallback) childBuilder;
 
   @override
   State<AmbientSpotlightTint> createState() => _AmbientSpotlightTintState();
@@ -29,7 +28,8 @@ class AmbientSpotlightTint extends StatefulWidget {
 
 class _AmbientSpotlightTintState extends State<AmbientSpotlightTint> {
   Color? _accent;
-  Timer? _debounce;
+  Color? _preparedAccent;
+  Future<void>? _paletteTask;
   int _generation = 0;
 
   @override
@@ -48,7 +48,6 @@ class _AmbientSpotlightTintState extends State<AmbientSpotlightTint> {
   }
 
   void _schedule() {
-    _debounce?.cancel();
     final generation = ++_generation;
     final media = widget.item;
     final path = media?.heroArtCandidates(containerAspectRatio: 16 / 9).firstOrNull ?? media?.thumbPath;
@@ -56,7 +55,7 @@ class _AmbientSpotlightTintState extends State<AmbientSpotlightTint> {
       _accent = null;
       return;
     }
-    _debounce = Timer(const Duration(milliseconds: 180), () async {
+    _paletteTask = (() async {
       final color = await AmbientArtworkPalette.resolve(
         path: path,
         client: widget.client,
@@ -64,15 +63,21 @@ class _AmbientSpotlightTintState extends State<AmbientSpotlightTint> {
         localPath: widget.localArtworkPathResolver?.call(path),
       );
       if (!mounted || generation != _generation) return;
-      setState(() => _accent = color);
-    });
+      _preparedAccent = color;
+    })();
   }
 
   @override
   void dispose() {
     _generation++;
-    _debounce?.cancel();
     super.dispose();
+  }
+
+  Future<void> _prepare() => _paletteTask ?? Future<void>.value();
+
+  void _start() {
+    if (!mounted) return;
+    setState(() => _accent = _preparedAccent);
   }
 
   @override
@@ -86,11 +91,11 @@ class _AmbientSpotlightTintState extends State<AmbientSpotlightTint> {
           : base;
       return TweenAnimationBuilder<Color?>(
         tween: ColorTween(end: tint),
-        duration: const Duration(milliseconds: 400),
+        duration: const Duration(milliseconds: 280),
         curve: Curves.easeInOutCubic,
         builder: (context, color, _) => Theme(
           data: theme.copyWith(scaffoldBackgroundColor: color ?? base),
-          child: Builder(builder: widget.childBuilder),
+          child: Builder(builder: (context) => widget.childBuilder(context, _prepare, _start)),
         ),
       );
     },
