@@ -19,8 +19,6 @@ class CyclingMediaBackdrop extends StatefulWidget {
   const CyclingMediaBackdrop({
     super.key,
     required this.mediaKey,
-    this.beforeArtworkFade,
-    this.onArtworkFadeStart,
     required this.imagePaths,
     required this.client,
     required this.width,
@@ -39,8 +37,6 @@ class CyclingMediaBackdrop extends StatefulWidget {
   });
 
   final Object? mediaKey;
-  final Future<void> Function()? beforeArtworkFade;
-  final VoidCallback? onArtworkFadeStart;
   final List<String> imagePaths;
   final List<String> fallbackImagePaths;
   final MediaServerClient? client;
@@ -272,8 +268,6 @@ class _CyclingMediaBackdropState extends State<CyclingMediaBackdrop> with Widget
 
     return _BackdropArtworkCrossfade(
       artworkKey: (widget.mediaKey, path),
-      beforeArtworkFade: widget.beforeArtworkFade,
-      onArtworkFadeStart: widget.onArtworkFadeStart,
       imageErrorKey: path,
       image: provider,
       pending: pending,
@@ -310,8 +304,6 @@ class _CyclingMediaBackdropState extends State<CyclingMediaBackdrop> with Widget
 class _BackdropArtworkCrossfade extends StatefulWidget {
   const _BackdropArtworkCrossfade({
     required this.artworkKey,
-    this.beforeArtworkFade,
-    this.onArtworkFadeStart,
     required this.imageErrorKey,
     required this.image,
     required this.pending,
@@ -323,8 +315,6 @@ class _BackdropArtworkCrossfade extends StatefulWidget {
   });
 
   final Object? artworkKey;
-  final Future<void> Function()? beforeArtworkFade;
-  final VoidCallback? onArtworkFadeStart;
   final Object? imageErrorKey;
   final ImageProvider? image;
   final bool pending;
@@ -353,7 +343,6 @@ class _BackdropArtworkCrossfadeState extends State<_BackdropArtworkCrossfade> wi
   Object? _incomingErrorKey;
   bool _incomingIsColor = false;
   bool _fadeStarted = false;
-  int _fadeGeneration = 0;
 
   @override
   void initState() {
@@ -402,7 +391,6 @@ class _BackdropArtworkCrossfadeState extends State<_BackdropArtworkCrossfade> wi
   void _transitionToIncoming() {
     setState(() {
       _fade.stop();
-      _fadeGeneration++;
       _fade.value = 0;
       _fadeStarted = false;
       _incoming = widget.image;
@@ -421,19 +409,7 @@ class _BackdropArtworkCrossfadeState extends State<_BackdropArtworkCrossfade> wi
   void _startFade() {
     if (_fadeStarted) return;
     _fadeStarted = true;
-    final generation = ++_fadeGeneration;
-    () async {
-      try {
-        await widget.beforeArtworkFade?.call();
-      } catch (_) {
-        // Palette failures must never prevent the image transition.
-      }
-      if (!mounted || generation != _fadeGeneration) return;
-      widget.onArtworkFadeStart?.call();
-      _fade.forward().whenComplete(() {
-        if (mounted && generation == _fadeGeneration) _promoteIncoming();
-      });
-    }();
+    _fade.forward().whenComplete(_promoteIncoming);
   }
 
   void _promoteIncoming() {
@@ -446,7 +422,6 @@ class _BackdropArtworkCrossfadeState extends State<_BackdropArtworkCrossfade> wi
   }
 
   void _dropIncoming() {
-    _fadeGeneration++;
     _incoming = null;
     _incomingErrorKey = null;
     _incomingIsColor = false;
