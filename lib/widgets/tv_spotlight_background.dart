@@ -183,10 +183,11 @@ class TvSpotlightBackground extends StatelessWidget {
                           return Align(alignment: .bottomLeft, child: _buildInfo(context, media, constraints.maxWidth));
                         }
 
-                        return Align(
-                          alignment: .bottomLeft,
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
+                        // Keep the information at its configured text size.
+                        // Scaling the entire column made short summaries look
+                        // larger and shifted the logo/metadata between titles.
+                        return ClipRect(
+                          child: Align(
                             alignment: .bottomLeft,
                             child: SizedBox(
                               width: constraints.maxWidth,
@@ -276,31 +277,40 @@ class TvSpotlightBackground extends StatelessWidget {
           SizedBox(height: _sectionGap(scale) * 0.65),
           metadataBelow!,
         ],
-        if (summary != null && summary.isNotEmpty) ...[
-          SizedBox(height: _sectionGap(scale)),
-          Text(
-            summary,
-            maxLines: compact ? 3 : 4,
-            overflow: .ellipsis,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-              color: colorScheme.onSurface.withValues(alpha: 0.78),
-              fontSize: _summaryFontSize(scale),
-              height: compact ? 1.34 : 1.45,
-            ),
+        // Reserve the same synopsis area for every selection, even when the
+        // synopsis is shorter or hidden. The logo, metadata and format badges
+        // therefore remain at the same vertical positions.
+        SizedBox(height: _sectionGap(scale)),
+        SizedBox(
+          height: MediaQuery.textScalerOf(context).scale(_summaryFontSize(scale)) *
+              (compact ? 1.34 : 1.45) * (compact ? 3 : 4),
+          child: Align(
+            alignment: .topLeft,
+            child: summary != null && summary.isNotEmpty
+                ? Text(
+                    summary,
+                    maxLines: compact ? 3 : 4,
+                    overflow: .ellipsis,
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: colorScheme.onSurface.withValues(alpha: 0.78),
+                      fontSize: _summaryFontSize(scale),
+                      height: compact ? 1.34 : 1.45,
+                    ),
+                  )
+                : shouldHideSpoiler && media.isEpisode
+                    ? Text(
+                        media.title ?? '',
+                        maxLines: 2,
+                        overflow: .ellipsis,
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          color: colorScheme.onSurface.withValues(alpha: 0.72),
+                          fontSize: _summaryFontSize(scale),
+                          height: compact ? 1.34 : 1.45,
+                        ),
+                      )
+                    : const SizedBox.shrink(),
           ),
-        ] else if (shouldHideSpoiler && media.isEpisode) ...[
-          SizedBox(height: _sectionGap(scale)),
-          Text(
-            media.title ?? '',
-            maxLines: 2,
-            overflow: .ellipsis,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-              color: colorScheme.onSurface.withValues(alpha: 0.72),
-              fontSize: _summaryFontSize(scale),
-              height: compact ? 1.34 : 1.45,
-            ),
-          ),
-        ],
+        ),
       ],
     );
   }
