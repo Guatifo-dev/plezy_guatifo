@@ -165,7 +165,10 @@ class TvSpotlightBackground extends StatelessWidget {
                 right: MediaQuery.sizeOf(context).width * 0.43,
                 // Never let the info panel extend above the screen: its
                 // ClipRect would otherwise cut off tall clearlogos.
-                top: math.max(0.0, (contentTop ?? 0) - 72 * _scale(context)),
+                // Keep a deliberate safe band above the logo, instead of
+                // allowing its flexible slot to reach the screen edge.
+                // Lower information rows stay anchored by contentBottom.
+                top: math.max(48 * _scale(context), (contentTop ?? 0) - 72 * _scale(context)),
                 bottom: contentBottom,
                 // The info block still cross-fades via AnimatedSwitcher, but its
                 // saveLayers are bounded to the text region, not the screen.
