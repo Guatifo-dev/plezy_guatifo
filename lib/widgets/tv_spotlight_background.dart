@@ -278,8 +278,11 @@ class TvSpotlightBackground extends StatelessWidget {
               builder: (context, logoSpace) {
                 // Use spare room above the fixed information rows for the
                 // artwork. Only the logo scales; metadata and synopsis do not.
-                final logoWidth = math.min(logoSpace.maxWidth, 650 * scale);
-                final logoHeight = math.min(logoSpace.maxHeight, 220 * scale);
+                // Let tall/portrait clearlogos use the free space up to the
+                // navigation header, without moving any information below.
+                // The outer FittedBox preserves the artwork's aspect ratio.
+                final logoWidth = math.min(logoSpace.maxWidth, 850 * scale);
+                final logoHeight = math.min(logoSpace.maxHeight, 300 * scale);
                 return Align(
                   alignment: .bottomLeft,
                   child: SizedBox(
