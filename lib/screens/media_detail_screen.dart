@@ -3784,15 +3784,18 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     final stableRailHeight = _tvDetailStableRailHeight;
     final railHeight = stableRailHeight == null || rawRailHeight > stableRailHeight ? rawRailHeight : stableRailHeight;
     final railTopPadding = 12 * detailScale;
-    // Match Discover's information bottom independently of the cast rail.
-    // The action row belongs below that information, not inside its logo budget.
+    // Pin the shared information to Discover's stable hero geometry. Do not
+    // subtract button height: the actions and rails are separate layers.
     final discoverMinimumBottom = railHeight + 8 * detailScale;
     final discoverBaseBottom = (size.height * 0.48).clamp(160.0, 820.0).toDouble();
-    final discoverDesiredBottom = discoverMinimumBottom > discoverBaseBottom ? discoverMinimumBottom : discoverBaseBottom;
+    final discoverDesiredBottom = math.max(discoverMinimumBottom, discoverBaseBottom);
     final discoverMaxBottom = (size.height - spotlightTop - 96 * detailScale).clamp(0.0, double.infinity).toDouble();
-    final discoverBottom = discoverDesiredBottom > discoverMaxBottom ? discoverMaxBottom : discoverDesiredBottom;
-    final foregroundBottom = discoverBottom - (_tvDetailActionSize + 16) * detailScale;
+    final discoverBottom = math.min(discoverDesiredBottom, discoverMaxBottom);
     final spotlightLeft = (24 * detailScale).clamp(18.0, 40.0).toDouble();
+    final actionTop = size.height - discoverBottom + 16 * detailScale;
+    final actionHeight = _tvDetailActionSize * detailScale;
+    final railStart = actionTop + actionHeight + 20 * detailScale;
+    final railLeft = spotlightLeft - TvBrowseRailLayout.horizontalInsetForScale(detailScale);
     // See _tvDetailRouteSettled. The children stay in place (only their
     // content is withheld) so the Stack keeps its elements across the swap.
     final buildHiddenContent = _tvDetailRevealed || _tvDetailRouteSettled;
@@ -3806,7 +3809,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
           top: (spotlightTop - 72 * detailScale) > (48 * detailScale)
               ? spotlightTop - 72 * detailScale
               : 48 * detailScale,
-          bottom: foregroundBottom,
+          bottom: discoverBottom,
           child: buildHiddenContent
               ? ListenableBuilder(
                   listenable: _tvDetailForegroundListenable,
@@ -3815,6 +3818,14 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                 )
               : const SizedBox.shrink(),
         ),
+        if (buildHiddenContent)
+          Positioned(
+            left: spotlightLeft,
+            right: 0,
+            top: actionTop,
+            height: actionHeight,
+            child: SizedBox(height: actionHeight, child: _buildActionButtons(metadata)),
+          ),
         Positioned(
           top: 0,
           left: 0,
@@ -3829,10 +3840,14 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
         ),
         if (buildHiddenContent && detailHubs.isNotEmpty)
           Positioned(
-            left: 0,
+            left: railLeft,
             right: 0,
+            top: railStart,
             bottom: 0,
-            child: TvBrowseRail(
+            child: SingleChildScrollView(
+              child: SizedBox(
+                height: railHeight,
+                child: TvBrowseRail(
               key: _tvDetailRailKey,
               hubs: detailHubs,
               focusMemory: _hubFocusMemory,
@@ -3852,6 +3867,8 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
               initialItemId: _tvDetailInitialItemId(metadata),
               episodePosterModeForHub: _tvDetailEpisodePosterModeForHub,
               showTitleImpliedForHub: _isTvDetailEpisodeHub,
+                ),
+              ),
             ),
           ),
       ],
@@ -3893,208 +3910,47 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     required bool hideSpoilers,
     required double scale,
   }) {
-    final theme = Theme.of(context);
     final description = _tvDetailDescription(metadata, hideSpoilers: hideSpoilers);
-    // The focused episode's own title. The logo/title slot above keeps the
-    // show's name, so without this line the episode title exists only on the
-    // (usually truncated) rail card (#2217).
-    final episodeTitle = _tvDetailFocusedEpisode.value?.title;
-    final badgeItem = _tvDetailFocusedEpisode.value ?? metadata;
-    final showFormatBadges = (badgeItem.kind == MediaKind.movie || badgeItem.kind == MediaKind.episode) &&
-        SettingsService.instance.read(SettingsService.showHeroFormatBadges);
-    final foregroundColor = _tvDetailForegroundColor(context);
-    final mutedForegroundColor = foregroundColor.withValues(alpha: 0.78);
-
+    final genres = metadata.genres ?? const <String>[];
+    void openDetails() => _openTvDetailsSheet(context, metadata, hideSpoilers: hideSpoilers);
+    // Use the actual Discover renderer, not a second approximation of its
+    // logo, text styles, badge row or synopsis. The information focus surface
+    // adds no padding or scaling.
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (constraints.maxHeight <= 0 || constraints.maxWidth <= 0) return const SizedBox.shrink();
-
-        final availableHeight = constraints.maxHeight.isFinite ? constraints.maxHeight : 264.0;
-        // Let the logo take the remaining space, as Discover does.
-        final desiredLogoHeight = availableHeight;
-        final desiredLogoWidth = 850 * scale;
-        final episodeTitleLineHeight = 30 * scale;
-        final episodeTitleGap = 4 * scale;
-        final metadataLineHeight = 24 * scale;
-        final logoMetadataGap = 10 * scale;
-        final summaryGap = 10 * scale;
-        // Match Discover's compact synopsis metrics.
-        final summaryFontSize = 16.0 * scale;
-        final summaryLineHeight = summaryFontSize * 1.34;
-        final actionHeight = _tvDetailActionSize * scale;
-        final actionGap = 16 * scale;
-        final hasDescription = description != null && description.isNotEmpty;
-        final hasEpisodeTitle = episodeTitle != null && episodeTitle.isNotEmpty;
-        final episodeTitleBlockHeight = hasEpisodeTitle ? episodeTitleLineHeight + episodeTitleGap : 0.0;
-        final formatBadgeGap = showFormatBadges ? 6.5 * scale : 0.0;
-        final formatBadgesHeight = showFormatBadges ? 20.0 * scale : 0.0;
-        final genres = metadata.genres ?? const <String>[];
-
-        // Reserve three synopsis lines even for a short description, as in
-        // Discover. The metadata/badges never jump when the text changes.
-        // Use the logo slot for flexible space, not the position of the rows.
-        final summaryMaxLines = hasDescription ? 3 : 0;
-        final reservedSynopsisHeight = summaryGap + summaryLineHeight * 3;
-        final fixedRowsHeight = logoMetadataGap +
-            episodeTitleBlockHeight +
-            metadataLineHeight +
-            formatBadgeGap +
-            formatBadgesHeight +
-            reservedSynopsisHeight +
-            actionGap +
-            actionHeight;
-        // Discover reserves the lower information rows first, then lets
-        // its logo occupy only the remaining space above them.
-        final logoHeight = (availableHeight - fixedRowsHeight).clamp(0.0, desiredLogoHeight).toDouble();
-        final logoWidth = desiredLogoWidth < constraints.maxWidth ? desiredLogoWidth : constraints.maxWidth;
-
-        void openDetails() => _openTvDetailsSheet(context, metadata, hideSpoilers: hideSpoilers);
-
-        return ClipRect(
-          child: SizedBox(
-            height: availableHeight,
-            child: Align(
-              alignment: .topLeft,
-              child: SizedBox(
-                height: availableHeight,
-                child: Column(
-                  mainAxisSize: .min,
-                  crossAxisAlignment: .start,
-                  children: [
-                    Semantics(
-                      key: const ValueKey('tv_detail_information_semantics'),
-                      identifier: 'tv_detail_information',
-                      container: true,
-                      button: true,
-                      label: _tvDetailInformationSemanticLabel(metadata, description: description, genres: genres),
-                      hint: t.mediaMenu.viewDetails,
-                      onTap: openDetails,
-                      child: ExcludeSemantics(
-                        // One announcement, one action: activating it opens the
-                        // full-information sheet. The action buttons below
-                        // remain separate accessible controls.
-                        child: Column(
-                          mainAxisSize: .min,
-                          crossAxisAlignment: .start,
-                          children: [
-                            // Same bottom-left, aspect-preserving fitted logo
-                            // slot used by Discover. The rows below have a
-                            // fixed budget independent of synopsis length.
-                            SizedBox(
-                              width: logoWidth,
-                              height: logoHeight,
-                              child: FittedBox(
-                                fit: BoxFit.contain,
-                                alignment: Alignment.bottomLeft,
-                                child: SizedBox(
-                                  width: logoWidth,
-                                  height: logoHeight,
-                                  child: _buildDetailLogoOrTitle(
-                                    context,
-                                    metadata,
-                                    width: logoWidth,
-                                    height: logoHeight,
-                                    availableWidth: constraints.maxWidth,
-                                    titleBuilder: (context, title) => _buildDetailTitle(
-                                      context,
-                                      title,
-                                      fontSize: 56 * scale,
-                                      fontWeight: .w800,
-                                      shadowBlur: 12,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            SizedBox(height: logoMetadataGap),
-                            // The metadata line sheds badges and the summary
-                            // truncates by design; this block is the focusable
-                            // path to the sheet that shows all of it (#2042).
-                            // Background-only focus chrome: zero layout delta,
-                            // so the hero height budget above stays exact.
-                            FocusableWrapper(
-                              focusNode: _tvDetailInfoFocusNode,
-                              onSelect: openDetails,
-                              onNavigateUp: _backButtonFocusNode.requestFocus,
-                              onNavigateDown: _focusTvDetailActionRow,
-                              onBack: _popMediaDetailIfBackNotSuppressed,
-                              useBackgroundFocus: true,
-                              disableScale: true,
-                              autoScroll: false,
-                              borderRadius: 8,
-                              descendantsAreFocusable: false,
-                              child: GestureDetector(
-                                behavior: HitTestBehavior.opaque,
-                                onTap: openDetails,
-                                child: Column(
-                                  mainAxisSize: .min,
-                                  crossAxisAlignment: .start,
-                                  children: [
-                                    if (hasEpisodeTitle) ...[
-                                      SizedBox(
-                                        height: episodeTitleLineHeight,
-                                        child: Align(
-                                          alignment: .centerLeft,
-                                          child: Text(
-                                            episodeTitle,
-                                            key: const ValueKey('tv_detail_episode_title'),
-                                            maxLines: 1,
-                                            overflow: .ellipsis,
-                                            style: TextStyle(
-                                              color: foregroundColor,
-                                              fontSize: 24 * scale,
-                                              fontWeight: .w700,
-                                              height: 1.2,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                      SizedBox(height: episodeTitleGap),
-                                    ],
-                                    SizedBox(
-                                      height: metadataLineHeight,
-                                      child: Align(
-                                        alignment: .centerLeft,
-                                        child: _buildTvDetailMetadataLine(context, metadata, scale),
-                                      ),
-                                    ),
-                                    if (showFormatBadges) SizedBox(height: formatBadgeGap),
-                                    if (showFormatBadges)
-                                      SizedBox(
-                                        height: formatBadgesHeight,
-                                        child: Align(
-                                          alignment: Alignment.centerLeft,
-                                          child: SelectedMediaFormatBadges(key: ValueKey(badgeItem.globalKey), item: badgeItem),
-                                        ),
-                                      ),
-                                    SizedBox(height: summaryGap),
-                                    SizedBox(
-                                      height: summaryLineHeight * 3,
-                                      child: hasDescription
-                                          ? Text(
-                                              description,
-                                              maxLines: summaryMaxLines,
-                                              overflow: .ellipsis,
-                                              style: theme.textTheme.bodyLarge?.copyWith(
-                                                color: mutedForegroundColor,
-                                                fontSize: summaryFontSize,
-                                                height: 1.34,
-                                              ),
-                                            )
-                                          : null,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    SizedBox(height: actionGap),
-                    SizedBox(height: actionHeight, child: _buildActionButtons(metadata)),
-                  ],
-                ),
+        final info = TvSpotlightBackground(
+          item: metadata,
+          client: _getArtworkMediaClient(context),
+          hideSpoilers: hideSpoilers,
+          compact: true,
+          metadataBelow: SettingsService.instance.read(SettingsService.showHeroFormatBadges)
+              ? SelectedMediaFormatBadges(item: metadata)
+              : null,
+        ).buildInformation(context, metadata, constraints.maxWidth);
+        return Semantics(
+          key: const ValueKey('tv_detail_information_semantics'),
+          identifier: 'tv_detail_information',
+          container: true,
+          button: true,
+          label: _tvDetailInformationSemanticLabel(metadata, description: description, genres: genres),
+          hint: t.mediaMenu.viewDetails,
+          onTap: openDetails,
+          child: ExcludeSemantics(
+            child: FocusableWrapper(
+              focusNode: _tvDetailInfoFocusNode,
+              onSelect: openDetails,
+              onNavigateUp: _backButtonFocusNode.requestFocus,
+              onNavigateDown: _focusTvDetailActionRow,
+              onBack: _popMediaDetailIfBackNotSuppressed,
+              useBackgroundFocus: true,
+              disableScale: true,
+              autoScroll: false,
+              borderRadius: 8,
+              descendantsAreFocusable: false,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: openDetails,
+                child: info,
               ),
             ),
           ),
