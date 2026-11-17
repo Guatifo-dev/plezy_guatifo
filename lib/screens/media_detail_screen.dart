@@ -3934,18 +3934,9 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
             reservedSynopsisHeight +
             actionGap +
             actionHeight;
-        // The logo is sized against the one-line baseline. Additional
-        // synopsis lines expand downwards into the space freed above the rail.
-        final logoHeight = (availableHeight - fixedRowsHeight + (2 * summaryLineHeight)).clamp(0.0, desiredLogoHeight).toDouble();
-        final showLogo = logoHeight > 0;
-        final contentHeight = (showLogo ? logoHeight + logoMetadataGap : 0) +
-            episodeTitleBlockHeight +
-            metadataLineHeight +
-            formatBadgeGap +
-            formatBadgesHeight +
-            reservedSynopsisHeight +
-            actionGap +
-            actionHeight;
+        // Discover reserves the lower information rows first, then lets
+        // its logo occupy only the remaining space above them.
+        final logoHeight = (availableHeight - fixedRowsHeight).clamp(0.0, desiredLogoHeight).toDouble();
         final logoWidth = desiredLogoWidth < constraints.maxWidth ? desiredLogoWidth : constraints.maxWidth;
 
         void openDetails() => _openTvDetailsSheet(context, metadata, hideSpoilers: hideSpoilers);
@@ -3956,7 +3947,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
             child: Align(
               alignment: .topLeft,
               child: SizedBox(
-                height: contentHeight <= availableHeight ? contentHeight : availableHeight,
+                height: availableHeight,
                 child: Column(
                   mainAxisSize: .min,
                   crossAxisAlignment: .start,
@@ -3977,23 +3968,36 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                           mainAxisSize: .min,
                           crossAxisAlignment: .start,
                           children: [
-                            if (showLogo) ...[
-                              _buildDetailLogoOrTitle(
-                                context,
-                                metadata,
-                                width: logoWidth,
-                                height: logoHeight,
-                                availableWidth: constraints.maxWidth,
-                                titleBuilder: (context, title) => _buildDetailTitle(
-                                  context,
-                                  title,
-                                  fontSize: 56 * scale,
-                                  fontWeight: .w800,
-                                  shadowBlur: 12,
+                            // Same bottom-left, aspect-preserving fitted logo
+                            // slot used by Discover. The rows below have a
+                            // fixed budget independent of synopsis length.
+                            SizedBox(
+                              width: logoWidth,
+                              height: logoHeight,
+                              child: FittedBox(
+                                fit: BoxFit.contain,
+                                alignment: Alignment.bottomLeft,
+                                child: SizedBox(
+                                  width: logoWidth,
+                                  height: logoHeight,
+                                  child: _buildDetailLogoOrTitle(
+                                    context,
+                                    metadata,
+                                    width: logoWidth,
+                                    height: logoHeight,
+                                    availableWidth: constraints.maxWidth,
+                                    titleBuilder: (context, title) => _buildDetailTitle(
+                                      context,
+                                      title,
+                                      fontSize: 56 * scale,
+                                      fontWeight: .w800,
+                                      shadowBlur: 12,
+                                    ),
+                                  ),
                                 ),
                               ),
-                              SizedBox(height: logoMetadataGap),
-                            ],
+                            ),
+                            SizedBox(height: logoMetadataGap),
                             // The metadata line sheds badges and the summary
                             // truncates by design; this block is the focusable
                             // path to the sheet that shows all of it (#2042).
