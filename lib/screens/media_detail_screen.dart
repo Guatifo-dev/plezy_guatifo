@@ -3783,8 +3783,10 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     final stableRailHeight = _tvDetailStableRailHeight;
     final railHeight = stableRailHeight == null || rawRailHeight > stableRailHeight ? rawRailHeight : stableRailHeight;
     final railTopPadding = 12 * detailScale;
-    final foregroundBottom = (railHeight - railTopPadding) + (_tvDetailActionRailGap * detailScale);
-    final spotlightLeft = (24 * detailScale).clamp(18.0, 40.0).toDouble();
+    // Give the synopsis its extra two lines below the stable hero rows,
+    // instead of stealing that space from the clearlogo above them.
+    final foregroundBottom = (railHeight - railTopPadding) + (_tvDetailActionRailGap * detailScale) - (2 * 18 * 1.34 * detailScale);
+    final spotlightLeft = TvLayoutConstants.horizontalInset;
     // See _tvDetailRouteSettled. The children stay in place (only their
     // content is withheld) so the Stack keeps its elements across the swap.
     final buildHiddenContent = _tvDetailRevealed || _tvDetailRouteSettled;
@@ -3794,7 +3796,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
       children: [
         Positioned(
           left: spotlightLeft,
-          right: size.width * 0.40,
+          right: size.width * 0.43,
           top: spotlightTop,
           bottom: foregroundBottom,
           child: buildHiddenContent
@@ -3901,14 +3903,15 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
 
         final availableHeight = constraints.maxHeight.isFinite ? constraints.maxHeight : 264.0;
         final desiredLogoHeight = 220 * scale;
-        final desiredLogoWidth = 790 * scale;
+        final desiredLogoWidth = 850 * scale;
         final episodeTitleLineHeight = 30 * scale;
         final episodeTitleGap = 4 * scale;
         final metadataLineHeight = 22 * scale;
         final logoMetadataGap = 14 * scale;
         final summaryGap = 10 * scale;
-        final summaryFontSize = availableHeight < 260 * scale ? 16.2 * scale : 18 * scale;
-        final summaryLineHeight = summaryFontSize * 1.35;
+        // Match Discover's compact synopsis metrics.
+        final summaryFontSize = 16.0 * scale;
+        final summaryLineHeight = summaryFontSize * 1.34;
         final actionHeight = _tvDetailActionSize * scale;
         final actionGap = 16 * scale;
         final hasDescription = description != null && description.isNotEmpty;
@@ -3931,7 +3934,9 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
             reservedSynopsisHeight +
             actionGap +
             actionHeight;
-        final logoHeight = (availableHeight - fixedRowsHeight).clamp(0.0, desiredLogoHeight).toDouble();
+        // The logo is sized against the one-line baseline. Additional
+        // synopsis lines expand downwards into the space freed above the rail.
+        final logoHeight = (availableHeight - fixedRowsHeight + (2 * summaryLineHeight)).clamp(0.0, desiredLogoHeight).toDouble();
         final showLogo = logoHeight > 0;
         final contentHeight = (showLogo ? logoHeight + logoMetadataGap : 0) +
             episodeTitleBlockHeight +
@@ -4060,7 +4065,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                                               style: theme.textTheme.bodyLarge?.copyWith(
                                                 color: mutedForegroundColor,
                                                 fontSize: summaryFontSize,
-                                                height: 1.35,
+                                                height: 1.34,
                                               ),
                                             )
                                           : null,
