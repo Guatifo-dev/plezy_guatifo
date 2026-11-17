@@ -27,6 +27,12 @@ import 'rasterized_gradient.dart';
 import 'plex_trailer_preview.dart';
 
 class TvSpotlightBackground extends StatelessWidget {
+  static final Set<String> _loggedLogoDiagnostics = <String>{};
+
+  static void _logLogoOnce(String key, String message) {
+    if (_loggedLogoDiagnostics.add(key)) debugPrint(message);
+  }
+
   final MediaItem? item;
   final MediaServerClient? client;
   final bool hideSpoilers;
@@ -284,16 +290,14 @@ class TvSpotlightBackground extends StatelessWidget {
                 // The outer FittedBox preserves the artwork's aspect ratio.
                 final logoWidth = math.min(logoSpace.maxWidth, 850 * scale);
                 final logoHeight = logoSpace.maxHeight;
-                assert(() {
-                  debugPrint(
-                    '[SpotlightLogoDebug] title="${media.displayTitle}" '
+                _logLogoOnce(
+                  'slot:${media.globalKey}:${logoWidth.toStringAsFixed(0)}:${logoHeight.toStringAsFixed(0)}',
+                  '[SpotlightLogoDebug] title="${media.displayTitle}" '
                     'slot=${logoSpace.maxWidth.toStringAsFixed(1)}x${logoSpace.maxHeight.toStringAsFixed(1)} '
                     'target=${logoWidth.toStringAsFixed(1)}x${logoHeight.toStringAsFixed(1)} '
                     'scale=${scale.toStringAsFixed(2)} '
                     'source=${media.clearLogoPath}',
-                  );
-                  return true;
-                }());
+                );
                 return Align(
                   alignment: .bottomLeft,
                   child: SizedBox(
@@ -403,15 +407,13 @@ class TvSpotlightBackground extends StatelessWidget {
     final logoPath = media.clearLogoPath;
     final logoWidth = math.min(logoWidthOverride ?? _logoWidth(scale), availableWidth);
     final logoHeight = logoHeightOverride ?? _logoHeight(scale);
-    assert(() {
-      debugPrint(
-        '[SpotlightLogoDebug] render title="${media.displayTitle}" '
+    _logLogoOnce(
+      'render:${media.globalKey}:${logoWidth.toStringAsFixed(0)}:${logoHeight.toStringAsFixed(0)}',
+      '[SpotlightLogoDebug] render title="${media.displayTitle}" '
         'imageBox=${logoWidth.toStringAsFixed(1)}x${logoHeight.toStringAsFixed(1)} '
         'fallbackWidth=${availableWidth.toStringAsFixed(1)} '
         'source=${logoPath ?? "none"}',
-      );
-      return true;
-    }());
+    );
     final width = ClearLogoImage.fallbackWidthFor(logoWidth: logoWidth, available: availableWidth);
     if (logoPath == null || logoPath.isEmpty) {
       return SizedBox(width: width, height: logoHeight, child: _buildTitle(context, title));
