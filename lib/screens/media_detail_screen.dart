@@ -3775,7 +3775,8 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     }
     final hideSpoilers = SettingsService.instance.read(SettingsService.hideSpoilers);
     final detailScale = TvLayoutConstants.scaleForSize(size);
-    final spotlightTop = (size.height * 0.08).clamp(56.0 * detailScale, 110.0 * detailScale).toDouble();
+    // Match Discover's hero top safe band.
+    final spotlightTop = (size.height * 0.075).clamp(64.0 * detailScale, 120.0 * detailScale).toDouble();
     final rawRailHeight = _estimateTvDetailRailHeight(size, detailHubs);
     if (!_tvDetailRevealed && _isTvDetailReadyToReveal(metadata)) {
       _scheduleTvDetailReveal(rawRailHeight, focusPrimaryAction: metadata.isMovie);
@@ -3783,10 +3784,15 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     final stableRailHeight = _tvDetailStableRailHeight;
     final railHeight = stableRailHeight == null || rawRailHeight > stableRailHeight ? rawRailHeight : stableRailHeight;
     final railTopPadding = 12 * detailScale;
-    // Give the synopsis its extra two lines below the stable hero rows,
-    // instead of stealing that space from the clearlogo above them.
-    final foregroundBottom = (railHeight - railTopPadding) + (_tvDetailActionRailGap * detailScale) - (2 * 18 * 1.34 * detailScale);
-    final spotlightLeft = TvLayoutConstants.horizontalInset;
+    // Match Discover's information bottom independently of the cast rail.
+    // The action row belongs below that information, not inside its logo budget.
+    final discoverMinimumBottom = railHeight + 8 * detailScale;
+    final discoverBaseBottom = (size.height * 0.48).clamp(160.0, 820.0).toDouble();
+    final discoverDesiredBottom = discoverMinimumBottom > discoverBaseBottom ? discoverMinimumBottom : discoverBaseBottom;
+    final discoverMaxBottom = (size.height - spotlightTop - 96 * detailScale).clamp(0.0, double.infinity).toDouble();
+    final discoverBottom = discoverDesiredBottom > discoverMaxBottom ? discoverMaxBottom : discoverDesiredBottom;
+    final foregroundBottom = discoverBottom - (_tvDetailActionSize + 16) * detailScale;
+    final spotlightLeft = (24 * detailScale).clamp(18.0, 40.0).toDouble();
     // See _tvDetailRouteSettled. The children stay in place (only their
     // content is withheld) so the Stack keeps its elements across the swap.
     final buildHiddenContent = _tvDetailRevealed || _tvDetailRouteSettled;
@@ -3797,7 +3803,9 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
         Positioned(
           left: spotlightLeft,
           right: size.width * 0.43,
-          top: spotlightTop,
+          top: (spotlightTop - 72 * detailScale) > (48 * detailScale)
+              ? spotlightTop - 72 * detailScale
+              : 48 * detailScale,
           bottom: foregroundBottom,
           child: buildHiddenContent
               ? ListenableBuilder(
@@ -3902,12 +3910,13 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
         if (constraints.maxHeight <= 0 || constraints.maxWidth <= 0) return const SizedBox.shrink();
 
         final availableHeight = constraints.maxHeight.isFinite ? constraints.maxHeight : 264.0;
-        final desiredLogoHeight = 220 * scale;
+        // Let the logo take the remaining space, as Discover does.
+        final desiredLogoHeight = availableHeight;
         final desiredLogoWidth = 850 * scale;
         final episodeTitleLineHeight = 30 * scale;
         final episodeTitleGap = 4 * scale;
-        final metadataLineHeight = 22 * scale;
-        final logoMetadataGap = 14 * scale;
+        final metadataLineHeight = 24 * scale;
+        final logoMetadataGap = 10 * scale;
         final summaryGap = 10 * scale;
         // Match Discover's compact synopsis metrics.
         final summaryFontSize = 16.0 * scale;
@@ -3917,8 +3926,8 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
         final hasDescription = description != null && description.isNotEmpty;
         final hasEpisodeTitle = episodeTitle != null && episodeTitle.isNotEmpty;
         final episodeTitleBlockHeight = hasEpisodeTitle ? episodeTitleLineHeight + episodeTitleGap : 0.0;
-        final formatBadgeGap = showFormatBadges ? 7.0 * scale : 0.0;
-        final formatBadgesHeight = showFormatBadges ? 26.0 * scale : 0.0;
+        final formatBadgeGap = showFormatBadges ? 6.5 * scale : 0.0;
+        final formatBadgesHeight = showFormatBadges ? 20.0 * scale : 0.0;
         final genres = metadata.genres ?? const <String>[];
 
         // Reserve three synopsis lines even for a short description, as in
@@ -4122,25 +4131,27 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     final lineMetadata = focusedEpisode ?? metadata;
     final parts = <MetadataLinePart>[];
 
+    // Same metadata ordering and source as Discover's TV spotlight.
     final episodeLabel = formatSeasonEpisodeLabel(lineMetadata.parentIndex, lineMetadata.index);
     if (lineMetadata.isEpisode && episodeLabel != null) parts.add(MetadataLineText(episodeLabel, dropPriority: 0));
-    if (lineMetadata.isEpisode && lineMetadata.originallyAvailableAt != null) {
-      parts.add(MetadataLineText(formatAbbreviatedDate(lineMetadata.originallyAvailableAt!), dropPriority: 0));
-    } else if (lineMetadata.year != null) {
-      parts.add(MetadataLineText(lineMetadata.year.toString(), dropPriority: 0));
+    if (lineMetadata.isMovie) {
+      parts.add(MetadataLineText(t.discover.movie, dropPriority: 3));
+    } else if (lineMetadata.isShow) {
+      parts.add(MetadataLineText(t.discover.tvShow, dropPriority: 3));
     }
+    final ratings = mediaRatingsFor(lineMetadata);
+    if (ratings.isNotEmpty) parts.add(MetadataLineRatings(ratings, dropPriority: 4));
     if (lineMetadata.contentRating != null) {
       parts.add(MetadataLineText(formatContentRating(lineMetadata.contentRating!), dropPriority: 2));
     }
     if (lineMetadata.durationMs != null) {
       parts.add(MetadataLineText(formatDurationTextual(lineMetadata.durationMs!), dropPriority: 1));
     }
-    final episodeRatings = focusedEpisode == null
-        ? const <MediaRatingSource>[]
-        : mediaRatingsFor(_withProbedRatings(focusedEpisode));
-    // An episode without scores of its own shows the title's.
-    final ratings = episodeRatings.isNotEmpty ? episodeRatings : _titleRatings(metadata);
-    if (ratings.isNotEmpty) parts.add(MetadataLineRatings(ratings, dropPriority: 4));
+    if (lineMetadata.isEpisode && lineMetadata.originallyAvailableAt != null) {
+      parts.add(MetadataLineText(formatFullDate(lineMetadata.originallyAvailableAt!), dropPriority: 0));
+    } else if (lineMetadata.year != null) {
+      parts.add(MetadataLineText(lineMetadata.year.toString(), dropPriority: 0));
+    }
 
     return parts;
   }
