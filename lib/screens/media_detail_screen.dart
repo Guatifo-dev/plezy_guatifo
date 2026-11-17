@@ -3901,7 +3901,6 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
 
         final availableHeight = constraints.maxHeight.isFinite ? constraints.maxHeight : 264.0;
         final desiredLogoHeight = 220 * scale;
-        final minLogoHeight = 0.0;
         final desiredLogoWidth = 790 * scale;
         final episodeTitleLineHeight = 30 * scale;
         final episodeTitleGap = 4 * scale;
@@ -3917,40 +3916,29 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
         final episodeTitleBlockHeight = hasEpisodeTitle ? episodeTitleLineHeight + episodeTitleGap : 0.0;
         final formatBadgeGap = showFormatBadges ? 7.0 * scale : 0.0;
         final formatBadgesHeight = showFormatBadges ? 26.0 * scale : 0.0;
-        // Genres belong to the show, not the focused episode, and do not change
-        // while browsing; they live in the details sheet (#2217).
         final genres = metadata.genres ?? const <String>[];
-        var summaryMaxLines = 0;
-        var logoHeight = 0.0;
 
-        for (var lines = hasDescription ? 3 : 0; lines >= 0; lines--) {
-          final descriptionHeight = lines > 0 ? summaryGap + (summaryLineHeight * lines) : 0.0;
-          final reservedHeight =
-              logoMetadataGap +
-              episodeTitleBlockHeight +
-              metadataLineHeight +
-              formatBadgeGap +
-              formatBadgesHeight +
-              descriptionHeight +
-              actionGap +
-              actionHeight;
-          final remainingForLogo = availableHeight - reservedHeight;
-          if (remainingForLogo >= minLogoHeight || lines == 0) {
-            summaryMaxLines = lines;
-            logoHeight = remainingForLogo <= 0 ? 0 : remainingForLogo.clamp(0, desiredLogoHeight).toDouble();
-            break;
-          }
-        }
-
-        final showLogo = logoHeight > 0;
-        final descriptionHeight = summaryMaxLines > 0 ? summaryGap + (summaryLineHeight * summaryMaxLines) : 0.0;
-        final contentHeight =
-            (showLogo ? logoHeight + logoMetadataGap : 0) +
+        // Reserve three synopsis lines even for a short description, as in
+        // Discover. The metadata/badges never jump when the text changes.
+        // Use the logo slot for flexible space, not the position of the rows.
+        final summaryMaxLines = hasDescription ? 3 : 0;
+        final reservedSynopsisHeight = summaryGap + summaryLineHeight * 3;
+        final fixedRowsHeight = logoMetadataGap +
             episodeTitleBlockHeight +
             metadataLineHeight +
             formatBadgeGap +
             formatBadgesHeight +
-            descriptionHeight +
+            reservedSynopsisHeight +
+            actionGap +
+            actionHeight;
+        final logoHeight = (availableHeight - fixedRowsHeight).clamp(0.0, desiredLogoHeight).toDouble();
+        final showLogo = logoHeight > 0;
+        final contentHeight = (showLogo ? logoHeight + logoMetadataGap : 0) +
+            episodeTitleBlockHeight +
+            metadataLineHeight +
+            formatBadgeGap +
+            formatBadgesHeight +
+            reservedSynopsisHeight +
             actionGap +
             actionHeight;
         final logoWidth = desiredLogoWidth < constraints.maxWidth ? desiredLogoWidth : constraints.maxWidth;
@@ -3961,7 +3949,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
           child: SizedBox(
             height: availableHeight,
             child: Align(
-              alignment: .bottomLeft,
+              alignment: .topLeft,
               child: SizedBox(
                 height: contentHeight <= availableHeight ? contentHeight : availableHeight,
                 child: Column(
@@ -4061,22 +4049,22 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                                           child: SelectedMediaFormatBadges(key: ValueKey(badgeItem.globalKey), item: badgeItem),
                                         ),
                                       ),
-                                    if (hasDescription && summaryMaxLines > 0) ...[
-                                      SizedBox(height: summaryGap),
-                                      SizedBox(
-                                        height: summaryLineHeight * summaryMaxLines,
-                                        child: Text(
-                                          description,
-                                          maxLines: summaryMaxLines,
-                                          overflow: .ellipsis,
-                                          style: theme.textTheme.bodyLarge?.copyWith(
-                                            color: mutedForegroundColor,
-                                            fontSize: summaryFontSize,
-                                            height: 1.35,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
+                                    SizedBox(height: summaryGap),
+                                    SizedBox(
+                                      height: summaryLineHeight * 3,
+                                      child: hasDescription
+                                          ? Text(
+                                              description,
+                                              maxLines: summaryMaxLines,
+                                              overflow: .ellipsis,
+                                              style: theme.textTheme.bodyLarge?.copyWith(
+                                                color: mutedForegroundColor,
+                                                fontSize: summaryFontSize,
+                                                height: 1.35,
+                                              ),
+                                            )
+                                          : null,
+                                    ),
                                   ],
                                 ),
                               ),
