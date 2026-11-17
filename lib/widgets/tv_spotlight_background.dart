@@ -282,7 +282,7 @@ class TvSpotlightBackground extends StatelessWidget {
                 // navigation header, without moving any information below.
                 // The outer FittedBox preserves the artwork's aspect ratio.
                 final logoWidth = math.min(logoSpace.maxWidth, 850 * scale);
-                final logoHeight = math.min(logoSpace.maxHeight, 300 * scale);
+                final logoHeight = logoSpace.maxHeight;
                 return Align(
                   alignment: .bottomLeft,
                   child: SizedBox(
