@@ -103,6 +103,7 @@ import '../widgets/loading_indicator_box.dart';
 import '../widgets/rasterized_gradient.dart';
 import '../widgets/tv_browse_rail.dart';
 import '../widgets/tv_spotlight_background.dart';
+import '../widgets/side_navigation_rail.dart';
 import '../widgets/plex_trailer_preview.dart';
 import '../providers/account_preferences_controller.dart';
 import '../services/playback_track_preview.dart';
@@ -3791,7 +3792,11 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     final discoverDesiredBottom = math.max(discoverMinimumBottom, discoverBaseBottom);
     final discoverMaxBottom = (size.height - spotlightTop - 96 * detailScale).clamp(0.0, double.infinity).toDouble();
     final discoverBottom = math.min(discoverDesiredBottom, discoverMaxBottom);
-    final spotlightLeft = (24 * detailScale).clamp(18.0, 40.0).toDouble();
+    // Discover renders inside the main shell's foreground box. The details
+    // route is full-screen, so reproduce the collapsed TV navigation inset
+    // instead of anchoring the hero to the physical screen edge.
+    final discoverSidebarInset = SideNavigationRailState.collapsedWidthForContext(context);
+    final spotlightLeft = (24 * detailScale).clamp(18.0, 40.0).toDouble() + discoverSidebarInset;
     final actionTop = size.height - discoverBottom + 16 * detailScale;
     final actionHeight = _tvDetailActionSize * detailScale;
     final railStart = actionTop + actionHeight + 20 * detailScale;
