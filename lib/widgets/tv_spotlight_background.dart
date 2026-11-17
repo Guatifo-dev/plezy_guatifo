@@ -170,7 +170,8 @@ class TvSpotlightBackground extends StatelessWidget {
               Positioned(
                 left: contentLeft ?? TvLayoutConstants.horizontalInset,
                 right: MediaQuery.sizeOf(context).width * 0.43,
-                top: contentTop,
+                // Expand the logo's upper room without moving lower info rows.
+                top: (contentTop ?? 0) - 72 * _scale(context),
                 bottom: contentBottom,
                 // The info block still cross-fades via AnimatedSwitcher, but its
                 // saveLayers are bounded to the text region, not the screen.
