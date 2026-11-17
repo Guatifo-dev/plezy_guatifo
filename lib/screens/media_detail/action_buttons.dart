@@ -195,8 +195,14 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
               padding: .symmetric(horizontal: isTv ? 22 * tvScale : 16, vertical: isTv ? 9 * tvScale : 0),
               shape: playShape,
             ).copyWith(
-              backgroundColor: isTv ? const WidgetStatePropertyAll(Colors.white) : null,
-              foregroundColor: isTv ? const WidgetStatePropertyAll(Colors.black) : null,
+              // TV Play only fills white while it owns focus. When focus
+              // moves to Trailer, retain just the outlined capsule.
+              backgroundColor: isTv
+                  ? WidgetStatePropertyAll(state.showFocus ? Colors.white : Colors.transparent)
+                  : null,
+              foregroundColor: isTv
+                  ? WidgetStatePropertyAll(state.showFocus ? Colors.black : Colors.white)
+                  : null,
               side: isTv ? const WidgetStatePropertyAll(BorderSide(color: Colors.white)) : null,
             ),
             child: (isTv || playButtonLabel.isNotEmpty)
