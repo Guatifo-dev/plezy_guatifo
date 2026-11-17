@@ -3787,11 +3787,14 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     final railTopPadding = 12 * detailScale;
     // Pin the shared information to Discover's stable hero geometry. Do not
     // subtract button height: the actions and rails are separate layers.
-    final discoverMinimumBottom = railHeight + 8 * detailScale;
+    // The details cast/extra rail is not the Discover browse rail. Its height
+    // must never alter the logo slot: that changes the fitted logo scale and
+    // shifts every information row during the route transition.
+    // Discover's standard hero uses its 48%-height floor; reserve that same
+    // fixed region here, independently of how many detail hubs are loaded.
     final discoverBaseBottom = (size.height * 0.48).clamp(160.0, 820.0).toDouble();
-    final discoverDesiredBottom = math.max(discoverMinimumBottom, discoverBaseBottom);
     final discoverMaxBottom = (size.height - spotlightTop - 96 * detailScale).clamp(0.0, double.infinity).toDouble();
-    final discoverBottom = math.min(discoverDesiredBottom, discoverMaxBottom);
+    final discoverBottom = math.min(discoverBaseBottom, discoverMaxBottom);
     // Discover renders inside the main shell's foreground box. The details
     // route is full-screen, so reproduce the collapsed TV navigation inset
     // instead of anchoring the hero to the physical screen edge.
