@@ -129,7 +129,7 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
     final focusBg = colorScheme.inverseSurface;
     final focusFg = colorScheme.onInverseSurface;
     final tonalBg = colorScheme.secondaryContainer;
-    final idleBg = isTv ? tonalBg.withValues(alpha: 0.38) : tonalBg;
+    final idleBg = isTv ? Colors.black.withValues(alpha: 0.34) : tonalBg;
     final tonalFg = colorScheme.onSecondaryContainer;
     final noOverlay = WidgetStateProperty.resolveWith((states) {
       if (states.contains(WidgetState.focused)) return Colors.transparent;
@@ -162,8 +162,9 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
         visualDensity: VisualDensity.compact,
         overlayColor: noOverlay,
         backgroundColor: WidgetStatePropertyAll(showFocus ? focusBg : idleBg),
-        foregroundColor: WidgetStatePropertyAll(showFocus ? focusFg : foregroundColor ?? tonalFg),
-        shape: shape != null ? WidgetStatePropertyAll(shape) : null,
+        foregroundColor: WidgetStatePropertyAll(showFocus ? focusFg : foregroundColor ?? (isTv ? Colors.white : tonalFg)),
+        side: isTv ? WidgetStatePropertyAll(BorderSide(color: Colors.white.withValues(alpha: showFocus ? 0.85 : 0.25), width: showFocus ? 1.6 : 1.0)) : null,
+        shape: WidgetStatePropertyAll(shape ?? const StadiumBorder()),
       );
     }
 
@@ -191,16 +192,20 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
             onPressed: onPlayPressed,
             style: actionButtonStyle(
               showFocus: state.showFocus,
-              padding: .symmetric(horizontal: isTv ? 17 * tvScale : 16, vertical: isTv ? 9 * tvScale : 0),
+              padding: .symmetric(horizontal: isTv ? 22 * tvScale : 16, vertical: isTv ? 9 * tvScale : 0),
               shape: playShape,
+            ).copyWith(
+              backgroundColor: isTv ? const WidgetStatePropertyAll(Colors.white) : null,
+              foregroundColor: isTv ? const WidgetStatePropertyAll(Colors.black) : null,
+              side: isTv ? const WidgetStatePropertyAll(BorderSide(color: Colors.white)) : null,
             ),
-            child: playButtonLabel.isNotEmpty
+            child: (isTv || playButtonLabel.isNotEmpty)
                 ? Row(
                     mainAxisSize: .min,
                     children: [
                       playButtonIcon,
                       SizedBox(width: isTv ? 7 * tvScale : 8),
-                      Text(playButtonLabel, style: playTextStyle),
+                      Text(isTv && playButtonLabel.isEmpty ? playActionLabel : playButtonLabel, style: playTextStyle),
                     ],
                   )
                 : playButtonIcon,
@@ -380,15 +385,15 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
     ];
 
     double playButtonWidthEstimate() {
-      if (playButtonLabel.isEmpty) return 64.0;
+      if (playButtonLabel.isEmpty && !isTv) return 64.0;
       final textPainter = TextPainter(
-        text: TextSpan(text: playButtonLabel, style: playTextStyle),
+        text: TextSpan(text: isTv && playButtonLabel.isEmpty ? playActionLabel : playButtonLabel, style: playTextStyle),
         maxLines: 1,
         textDirection: Directionality.of(context),
       )..layout();
       final textWidth = textPainter.width;
       textPainter.dispose();
-      final horizontalPadding = isTv ? 34.0 * tvScale : 32.0;
+      final horizontalPadding = isTv ? 44.0 * tvScale : 32.0;
       final iconGap = isTv ? 7.0 * tvScale : 8.0;
       return (horizontalPadding + playIconSize + iconGap + textWidth).clamp(64.0, double.infinity).toDouble();
     }
