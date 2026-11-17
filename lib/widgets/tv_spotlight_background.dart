@@ -292,9 +292,19 @@ class TvSpotlightBackground extends StatelessWidget {
                       fit: BoxFit.contain,
                       alignment: .bottomLeft,
                       child: SizedBox(
-                        width: _logoWidth(scale),
-                        height: _logoHeight(scale),
-                        child: _buildLogoOrTitle(context, media, title, _logoWidth(scale)),
+                        // Give the image itself the same bounds as its slot.
+                        // Previously the inner hero-logo limits (520x150 or
+                        // 360x96) kept the artwork small despite a larger slot.
+                        width: logoWidth,
+                        height: logoHeight,
+                        child: _buildLogoOrTitle(
+                          context,
+                          media,
+                          title,
+                          logoWidth,
+                          logoWidthOverride: logoWidth,
+                          logoHeightOverride: logoHeight,
+                        ),
                       ),
                     ),
                   ),
@@ -363,7 +373,14 @@ class TvSpotlightBackground extends StatelessWidget {
   /// The logo is contained within its slot; the title fallback gets
   /// [ClearLogoImage.fallbackWidthFor] of the info block's [availableWidth]
   /// at the slot's height (#1796).
-  Widget _buildLogoOrTitle(BuildContext context, MediaItem media, String title, double availableWidth) {
+  Widget _buildLogoOrTitle(
+    BuildContext context,
+    MediaItem media,
+    String title,
+    double availableWidth, {
+    double? logoWidthOverride,
+    double? logoHeightOverride,
+  }) {
     final theme = Theme.of(context);
     // The spotlight scrim washes artwork toward the scaffold background, so
     // light themes recolor light-toned logos to stay visible.
@@ -373,8 +390,8 @@ class TvSpotlightBackground extends StatelessWidget {
     );
     final scale = _scale(context);
     final logoPath = media.clearLogoPath;
-    final logoWidth = math.min(_logoWidth(scale), availableWidth);
-    final logoHeight = _logoHeight(scale);
+    final logoWidth = math.min(logoWidthOverride ?? _logoWidth(scale), availableWidth);
+    final logoHeight = logoHeightOverride ?? _logoHeight(scale);
     final width = ClearLogoImage.fallbackWidthFor(logoWidth: logoWidth, available: availableWidth);
     if (logoPath == null || logoPath.isEmpty) {
       return SizedBox(width: width, height: logoHeight, child: _buildTitle(context, title));
