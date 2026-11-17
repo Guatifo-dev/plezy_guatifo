@@ -3805,29 +3805,6 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                 )
               : const SizedBox.shrink(),
         ),
-        // The action row's track status sits at the screen's right edge,
-        // bottom-aligned with the row and outside the hero's 60% text column,
-        // so it reads as a note about the row rather than a sixth button
-        // (#2217).
-        Positioned(
-          left: size.width * 0.60 + spotlightLeft,
-          right: spotlightLeft,
-          bottom: foregroundBottom,
-          height: _tvDetailActionSize * detailScale,
-          child: ValueListenableBuilder<MediaItem?>(
-            valueListenable: _tvDetailFocusedEpisode,
-            builder: (context, _, _) => Align(
-              alignment: .bottomRight,
-              child: _buildPlaybackTracksStatus(
-                context,
-                metadata,
-                isTv: true,
-                tvScale: detailScale,
-                maxWidth: size.width * 0.40 - spotlightLeft * 2,
-              ),
-            ),
-          ),
-        ),
         Positioned(
           top: 0,
           left: 0,
@@ -3924,7 +3901,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
 
         final availableHeight = constraints.maxHeight.isFinite ? constraints.maxHeight : 264.0;
         final desiredLogoHeight = 220 * scale;
-        final minLogoHeight = 60 * scale;
+        final minLogoHeight = 0.0;
         final desiredLogoWidth = 790 * scale;
         final episodeTitleLineHeight = 30 * scale;
         final episodeTitleGap = 4 * scale;
@@ -3938,7 +3915,8 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
         final hasDescription = description != null && description.isNotEmpty;
         final hasEpisodeTitle = episodeTitle != null && episodeTitle.isNotEmpty;
         final episodeTitleBlockHeight = hasEpisodeTitle ? episodeTitleLineHeight + episodeTitleGap : 0.0;
-        final formatBadgesHeight = showFormatBadges ? 26.0 : 0.0;
+        final formatBadgeGap = showFormatBadges ? 7.0 * scale : 0.0;
+        final formatBadgesHeight = showFormatBadges ? 26.0 * scale : 0.0;
         // Genres belong to the show, not the focused episode, and do not change
         // while browsing; they live in the details sheet (#2217).
         final genres = metadata.genres ?? const <String>[];
@@ -3951,6 +3929,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
               logoMetadataGap +
               episodeTitleBlockHeight +
               metadataLineHeight +
+              formatBadgeGap +
               formatBadgesHeight +
               descriptionHeight +
               actionGap +
@@ -3969,6 +3948,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
             (showLogo ? logoHeight + logoMetadataGap : 0) +
             episodeTitleBlockHeight +
             metadataLineHeight +
+            formatBadgeGap +
             formatBadgesHeight +
             descriptionHeight +
             actionGap +
@@ -4072,6 +4052,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                                         child: _buildTvDetailMetadataLine(context, metadata, scale),
                                       ),
                                     ),
+                                    if (showFormatBadges) SizedBox(height: formatBadgeGap),
                                     if (showFormatBadges)
                                       SizedBox(
                                         height: formatBadgesHeight,
