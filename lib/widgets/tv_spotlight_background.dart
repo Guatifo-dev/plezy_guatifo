@@ -266,6 +266,11 @@ class TvSpotlightBackground extends StatelessWidget {
     );
   }
 
+  /// Shared TV hero information. Discover and Details must use this exact
+  /// renderer to keep logo, metadata, badges and synopsis typography identical.
+  Widget buildInformation(BuildContext context, MediaItem media, double width) =>
+      _buildInfo(context, media, width, fixedHeight: true);
+
   Widget _buildInfo(BuildContext context, MediaItem media, double width, {bool fixedHeight = false}) {
     final scale = _scale(context);
     final colorScheme = Theme.of(context).colorScheme;
