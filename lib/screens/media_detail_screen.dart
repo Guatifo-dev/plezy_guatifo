@@ -3906,6 +3906,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                 item: metadata,
                 client: _getArtworkMediaClient(context),
                 showInfo: false,
+                detailTrailerArtworkLayout: metadata.isMovie,
                 localArtworkPathResolver: widget.isOffline
                     ? (path) => _offlineArtworkCandidatePath(context, path)
                     : null,
