@@ -87,7 +87,9 @@ class TvSpotlightBackground extends StatelessWidget {
     return SettingValueBuilder<bool>(
       pref: SettingsService.tvCornerSpotlightBackdrop,
       builder: (context, cornerBackdrop, _) {
-        final backdropSize = cornerBackdrop ? Size(size.width * 0.68, size.height * 0.72) : size;
+        final backdropSize = cornerBackdrop || detailTrailerArtworkLayout
+            ? Size(size.width * 0.68, size.height * 0.72)
+            : size;
         final backdrop = CyclingMediaBackdrop(
           mediaKey: media?.globalKey,
           imagePaths: media?.heroRotationPaths(containerAspectRatio: containerAspect) ?? const [],
@@ -117,7 +119,7 @@ class TvSpotlightBackground extends StatelessWidget {
                     // has rendered the first frame.
                     PlexTrailerPreview.prepareForRoute(ModalRoute.of(context));
                   }
-                  if (cornerBackdrop) {
+                  if (cornerBackdrop || detailTrailerArtworkLayout) {
                     return _buildCornerBackdrop(backdropSize, backdrop, media, client, showTrailer);
                   }
                   // Full-artwork mode must also host the shared trailer player.
