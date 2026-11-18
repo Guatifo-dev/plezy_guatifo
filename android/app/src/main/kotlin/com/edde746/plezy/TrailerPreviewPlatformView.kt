@@ -122,6 +122,7 @@ internal object TrailerPreviewPlayerManager {
           synchronized(this@TrailerPreviewPlayerManager) {
             completedUrl = currentUrl
             Log.i(TAG, "Trailer finished; releasing decoder and revealing static artwork")
+            eventChannel?.invokeMethod("trailerFinished", null)
             notifySurfaceReady()
             releasePlayer()
             surfaces.values.forEach { it.visibility = View.GONE }
