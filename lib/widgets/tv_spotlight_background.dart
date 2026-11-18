@@ -186,7 +186,24 @@ class TvSpotlightBackground extends StatelessWidget {
                         width: size.width * 0.53,
                         height: size.height * 0.45,
                         child: IgnorePointer(
+                          // The contained artwork does not fill this wide box.
+                          // Start the left fade inside the actual image area,
+                          // rather than wasting it in the empty box margin.
                           child: ShaderMask(
+                            blendMode: BlendMode.dstIn,
+                            shaderCallback: (rect) => const LinearGradient(
+                              begin: Alignment.centerLeft,
+                              end: Alignment.centerRight,
+                              colors: [
+                                Colors.transparent,
+                                Colors.transparent,
+                                Color(0x33FFFFFF),
+                                Color(0xB3FFFFFF),
+                                Colors.white,
+                              ],
+                              stops: [0.0, 0.16, 0.27, 0.43, 0.59],
+                            ).createShader(rect),
+                            child: ShaderMask(
                             blendMode: BlendMode.dstIn,
                             shaderCallback: (rect) => const LinearGradient(
                               begin: Alignment.topCenter,
@@ -204,16 +221,16 @@ class TvSpotlightBackground extends StatelessWidget {
                               shaderCallback: (rect) => const LinearGradient(
                                 begin: Alignment.centerLeft,
                                 end: Alignment.centerRight,
-                                colors: [Colors.white, Colors.white, Color(0xD9FFFFFF), Colors.transparent],
-                                stops: [0.0, 0.82, 0.93, 1.0],
+                                colors: [Colors.white, Color(0xD9FFFFFF), Color(0x66FFFFFF), Colors.transparent],
+                                stops: [0.0, 0.59, 0.77, 0.97],
                               ).createShader(rect),
                               child: ShaderMask(
                                 blendMode: BlendMode.dstIn,
                                 shaderCallback: (rect) => const LinearGradient(
                                   begin: Alignment.topCenter,
                                   end: Alignment.bottomCenter,
-                                  colors: [Colors.white, Color(0xF2FFFFFF), Color(0x99FFFFFF), Colors.transparent],
-                                  stops: [0.0, 0.73, 0.88, 1.0],
+                                  colors: [Colors.white, Color(0xC0FFFFFF), Color(0x4DFFFFFF), Colors.transparent],
+                                  stops: [0.0, 0.55, 0.75, 0.96],
                                 ).createShader(rect),
                                 child: ShaderMask(
                             blendMode: BlendMode.dstIn,
@@ -254,6 +271,7 @@ class TvSpotlightBackground extends StatelessWidget {
                                 ),
                               ),
                             ),
+                          ),
                           ),
                         ),
                       ),
