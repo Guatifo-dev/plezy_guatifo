@@ -5,6 +5,10 @@ import '../media/catalog_item_ref.dart';
 import '../media/ids.dart';
 import '../media/media_backend.dart';
 import '../media/media_item.dart';
+import '../media/ids.dart';
+import '../utils/media_image_helper.dart';
+import '../utils/provider_extensions.dart';
+import '../utils/platform_detector.dart';
 import '../media/media_item_merge.dart';
 import '../media/media_item_types.dart';
 import '../media/media_kind.dart';
@@ -325,6 +329,49 @@ Future<MediaNavigationResult> navigateToMediaItemDetails(
   }
 
   final target = mediaDetailNavigationTargetFor(mi, metadataOverride: metadataOverride);
+  // Warm exactly the same artwork provider used by TvSpotlightBackground
+  // before the new opaque TV route starts fading in. Without this, a fresh
+  // CyclingMediaBackdrop paints its dark fallback for the first decoded frame.
+  // Keep a bounded wait: an unavailable Plex server must not block navigation.
+  if (PlatformDetector.isTV() && !isOffline) {
+    final size = MediaQuery.sizeOf(context);
+    final artwork = target.metadata.heroRotationPaths(containerAspectRatio: size.width / size.height);
+    final fallbacks = <String>[
+      ...target.metadata.heroArtCandidates(containerAspectRatio: size.width / size.height),
+      ?target.metadata.thumbPath,
+    ];
+    final path = artwork.isNotEmpty ? artwork.first : (fallbacks.isNotEmpty ? fallbacks.first : null);
+    if (path != null && path.isNotEmpty) {
+      final client = context.tryGetMediaClientForServer(serverIdOrNull(target.metadata.serverId));
+      final ratio = MediaImageHelper.artworkPixelRatio(context, imageType: ImageType.art);
+      final (memWidth, memHeight) = MediaImageHelper.getMemCacheDimensions(
+        displayWidth: (size.width * ratio).round(),
+        displayHeight: (size.height * ratio).round(),
+        imageType: ImageType.art,
+      );
+      final url = MediaImageHelper.getOptimizedImageUrl(
+        client: client,
+        thumbPath: path,
+        maxWidth: size.width,
+        maxHeight: size.height,
+        pixelRatio: ratio,
+        imageType: ImageType.art,
+      );
+      if (url.isNotEmpty) {
+        final provider = MediaImageHelper.serverArtworkProvider(
+          imageUrl: url,
+          memWidth: memWidth,
+          memHeight: memHeight,
+        );
+        try {
+          await precacheImage(provider, context).timeout(const Duration(milliseconds: 900));
+        } catch (_) {
+          // Missing artwork falls back to the existing candidate/error logic.
+        }
+        if (!context.mounted) return MediaNavigationResult.navigated;
+      }
+    }
+  }
   final result = await Navigator.push<bool>(
     context,
     mediaDetailRoute(
