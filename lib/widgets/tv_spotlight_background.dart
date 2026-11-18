@@ -176,12 +176,11 @@ class TvSpotlightBackground extends StatelessWidget {
                     opacity: activeUrl != null && surfaceReady ? 1 : 0,
                     duration: const Duration(milliseconds: 420),
                     curve: Curves.easeOutCubic,
-                    child: Positioned(
-                      right: size.width * 0.025,
-                      bottom: size.height * 0.035,
-                      width: size.width * 0.53,
-                      height: size.height * 0.45,
-                      child: SizedBox(
+                    child: Transform.translate(
+                      offset: Offset(-size.width * 0.025, -size.height * 0.035),
+                      child: Align(
+                        alignment: Alignment.bottomRight,
+                        child: SizedBox(
                         width: size.width * 0.53,
                         height: size.height * 0.45,
                         child: IgnorePointer(
@@ -220,6 +219,7 @@ class TvSpotlightBackground extends StatelessWidget {
                           ),
                         ),
                       ),
+                    ),
                     ),
                   ),
                 ),
