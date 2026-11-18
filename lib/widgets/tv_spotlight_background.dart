@@ -131,10 +131,16 @@ class TvSpotlightBackground extends StatelessWidget {
                           child: SizedBox(
                             width: backdropSize.width,
                             height: backdropSize.height,
-                            child: PlexTrailerPreview(
-                              key: ValueKey(media!.globalKey),
-                              item: media,
-                              client: client!,
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                PlexTrailerPreview(
+                                  key: ValueKey(media!.globalKey),
+                                  item: media,
+                                  client: client!,
+                                ),
+                                _trailerBottomBlend(bgColor),
+                              ],
                             ),
                           ),
                         ),
@@ -240,8 +246,10 @@ class TvSpotlightBackground extends StatelessWidget {
                   // Only hide the artwork while an active preview is waiting
                   // for its first rendered frame.
                   if (surfaceReady || !trailerPreview) backdrop else const ColoredBox(color: Colors.black),
-                  if (trailerPreview && media != null && client != null && Platform.isAndroid)
+                  if (trailerPreview && media != null && client != null && Platform.isAndroid) ...[
                     PlexTrailerPreview(key: ValueKey(media.globalKey), item: media, client: client),
+                    _trailerBottomBlend(Theme.of(context).scaffoldBackgroundColor),
+                  ],
                 ],
               ),
             ),
@@ -250,6 +258,24 @@ class TvSpotlightBackground extends StatelessWidget {
       ),
     );
   }
+
+  // Paint above the native preview without masking or modifying its SurfaceView.
+  // Especially softens the hard edge of letterboxed trailers.
+  Widget _trailerBottomBlend(Color bgColor) => IgnorePointer(
+        child: RasterizedGradient(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              bgColor.withValues(alpha: 0),
+              bgColor.withValues(alpha: 0),
+              bgColor.withValues(alpha: 0.45),
+              bgColor.withValues(alpha: 0.92),
+            ],
+            stops: const [0.0, 0.78, 0.91, 1.0],
+          ),
+        ),
+      );
 
   Widget _buildHorizontalScrim(Color bgColor) {
     return RasterizedGradient(
