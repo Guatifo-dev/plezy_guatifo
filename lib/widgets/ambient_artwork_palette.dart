@@ -11,6 +11,10 @@ class AmbientArtworkPalette {
   static final Map<String, Color> _cache = <String, Color>{};
   static const int maxEntries = 160;
 
+  /// Reuse an already resolved tint synchronously when a second route opens
+  /// for the same artwork. Avoids repainting the base-to-ambient animation.
+  static Color? cachedColor(String path) => _cache[path];
+
   static Future<Color?> resolve({
     required String path,
     required MediaServerClient? client,
