@@ -176,27 +176,30 @@ class TvSpotlightBackground extends StatelessWidget {
                     opacity: activeUrl != null && surfaceReady ? 1 : 0,
                     duration: const Duration(milliseconds: 420),
                     curve: Curves.easeOutCubic,
-                    child: Align(
-                      alignment: Alignment.bottomRight,
+                    child: Positioned(
+                      right: size.width * 0.025,
+                      bottom: size.height * 0.035,
+                      width: size.width * 0.53,
+                      height: size.height * 0.45,
                       child: SizedBox(
-                        width: size.width * 0.51,
-                        height: size.height * 0.43,
+                        width: size.width * 0.53,
+                        height: size.height * 0.45,
                         child: IgnorePointer(
                           child: ShaderMask(
                             blendMode: BlendMode.dstIn,
                             shaderCallback: (rect) => const LinearGradient(
                               begin: Alignment.centerLeft,
                               end: Alignment.centerRight,
-                              colors: [Colors.transparent, Colors.white, Colors.white],
-                              stops: [0.0, 0.32, 1.0],
+                              colors: [Colors.transparent, Color(0x33000000), Color(0xB3000000), Colors.white],
+                              stops: [0.0, 0.22, 0.46, 0.70],
                             ).createShader(rect),
                             child: ShaderMask(
                               blendMode: BlendMode.dstIn,
                               shaderCallback: (rect) => const LinearGradient(
                                 begin: Alignment.topCenter,
                                 end: Alignment.bottomCenter,
-                                colors: [Colors.transparent, Colors.white, Colors.white],
-                                stops: [0.0, 0.32, 1.0],
+                                colors: [Colors.transparent, Color(0x26000000), Color(0xA6000000), Colors.white],
+                                stops: [0.0, 0.20, 0.43, 0.66],
                               ).createShader(rect),
                               child: CyclingMediaBackdrop(
                                 mediaKey: media.globalKey,
@@ -207,8 +210,8 @@ class TvSpotlightBackground extends StatelessWidget {
                                     ? null
                                     : (path) => localArtworkPathResolver!(path),
                                 allowNetwork: allowNetwork,
-                                width: size.width * 0.51,
-                                height: size.height * 0.43,
+                                width: size.width * 0.53,
+                                height: size.height * 0.45,
                                 fit: BoxFit.contain,
                                 alignment: Alignment.bottomRight,
                                 fallbackColor: Colors.transparent,
