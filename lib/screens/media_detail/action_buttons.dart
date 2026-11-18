@@ -185,8 +185,9 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
         padding: .symmetric(horizontal: isTv ? 25 * tvScale : 16, vertical: isTv ? 9 * tvScale : 0),
         shape: playShape ?? const StadiumBorder(),
       ).copyWith(
-        backgroundColor: WidgetStatePropertyAll(state.showFocus ? focusBg : colorScheme.primary),
-        foregroundColor: WidgetStatePropertyAll(state.showFocus ? focusFg : colorScheme.onPrimary),
+        // Match the other tonal actions when unfocused; highlight only on focus.
+        backgroundColor: WidgetStatePropertyAll(state.showFocus ? focusBg : idleBg),
+        foregroundColor: WidgetStatePropertyAll(state.showFocus ? focusFg : tonalFg),
       );
       return Semantics(
         label: playSemanticsLabel,
