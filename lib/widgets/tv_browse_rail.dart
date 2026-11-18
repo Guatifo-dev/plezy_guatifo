@@ -452,7 +452,6 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
   static const _scrollCatchUpViewportDistance = 2.5;
   // Equivalent to the former whole-rail Opacity(0.6) without keeping a
   // full-viewport saveLayer alive.
-  static const _unfocusedRailDimAlpha = 0.4;
 
   late final FocusNode _focusNode = LockedFocusRowNode(debugLabel: 'tv_browse_rail', focusedItemRect: _focusedCardRect);
   final Map<String, ScrollController> _scrollControllers = {};
