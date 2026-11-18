@@ -2516,7 +2516,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
       // The hero information block sits directly above the action row and is
       // the D-pad path to the full details sheet (#2042).
       if (_metadata.isMovie) {
-        _backButtonFocusNode.requestFocus();
+        _tvDetailInfoFocusNode.requestFocus();
       } else {
         _tvDetailInfoFocusNode.requestFocus();
       }
@@ -3842,28 +3842,29 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
             ),
           ),
         ),
-        Positioned(
-          top: 0,
-          left: 0,
-          child: DesktopAppBarHelper.buildAdjustedLeading(
-            Focus(
-              onKeyEvent: (node, event) {
-                if (metadata.isMovie && event is KeyDownEvent &&
-                    event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                  _focusTvDetailActionRow();
-                  return KeyEventResult.handled;
-                }
-                return KeyEventResult.ignored;
-              },
-              child: AppBarBackButton(
-                style: BackButtonStyle.circular,
-                onPressed: _popMediaDetail,
-                focusNode: _backButtonFocusNode,
+        if (!metadata.isMovie)
+          Positioned(
+            top: 0,
+            left: 0,
+            child: DesktopAppBarHelper.buildAdjustedLeading(
+              Focus(
+                onKeyEvent: (node, event) {
+                  if (metadata.isMovie && event is KeyDownEvent &&
+                      event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                    _focusTvDetailActionRow();
+                    return KeyEventResult.handled;
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: AppBarBackButton(
+                  style: BackButtonStyle.circular,
+                  onPressed: _popMediaDetail,
+                  focusNode: _backButtonFocusNode,
+                ),
               ),
-            ),
-            context: context,
-          )!,
-        ),
+              context: context,
+            )!,
+          ),
         if (buildHiddenContent && detailHubs.isNotEmpty)
           Positioned(
             left: 0,
@@ -3956,7 +3957,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
         final logoMetadataGap = 14 * scale;
         final movieHero = metadata.isMovie && PlatformDetector.isTV();
         final summaryGap = 10 * scale;
-        final summaryFontSize = movieHero ? 15.6 * scale : (availableHeight < 260 * scale ? 16.2 * scale : 18 * scale);
+        final summaryFontSize = movieHero ? 16.6 * scale : (availableHeight < 260 * scale ? 16.2 * scale : 18 * scale);
         final summaryLineHeight = summaryFontSize * 1.35;
         final actionHeight = _tvDetailActionSize * scale;
         final actionGap = 16 * scale;
@@ -4062,7 +4063,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                             FocusableWrapper(
                               focusNode: _tvDetailInfoFocusNode,
                               onSelect: movieHero ? null : openDetails,
-                              onNavigateUp: _backButtonFocusNode.requestFocus,
+                              onNavigateUp: movieHero ? () {} : _backButtonFocusNode.requestFocus,
                               onNavigateDown: _focusTvDetailActionRow,
                               onBack: _popMediaDetailIfBackNotSuppressed,
                               useBackgroundFocus: true,
