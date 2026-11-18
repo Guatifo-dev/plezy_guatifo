@@ -4001,7 +4001,10 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
             descriptionHeight +
             actionGap +
             actionHeight;
-        final logoWidth = desiredLogoWidth < constraints.maxWidth ? desiredLogoWidth : constraints.maxWidth;
+        // Keep the movie artwork and synopsis within the left half of the TV.
+        // The action row retains its own full width so buttons do not overflow.
+        final informationWidth = movieHero ? constraints.maxWidth * 0.80 : constraints.maxWidth;
+        final logoWidth = desiredLogoWidth < informationWidth ? desiredLogoWidth : informationWidth;
 
         void openDetails() => _openTvDetailsSheet(context, metadata, hideSpoilers: hideSpoilers);
 
@@ -4016,8 +4019,10 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                   mainAxisSize: .min,
                   crossAxisAlignment: .start,
                   children: [
-                    Semantics(
-                      key: const ValueKey('tv_detail_information_semantics'),
+                    SizedBox(
+                      width: informationWidth,
+                      child: Semantics(
+                        key: const ValueKey('tv_detail_information_semantics'),
                       identifier: 'tv_detail_information',
                       container: true,
                       button: true,
@@ -4117,6 +4122,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                                         child: Text(
                                           description,
                                           maxLines: summaryMaxLines,
+                                          textAlign: movieHero ? TextAlign.justify : TextAlign.start,
                                           overflow: .ellipsis,
                                           style: theme.textTheme.bodyLarge?.copyWith(
                                             color: mutedForegroundColor,
@@ -4133,6 +4139,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                           ],
                         ),
                       ),
+                    ),
                     ),
                     SizedBox(height: actionGap),
                     SizedBox(height: actionHeight, child: _buildActionButtons(metadata)),
