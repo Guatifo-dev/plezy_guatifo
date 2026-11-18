@@ -186,19 +186,22 @@ class TvSpotlightBackground extends StatelessWidget {
                         child: IgnorePointer(
                           child: ShaderMask(
                             blendMode: BlendMode.dstIn,
-                            shaderCallback: (rect) => const LinearGradient(
-                              begin: Alignment.centerLeft,
-                              end: Alignment.centerRight,
-                              colors: [Colors.transparent, Color(0x33000000), Color(0xB3000000), Colors.white],
-                              stops: [0.0, 0.22, 0.46, 0.70],
+                            shaderCallback: (rect) => const RadialGradient(
+                              // Curved, off-centre feather instead of a straight edge.
+                              center: Alignment(0.62, 0.55),
+                              radius: 1.12,
+                              colors: [Colors.white, Colors.white, Color(0xBFFFFFFF), Colors.transparent],
+                              stops: [0.0, 0.35, 0.68, 1.0],
                             ).createShader(rect),
                             child: ShaderMask(
                               blendMode: BlendMode.dstIn,
-                              shaderCallback: (rect) => const LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [Colors.transparent, Color(0x26000000), Color(0xA6000000), Colors.white],
-                                stops: [0.0, 0.20, 0.43, 0.66],
+                              shaderCallback: (rect) => const RadialGradient(
+                                // A second displaced ellipse makes the upper
+                                // and left boundary irregular, with soft corners.
+                                center: Alignment(0.24, 0.85),
+                                radius: 1.10,
+                                colors: [Colors.white, Colors.white, Color(0xD9FFFFFF), Colors.transparent],
+                                stops: [0.0, 0.38, 0.68, 1.0],
                               ).createShader(rect),
                               child: CyclingMediaBackdrop(
                                 mediaKey: media.globalKey,
