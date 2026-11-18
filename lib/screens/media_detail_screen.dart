@@ -1059,7 +1059,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
 
   bool _isTvDetailReadyToReveal(MediaItem metadata) {
     if (_isLoadingMetadata) return false;
-    if (!_hasLoadedTvDetailSupplementalSections(metadata)) return false;
+    if (!metadata.isMovie && !_hasLoadedTvDetailSupplementalSections(metadata)) return false;
 
     if (metadata.isShow) {
       if (_isLoadingSeasons || (!_hasLoadedSeasons && _seasons.isEmpty)) return false;
@@ -3770,21 +3770,23 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     KeyEventResult Function(FocusNode, KeyEvent) handleBack,
   ) {
     final size = MediaQuery.sizeOf(context);
-    final detailHubs = _tvDetailHubs(metadata);
+    final detailHubs = metadata.isMovie ? const <MediaHub>[] : _tvDetailHubs(metadata);
     if (widget.initialEpisodeId != null && !_initialEpisodePagingDone) {
       _maybeLoadMoreForInitialEpisode();
     }
     final hideSpoilers = SettingsService.instance.read(SettingsService.hideSpoilers);
     final detailScale = TvLayoutConstants.scaleForSize(size);
     final spotlightTop = (size.height * 0.08).clamp(56.0 * detailScale, 110.0 * detailScale).toDouble();
-    final rawRailHeight = _estimateTvDetailRailHeight(size, detailHubs);
+    final rawRailHeight = metadata.isMovie ? 0.0 : _estimateTvDetailRailHeight(size, detailHubs);
     if (!_tvDetailRevealed && _isTvDetailReadyToReveal(metadata)) {
       _scheduleTvDetailReveal(rawRailHeight, focusPrimaryAction: metadata.isMovie);
     }
     final stableRailHeight = _tvDetailStableRailHeight;
     final railHeight = stableRailHeight == null || rawRailHeight > stableRailHeight ? rawRailHeight : stableRailHeight;
     final railTopPadding = 12 * detailScale;
-    final foregroundBottom = (railHeight - railTopPadding) + (_tvDetailActionRailGap * detailScale);
+    final foregroundBottom = metadata.isMovie
+        ? 28.0 * detailScale
+        : (railHeight - railTopPadding) + (_tvDetailActionRailGap * detailScale);
     final spotlightLeft = (24 * detailScale).clamp(18.0, 40.0).toDouble();
     // See _tvDetailRouteSettled. The children stay in place (only their
     // content is withheld) so the Stack keeps its elements across the swap.
@@ -4131,8 +4133,58 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     final genres = metadata.genres ?? const <String>[];
     unawaited(
       OverlaySheetController.of(context).show<void>(
-        builder: (_) => MediaDetailsSheet(item: item, description: description, genres: genres),
+        builder: (_) => metadata.isMovie && PlatformDetector.isTV()
+            ? _buildTvMovieMoreDetailsSheet(item, description, genres, metadata)
+            : MediaDetailsSheet(item: item, description: description, genres: genres),
       ),
+    );
+  }
+
+  /// Movie-only expanded information. The main movie hero never depends on
+  /// supplemental rail data; this sheet owns the cast/extras/related rails.
+  Widget _buildTvMovieMoreDetailsSheet(
+    MediaItem item,
+    String? description,
+    List<String> genres,
+    MediaItem metadata,
+  ) {
+    final hubs = _tvDetailHubs(metadata);
+    return Builder(
+      builder: (sheetContext) {
+        final size = MediaQuery.sizeOf(sheetContext);
+        final railHeight = hubs.isEmpty
+            ? 0.0
+            : math.min(_estimateTvBrowseRailHeight(size, hubs), size.height * 0.46);
+        return SizedBox(
+          height: size.height * 0.82,
+          child: Column(
+            children: [
+              Expanded(child: MediaDetailsSheet(item: item, description: description, genres: genres)),
+              if (hubs.isNotEmpty && railHeight > 0)
+                SizedBox(
+                  height: railHeight,
+                  child: TvBrowseRail(
+                    hubs: hubs,
+                    focusMemory: _hubFocusMemory,
+                    iconForHub: _getTvDetailHubIcon,
+                    onFocusedHubItemChanged: _handleTvDetailFocusedRailItemChanged,
+                    onRefresh: (source) => unawaited(_refreshItemInPlace(source)),
+                    onActiveHubChanged: _handleTvDetailHubChanged,
+                    onActivateItem: _handleTvDetailRailItemActivated,
+                    trailingForHub: _tvDetailTrailingState,
+                    leadingItemForHub: _tvDetailLeadingItemForHub,
+                    onRetryHub: _retryTvDetailHub,
+                    onBack: () => OverlaySheetController.of(sheetContext).pop(),
+                    tallPosterScale: _tvDetailTallPosterScale,
+                    widePosterScaleForHub: _tvDetailWidePosterScaleForHub,
+                    episodePosterModeForHub: _tvDetailEpisodePosterModeForHub,
+                    showTitleImpliedForHub: _isTvDetailEpisodeHub,
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 
