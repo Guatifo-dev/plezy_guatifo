@@ -368,6 +368,28 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
             ),
           );
 
+    // Movie-only TV shortcut: open the extended information and media rails.
+    final movieDetailsAction = isTv && metadata.isMovie
+        ? FocusableAction(
+            debugLabel: 'detail_movie_more_details',
+            onPressed: () => _openTvDetailsSheet(
+              context,
+              metadata,
+              hideSpoilers: SettingsService.instance.read(SettingsService.hideSpoilers),
+            ),
+            builder: (context, state) => iconActionButton(
+              state,
+              onPressed: () => _openTvDetailsSheet(
+                context,
+                metadata,
+                hideSpoilers: SettingsService.instance.read(SettingsService.hideSpoilers),
+              ),
+              icon: const AppIcon(Symbols.info_rounded, fill: 1),
+              tooltip: t.mediaMenu.viewDetails,
+            ),
+          )
+        : null;
+
     final allActions = <FocusableAction>[
       playAction,
       ?versionAction,
@@ -376,6 +398,7 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
       ?downloadAction,
       watchedAction,
       ?watchlistAction,
+      ?movieDetailsAction,
       ?moreActionsAction,
     ];
 
