@@ -1059,11 +1059,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
 
   bool _isTvDetailReadyToReveal(MediaItem metadata) {
     if (_isLoadingMetadata) return false;
-    // Movie hero information is ready as soon as its metadata is loaded.
-    // Extras and related rails can arrive later without delaying the hero.
-    // Keep the existing full readiness gate for shows and seasons, whose
-    // episode/season layout depends on those asynchronous sections.
-    if (!metadata.isMovie && !_hasLoadedTvDetailSupplementalSections(metadata)) return false;
+    if (!_hasLoadedTvDetailSupplementalSections(metadata)) return false;
 
     if (metadata.isShow) {
       if (_isLoadingSeasons || (!_hasLoadedSeasons && _seasons.isEmpty)) return false;
