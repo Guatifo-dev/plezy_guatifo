@@ -188,6 +188,35 @@ class TvSpotlightBackground extends StatelessWidget {
                         child: IgnorePointer(
                           child: ShaderMask(
                             blendMode: BlendMode.dstIn,
+                            shaderCallback: (rect) => const LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.transparent,
+                                Color(0x66FFFFFF),
+                                Color(0xE6FFFFFF),
+                                Colors.white,
+                              ],
+                              stops: [0.0, 0.20, 0.38, 0.56],
+                            ).createShader(rect),
+                            child: ShaderMask(
+                              blendMode: BlendMode.dstIn,
+                              shaderCallback: (rect) => const LinearGradient(
+                                begin: Alignment.centerLeft,
+                                end: Alignment.centerRight,
+                                colors: [Colors.white, Colors.white, Color(0xD9FFFFFF), Colors.transparent],
+                                stops: [0.0, 0.82, 0.93, 1.0],
+                              ).createShader(rect),
+                              child: ShaderMask(
+                                blendMode: BlendMode.dstIn,
+                                shaderCallback: (rect) => const LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [Colors.white, Colors.white, Color(0xD9FFFFFF), Colors.transparent],
+                                  stops: [0.0, 0.83, 0.94, 1.0],
+                                ).createShader(rect),
+                                child: ShaderMask(
+                            blendMode: BlendMode.dstIn,
                             shaderCallback: (rect) => const RadialGradient(
                               // Curved, off-centre feather instead of a straight edge.
                               center: Alignment(0.62, 0.55),
@@ -219,6 +248,10 @@ class TvSpotlightBackground extends StatelessWidget {
                                 fit: BoxFit.contain,
                                 alignment: Alignment.bottomRight,
                                 fallbackColor: Colors.transparent,
+                              ),
+                            ),
+                          ),
+                                ),
                               ),
                             ),
                           ),
