@@ -2515,11 +2515,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     if (PlatformDetector.isTV()) {
       // The hero information block sits directly above the action row and is
       // the D-pad path to the full details sheet (#2042).
-      if (_metadata.isMovie) {
-        _tvDetailInfoFocusNode.requestFocus();
-      } else {
-        _tvDetailInfoFocusNode.requestFocus();
-      }
+      if (!_metadata.isMovie) _tvDetailInfoFocusNode.requestFocus();
       return;
     }
     if (!widget.isOffline) _ratingChipFocusNode.requestFocus();
@@ -4060,7 +4056,9 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                             // path to the sheet that shows all of it (#2042).
                             // Background-only focus chrome: zero layout delta,
                             // so the hero height budget above stays exact.
-                            FocusableWrapper(
+                            ExcludeFocus(
+                              excluding: movieHero,
+                              child: FocusableWrapper(
                               focusNode: _tvDetailInfoFocusNode,
                               onSelect: movieHero ? null : openDetails,
                               onNavigateUp: movieHero ? () {} : _backButtonFocusNode.requestFocus,
@@ -4140,6 +4138,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                           ],
                         ),
                       ),
+                    ),
                     ),
                     ),
                     SizedBox(height: actionGap),
