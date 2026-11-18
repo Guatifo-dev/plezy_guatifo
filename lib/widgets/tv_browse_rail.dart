@@ -27,7 +27,6 @@ import '../utils/layout_constants.dart';
 import '../utils/media_image_helper.dart';
 import '../utils/media_navigation_helper.dart';
 import '../utils/provider_extensions.dart';
-import 'animated_dim_scrim.dart';
 import 'app_icon.dart';
 import 'card_inflation_budget.dart';
 import 'clickable_cursor.dart';
@@ -1393,27 +1392,7 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
                       height: viewportHeight,
                       child: _buildSemanticSelectionProxy(context),
                     ),
-                    // Unfocused-rail dim: a scrim quad on top instead of
-                    // AnimatedOpacity, which would keep a full-viewport
-                    // saveLayer alive every frame (see AnimatedDimScrim).
-                    // Bled under the side nav like the background gradient,
-                    // so its edge doesn't seam against the nav.
-                    _RailBleedPositioned(
-                      width: width,
-                      targetBleedLeft: widget.backgroundBleedLeft,
-                      child: ListenableSelector<bool>(
-                        listenable: _focusModel,
-                        selector: () => _focusModel.railHasFocus,
-                        builder: (context, railHasFocus, _) => AnimatedDimScrim(
-                          dimmed: !railHasFocus,
-                          color: theme.scaffoldBackgroundColor,
-                          alpha: _unfocusedRailDimAlpha,
-                          // The band's top edge cuts across the spotlight
-                          // artwork; ramp the dim in instead.
-                          fadeTop: 36 * scale,
-                        ),
-                      ),
-                    ),
+
                   ],
                 ),
               ),
