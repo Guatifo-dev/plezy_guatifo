@@ -380,6 +380,8 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
   bool _hasLoadedExtras = false;
   bool _hasLoadedRelatedHubs = false;
   final _tvDetailRailKey = GlobalKey<TvBrowseRailState>();
+  final _movieDetailsRailKey = GlobalKey<TvBrowseRailState>();
+  final _movieDetailsInfoFocusNode = FocusNode(debugLabel: 'movie_more_details_info');
   final _hubFocusMemory = HubFocusMemory();
   PageRoute<dynamic>? _route;
   RouteObserver<PageRoute<dynamic>>? _routeObserver;
@@ -1156,6 +1158,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     _backButtonFocusNode.dispose();
     _overviewFocusNode.dispose();
     _tvDetailInfoFocusNode.dispose();
+    _movieDetailsInfoFocusNode.dispose();
     _infoRowsFocusNode.dispose();
     _extrasSelectLongPress.dispose();
     for (final node in _seasonTabFocusNodes) {
@@ -4159,11 +4162,20 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
           height: size.height * 0.82,
           child: Column(
             children: [
-              Expanded(child: MediaDetailsSheet(item: item, description: description, genres: genres)),
+              Expanded(
+                child: MediaDetailsSheet(
+                  item: item,
+                  description: description,
+                  genres: genres,
+                  informationFocusNode: _movieDetailsInfoFocusNode,
+                  onNavigateDown: () => _movieDetailsRailKey.currentState?.requestFocus(),
+                ),
+              ),
               if (hubs.isNotEmpty && railHeight > 0)
                 SizedBox(
                   height: railHeight,
                   child: TvBrowseRail(
+                    key: _movieDetailsRailKey,
                     hubs: hubs,
                     focusMemory: _hubFocusMemory,
                     iconForHub: _getTvDetailHubIcon,
@@ -4174,6 +4186,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                     trailingForHub: _tvDetailTrailingState,
                     leadingItemForHub: _tvDetailLeadingItemForHub,
                     onRetryHub: _retryTvDetailHub,
+                    onNavigateUp: _movieDetailsInfoFocusNode.requestFocus,
                     onBack: () => OverlaySheetController.of(sheetContext).pop(),
                     tallPosterScale: _tvDetailTallPosterScale,
                     widePosterScaleForHub: _tvDetailWidePosterScaleForHub,
