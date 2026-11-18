@@ -172,8 +172,10 @@ class TvSpotlightBackground extends StatelessWidget {
                 valueListenable: PlexTrailerPreview.activeTrailerUrl,
                 builder: (context, activeUrl, _) => ValueListenableBuilder<bool>(
                   valueListenable: PlexTrailerPreview.surfaceReady,
-                  builder: (context, surfaceReady, _) => AnimatedOpacity(
-                    opacity: activeUrl != null && surfaceReady ? 1 : 0,
+                  builder: (context, surfaceReady, _) => ValueListenableBuilder<bool>(
+                    valueListenable: PlexTrailerPreview.trailerFinished,
+                    builder: (context, finished, _) => AnimatedOpacity(
+                    opacity: activeUrl != null && surfaceReady && !finished ? 1 : 0,
                     duration: const Duration(milliseconds: 420),
                     curve: Curves.easeOutCubic,
                     child: Transform.translate(
@@ -224,6 +226,7 @@ class TvSpotlightBackground extends StatelessWidget {
                       ),
                     ),
                     ),
+                  ),
                   ),
                 ),
               ),
