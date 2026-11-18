@@ -28,8 +28,8 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
     final playIcon = _getPlayButtonIcon(metadata);
     final playActionLabel = playIcon == Symbols.resume_rounded ? t.common.resume : t.common.play;
     final playSemanticsLabel = playButtonLabel.isEmpty ? playActionLabel : '$playActionLabel $playButtonLabel';
-    final playIconSize = isTv ? 22 * tvScale : 20.0;
-    final playTextStyle = TextStyle(fontSize: isTv ? 17 * tvScale : 16, fontWeight: .w700);
+    final playIconSize = isTv ? 25 * tvScale : 20.0;
+    final playTextStyle = TextStyle(fontSize: isTv ? 18 * tvScale : 16, fontWeight: .w800);
     final playButtonIcon = AppIcon(playIcon, fill: 1, size: playIconSize);
 
     // Split "Play Version" segment (#1881): a visible second Play segment
@@ -180,6 +180,14 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
     final gap = isTv ? 8.0 * tvScale : 12.0;
 
     Widget playButton(FocusableActionBuildState state) {
+      final prominentStyle = actionButtonStyle(
+        showFocus: state.showFocus,
+        padding: .symmetric(horizontal: isTv ? 25 * tvScale : 16, vertical: isTv ? 9 * tvScale : 0),
+        shape: playShape ?? const StadiumBorder(),
+      ).copyWith(
+        backgroundColor: WidgetStatePropertyAll(state.showFocus ? focusBg : colorScheme.primary),
+        foregroundColor: WidgetStatePropertyAll(state.showFocus ? focusFg : colorScheme.onPrimary),
+      );
       return Semantics(
         label: playSemanticsLabel,
         button: true,
@@ -189,9 +197,9 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
           height: actionSize,
           child: FilledButton(
             onPressed: onPlayPressed,
-            style: actionButtonStyle(
+            style: isTv ? prominentStyle : actionButtonStyle(
               showFocus: state.showFocus,
-              padding: .symmetric(horizontal: isTv ? 17 * tvScale : 16, vertical: isTv ? 9 * tvScale : 0),
+              padding: .symmetric(horizontal: 16, vertical: 0),
               shape: playShape,
             ),
             child: playButtonLabel.isNotEmpty
