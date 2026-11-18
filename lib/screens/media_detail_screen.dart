@@ -2515,7 +2515,11 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     if (PlatformDetector.isTV()) {
       // The hero information block sits directly above the action row and is
       // the D-pad path to the full details sheet (#2042).
-      _tvDetailInfoFocusNode.requestFocus();
+      if (_metadata.isMovie) {
+        _backButtonFocusNode.requestFocus();
+      } else {
+        _tvDetailInfoFocusNode.requestFocus();
+      }
       return;
     }
     if (!widget.isOffline) _ratingChipFocusNode.requestFocus();
@@ -2526,7 +2530,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     final metadata = _metadata;
 
     if (PlatformDetector.isTV()) {
-      _tvDetailRailKey.currentState?.requestFocus();
+      if (!metadata.isMovie) _tvDetailRailKey.currentState?.requestFocus();
       return;
     }
 
@@ -3779,7 +3783,9 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     }
     final hideSpoilers = SettingsService.instance.read(SettingsService.hideSpoilers);
     final detailScale = TvLayoutConstants.scaleForSize(size);
-    final spotlightTop = (size.height * 0.08).clamp(56.0 * detailScale, 110.0 * detailScale).toDouble();
+    final spotlightTop = metadata.isMovie
+        ? (size.height * 0.035).clamp(24.0 * detailScale, 50.0 * detailScale).toDouble()
+        : (size.height * 0.08).clamp(56.0 * detailScale, 110.0 * detailScale).toDouble();
     final rawRailHeight = metadata.isMovie ? 0.0 : _estimateTvDetailRailHeight(size, detailHubs);
     if (!_tvDetailRevealed && _isTvDetailReadyToReveal(metadata)) {
       _scheduleTvDetailReveal(rawRailHeight, focusPrimaryAction: metadata.isMovie);
@@ -3788,7 +3794,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     final railHeight = stableRailHeight == null || rawRailHeight > stableRailHeight ? rawRailHeight : stableRailHeight;
     final railTopPadding = 12 * detailScale;
     final foregroundBottom = metadata.isMovie
-        ? 28.0 * detailScale
+        ? 12.0 * detailScale
         : (railHeight - railTopPadding) + (_tvDetailActionRailGap * detailScale);
     final spotlightLeft = (24 * detailScale).clamp(18.0, 40.0).toDouble();
     // See _tvDetailRouteSettled. The children stay in place (only their
@@ -3840,10 +3846,20 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
           top: 0,
           left: 0,
           child: DesktopAppBarHelper.buildAdjustedLeading(
-            AppBarBackButton(
-              style: BackButtonStyle.circular,
-              onPressed: _popMediaDetail,
-              focusNode: _backButtonFocusNode,
+            Focus(
+              onKeyEvent: (node, event) {
+                if (metadata.isMovie && event is KeyDownEvent &&
+                    event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                  _focusTvDetailActionRow();
+                  return KeyEventResult.handled;
+                }
+                return KeyEventResult.ignored;
+              },
+              child: AppBarBackButton(
+                style: BackButtonStyle.circular,
+                onPressed: _popMediaDetail,
+                focusNode: _backButtonFocusNode,
+              ),
             ),
             context: context,
           )!,
@@ -3938,6 +3954,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
         final episodeTitleGap = 4 * scale;
         final metadataLineHeight = 22 * scale;
         final logoMetadataGap = 14 * scale;
+        final movieHero = metadata.isMovie && PlatformDetector.isTV();
         final summaryGap = 10 * scale;
         final summaryFontSize = availableHeight < 260 * scale ? 16.2 * scale : 18 * scale;
         final summaryLineHeight = summaryFontSize * 1.35;
@@ -3946,14 +3963,14 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
         final hasDescription = description != null && description.isNotEmpty;
         final hasEpisodeTitle = episodeTitle != null && episodeTitle.isNotEmpty;
         final episodeTitleBlockHeight = hasEpisodeTitle ? episodeTitleLineHeight + episodeTitleGap : 0.0;
-        final formatBadgesHeight = showFormatBadges ? 26.0 : 0.0;
+        final formatBadgesHeight = showFormatBadges ? (movieHero ? 34.0 * scale : 26.0) : 0.0;
         // Genres belong to the show, not the focused episode, and do not change
         // while browsing; they live in the details sheet (#2217).
         final genres = metadata.genres ?? const <String>[];
         var summaryMaxLines = 0;
         var logoHeight = 0.0;
 
-        for (var lines = hasDescription ? 3 : 0; lines >= 0; lines--) {
+        for (var lines = hasDescription ? (movieHero ? 6 : 3) : 0; lines >= 0; lines--) {
           final descriptionHeight = lines > 0 ? summaryGap + (summaryLineHeight * lines) : 0.0;
           final reservedHeight =
               logoMetadataGap +
@@ -3989,7 +4006,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
           child: SizedBox(
             height: availableHeight,
             child: Align(
-              alignment: .bottomLeft,
+              alignment: movieHero ? Alignment.topLeft : Alignment.bottomLeft,
               child: SizedBox(
                 height: contentHeight <= availableHeight ? contentHeight : availableHeight,
                 child: Column(
@@ -4003,7 +4020,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                       button: true,
                       label: _tvDetailInformationSemanticLabel(metadata, description: description, genres: genres),
                       hint: t.mediaMenu.viewDetails,
-                      onTap: openDetails,
+                      onTap: movieHero ? null : openDetails,
                       child: ExcludeSemantics(
                         // One announcement, one action: activating it opens the
                         // full-information sheet. The action buttons below
@@ -4036,7 +4053,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                             // so the hero height budget above stays exact.
                             FocusableWrapper(
                               focusNode: _tvDetailInfoFocusNode,
-                              onSelect: openDetails,
+                              onSelect: movieHero ? null : openDetails,
                               onNavigateUp: _backButtonFocusNode.requestFocus,
                               onNavigateDown: _focusTvDetailActionRow,
                               onBack: _popMediaDetailIfBackNotSuppressed,
@@ -4047,7 +4064,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                               descendantsAreFocusable: false,
                               child: GestureDetector(
                                 behavior: HitTestBehavior.opaque,
-                                onTap: openDetails,
+                                onTap: movieHero ? null : openDetails,
                                 child: Column(
                                   mainAxisSize: .min,
                                   crossAxisAlignment: .start,
