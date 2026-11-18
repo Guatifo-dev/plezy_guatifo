@@ -251,20 +251,34 @@ class TvSpotlightBackground extends StatelessWidget {
                         builder: (context, activeUrl, _) => Stack(
                           fit: StackFit.expand,
                           children: [
-                            // Keep the native video in the upper portion; the
-                            // existing fanart stays visible directly below it.
-                            // The lower band remains right of the synopsis.
-                            Positioned(
-                              top: 0,
-                              left: 0,
-                              right: 0,
-                              height: activeUrl == null ? backdropSize.height : backdropSize.height * 0.76,
-                              child: PlexTrailerPreview(
-                                key: ValueKey(media.globalKey),
-                                item: media,
-                                client: client,
-                              ),
+                            // Preserve the original native trailer dimensions.
+                            PlexTrailerPreview(
+                              key: ValueKey(media.globalKey),
+                              item: media,
+                              client: client,
                             ),
+                            // Experimental second fanart layer: overlap the
+                            // trailer's lower-right area without reaching the
+                            // synopsis column on the left.
+                            if (activeUrl != null && surfaceReady)
+                              Positioned(
+                                left: backdropSize.width * 0.46,
+                                right: 0,
+                                bottom: 0,
+                                height: backdropSize.height * 0.34,
+                                child: IgnorePointer(
+                                  child: ClipRect(
+                                    child: OverflowBox(
+                                      alignment: Alignment.bottomRight,
+                                      minWidth: backdropSize.width,
+                                      maxWidth: backdropSize.width,
+                                      minHeight: backdropSize.height,
+                                      maxHeight: backdropSize.height,
+                                      child: backdrop,
+                                    ),
+                                  ),
+                                ),
+                              ),
                           ],
                         ),
                       )
