@@ -2,10 +2,6 @@ package com.edde746.plezy
 
 import android.content.Context
 import android.graphics.Color
-import android.graphics.Canvas
-import android.graphics.LinearGradient
-import android.graphics.Paint
-import android.graphics.Shader
 import android.util.Log
 import android.view.Gravity
 import android.view.SurfaceView
@@ -189,8 +185,7 @@ internal class TrailerPreviewPlatformViewFactory :
     val params = args as? Map<*, *>
     val url = params?.get("url") as? String
     val audioEnabled = params?.get("audioEnabled") as? Boolean ?: true
-    val blendColor = (params?.get("blendColor") as? Number)?.toInt() ?: Color.BLACK
-    return TrailerPreviewPlatformView(context, viewId, url, audioEnabled, blendColor)
+    return TrailerPreviewPlatformView(context, viewId, url, audioEnabled)
   }
 }
 
@@ -198,8 +193,7 @@ private class TrailerPreviewPlatformView(
   context: Context,
   private val viewId: Int,
   url: String?,
-  audioEnabled: Boolean,
-  blendColor: Int
+  audioEnabled: Boolean
 ) : PlatformView {
   private val surfaceView = SurfaceView(context)
   private val container = FrameLayout(context).apply {
@@ -208,38 +202,6 @@ private class TrailerPreviewPlatformView(
       FrameLayout.LayoutParams.MATCH_PARENT,
       FrameLayout.LayoutParams.MATCH_PARENT,
       Gravity.CENTER
-    ))
-    // Native overlay shares the SurfaceView's Android composition layer.
-    // Flutter-side gradients can be hidden behind the video on Fire TV.
-    val edgeFade = object : View(context) {
-      private val fadePaint = Paint(Paint.ANTI_ALIAS_FLAG)
-      override fun onDraw(canvas: Canvas) {
-        super.onDraw(canvas)
-        if (width <= 0 || height <= 0) return
-        val red = Color.red(blendColor)
-        val green = Color.green(blendColor)
-        val blue = Color.blue(blendColor)
-        fadePaint.shader = LinearGradient(
-          0f, 0f, 0f, height.toFloat(),
-          intArrayOf(
-            Color.TRANSPARENT,
-            Color.TRANSPARENT,
-            Color.argb(100, red, green, blue),
-            Color.argb(245, red, green, blue)
-          ),
-          floatArrayOf(0f, 0.76f, 0.89f, 1f),
-          Shader.TileMode.CLAMP
-        )
-        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), fadePaint)
-      }
-    }.apply {
-      isClickable = false
-      isFocusable = false
-      importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-    }
-    addView(edgeFade, FrameLayout.LayoutParams(
-      FrameLayout.LayoutParams.MATCH_PARENT,
-      FrameLayout.LayoutParams.MATCH_PARENT
     ))
     importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
   }
