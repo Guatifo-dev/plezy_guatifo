@@ -3947,23 +3947,24 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
         if (constraints.maxHeight <= 0 || constraints.maxWidth <= 0) return const SizedBox.shrink();
 
         final availableHeight = constraints.maxHeight.isFinite ? constraints.maxHeight : 264.0;
-        final desiredLogoHeight = 220 * scale;
+        final desiredLogoHeight = (metadata.isMovie ? 155 : 220) * scale;
         final minLogoHeight = 60 * scale;
-        final desiredLogoWidth = 790 * scale;
+        final desiredLogoWidth = (metadata.isMovie ? 600 : 790) * scale;
         final episodeTitleLineHeight = 30 * scale;
         final episodeTitleGap = 4 * scale;
         final metadataLineHeight = 22 * scale;
         final logoMetadataGap = 14 * scale;
         final movieHero = metadata.isMovie && PlatformDetector.isTV();
         final summaryGap = 10 * scale;
-        final summaryFontSize = availableHeight < 260 * scale ? 16.2 * scale : 18 * scale;
+        final summaryFontSize = movieHero ? 15.6 * scale : (availableHeight < 260 * scale ? 16.2 * scale : 18 * scale);
         final summaryLineHeight = summaryFontSize * 1.35;
         final actionHeight = _tvDetailActionSize * scale;
         final actionGap = 16 * scale;
         final hasDescription = description != null && description.isNotEmpty;
         final hasEpisodeTitle = episodeTitle != null && episodeTitle.isNotEmpty;
         final episodeTitleBlockHeight = hasEpisodeTitle ? episodeTitleLineHeight + episodeTitleGap : 0.0;
-        final formatBadgesHeight = showFormatBadges ? (movieHero ? 34.0 * scale : 26.0) : 0.0;
+        final formatBadgesGap = showFormatBadges && movieHero ? 9.0 * scale : 0.0;
+        final formatBadgesHeight = showFormatBadges ? (movieHero ? 26.0 * scale : 26.0) : 0.0;
         // Genres belong to the show, not the focused episode, and do not change
         // while browsing; they live in the details sheet (#2217).
         final genres = metadata.genres ?? const <String>[];
@@ -3976,6 +3977,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
               logoMetadataGap +
               episodeTitleBlockHeight +
               metadataLineHeight +
+              formatBadgesGap +
               formatBadgesHeight +
               descriptionHeight +
               actionGap +
@@ -3994,6 +3996,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
             (showLogo ? logoHeight + logoMetadataGap : 0) +
             episodeTitleBlockHeight +
             metadataLineHeight +
+            formatBadgesGap +
             formatBadgesHeight +
             descriptionHeight +
             actionGap +
@@ -4097,6 +4100,8 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                                         child: _buildTvDetailMetadataLine(context, metadata, scale),
                                       ),
                                     ),
+                                    if (showFormatBadges && formatBadgesGap > 0)
+                                      SizedBox(height: formatBadgesGap),
                                     if (showFormatBadges)
                                       SizedBox(
                                         height: formatBadgesHeight,
