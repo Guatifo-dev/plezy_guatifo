@@ -193,11 +193,11 @@ class TvSpotlightBackground extends StatelessWidget {
                               end: Alignment.bottomCenter,
                               colors: [
                                 Colors.transparent,
-                                Color(0x66FFFFFF),
-                                Color(0xE6FFFFFF),
+                                Color(0xA6FFFFFF),
+                                Color(0xF0FFFFFF),
                                 Colors.white,
                               ],
-                              stops: [0.0, 0.20, 0.38, 0.56],
+                              stops: [0.0, 0.14, 0.30, 0.44],
                             ).createShader(rect),
                             child: ShaderMask(
                               blendMode: BlendMode.dstIn,
@@ -212,15 +212,15 @@ class TvSpotlightBackground extends StatelessWidget {
                                 shaderCallback: (rect) => const LinearGradient(
                                   begin: Alignment.topCenter,
                                   end: Alignment.bottomCenter,
-                                  colors: [Colors.white, Colors.white, Color(0xD9FFFFFF), Colors.transparent],
-                                  stops: [0.0, 0.83, 0.94, 1.0],
+                                  colors: [Colors.white, Color(0xF2FFFFFF), Color(0x99FFFFFF), Colors.transparent],
+                                  stops: [0.0, 0.73, 0.88, 1.0],
                                 ).createShader(rect),
                                 child: ShaderMask(
                             blendMode: BlendMode.dstIn,
                             shaderCallback: (rect) => const RadialGradient(
                               // Curved, off-centre feather instead of a straight edge.
-                              center: Alignment(0.62, 0.55),
-                              radius: 1.12,
+                              center: Alignment(0.40, 0.48),
+                              radius: 1.20,
                               colors: [Colors.white, Colors.white, Color(0xBFFFFFFF), Colors.transparent],
                               stops: [0.0, 0.35, 0.68, 1.0],
                             ).createShader(rect),
@@ -229,8 +229,8 @@ class TvSpotlightBackground extends StatelessWidget {
                               shaderCallback: (rect) => const RadialGradient(
                                 // A second displaced ellipse makes the upper
                                 // and left boundary irregular, with soft corners.
-                                center: Alignment(0.24, 0.85),
-                                radius: 1.10,
+                                center: Alignment(0.02, 0.54),
+                                radius: 1.22,
                                 colors: [Colors.white, Colors.white, Color(0xD9FFFFFF), Colors.transparent],
                                 stops: [0.0, 0.38, 0.68, 1.0],
                               ).createShader(rect),
