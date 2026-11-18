@@ -53,6 +53,15 @@ class _AmbientSpotlightTintState extends State<AmbientSpotlightTint> {
       _accent = null;
       return;
     }
+    // Discover and Detail own separate backdrop widgets, but the palette is
+    // shared. Seed the new route before its first paint instead of animating
+    // from the base color a second time for the same title.
+    final cached = AmbientArtworkPalette.cachedColor(path);
+    if (cached != null) {
+      _accent = cached;
+      return;
+    }
+    _accent = null;
     (() async {
       final color = await AmbientArtworkPalette.resolve(
         path: path,
