@@ -32,6 +32,9 @@ class PlexTrailerPreview extends StatefulWidget {
   /// During route handoff the artwork is covered until this becomes true.
   static ValueListenable<bool> get surfaceReady => _TrailerPreviewSession.surfaceReady;
 
+  /// Non-null only while a trailer has a resolved playback URL.
+  static ValueListenable<String?> get activeTrailerUrl => _TrailerPreviewSession.url;
+
   /// Marks a route handoff before its new Android surface is attached.
   static void prepareForRoute(Object? routeToken) {
     _TrailerPreviewSession.initialize();
