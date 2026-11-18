@@ -2,6 +2,7 @@ package com.edde746.plezy
 
 import android.content.Context
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.util.Log
 import android.view.Gravity
 import android.view.SurfaceView
@@ -185,7 +186,8 @@ internal class TrailerPreviewPlatformViewFactory :
     val params = args as? Map<*, *>
     val url = params?.get("url") as? String
     val audioEnabled = params?.get("audioEnabled") as? Boolean ?: true
-    return TrailerPreviewPlatformView(context, viewId, url, audioEnabled)
+    val blendColor = (params?.get("blendColor") as? Number)?.toInt() ?: Color.BLACK
+    return TrailerPreviewPlatformView(context, viewId, url, audioEnabled, blendColor)
   }
 }
 
@@ -193,7 +195,8 @@ private class TrailerPreviewPlatformView(
   context: Context,
   private val viewId: Int,
   url: String?,
-  audioEnabled: Boolean
+  audioEnabled: Boolean,
+  blendColor: Int
 ) : PlatformView {
   private val surfaceView = SurfaceView(context)
   private val container = FrameLayout(context).apply {
@@ -202,6 +205,37 @@ private class TrailerPreviewPlatformView(
       FrameLayout.LayoutParams.MATCH_PARENT,
       FrameLayout.LayoutParams.MATCH_PARENT,
       Gravity.CENTER
+    ))
+    // Native overlay shares the SurfaceView's Android composition layer.
+    // Flutter-side gradients can be hidden behind the video on Fire TV.
+    val edgeFade = View(context).apply {
+      background = GradientDrawable(
+        GradientDrawable.Orientation.TOP_BOTTOM,
+        intArrayOf(
+          Color.TRANSPARENT,
+          Color.TRANSPARENT,
+          Color.argb(100, Color.red(blendColor), Color.green(blendColor), Color.blue(blendColor)),
+          Color.argb(245, Color.red(blendColor), Color.green(blendColor), Color.blue(blendColor))
+        )
+      ).apply {
+        setGradientType(GradientDrawable.LINEAR_GRADIENT)
+        setColors(
+          intArrayOf(
+            Color.TRANSPARENT,
+            Color.TRANSPARENT,
+            Color.argb(100, Color.red(blendColor), Color.green(blendColor), Color.blue(blendColor)),
+            Color.argb(245, Color.red(blendColor), Color.green(blendColor), Color.blue(blendColor))
+          ),
+          floatArrayOf(0f, 0.76f, 0.89f, 1f)
+        )
+      }
+      isClickable = false
+      isFocusable = false
+      importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+    }
+    addView(edgeFade, FrameLayout.LayoutParams(
+      FrameLayout.LayoutParams.MATCH_PARENT,
+      FrameLayout.LayoutParams.MATCH_PARENT
     ))
     importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
   }
