@@ -24,7 +24,7 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
     final isTv = PlatformDetector.isTV();
     final tvScale = TvLayoutConstants.scaleOf(context);
     final actionSize = isTv ? _tvDetailActionSize * tvScale : 48.0;
-    final playButtonLabel = _getPlayButtonLabel(metadata);
+    final playButtonLabel = isTv && metadata.isMovie ? t.common.play : _getPlayButtonLabel(metadata);
     final playIcon = _getPlayButtonIcon(metadata);
     final playActionLabel = playIcon == Symbols.resume_rounded ? t.common.resume : t.common.play;
     final playSemanticsLabel = playButtonLabel.isEmpty ? playActionLabel : '$playActionLabel $playButtonLabel';
