@@ -450,8 +450,6 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
   // continuous glide on release.
   static Duration get _navigationScrollDuration => FocusTheme.navigationScrollDuration();
   static const _scrollCatchUpViewportDistance = 2.5;
-  // Equivalent to the former whole-rail Opacity(0.6) without keeping a
-  // full-viewport saveLayer alive.
 
   late final FocusNode _focusNode = LockedFocusRowNode(debugLabel: 'tv_browse_rail', focusedItemRect: _focusedCardRect);
   final Map<String, ScrollController> _scrollControllers = {};
