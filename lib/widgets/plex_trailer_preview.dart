@@ -94,7 +94,6 @@ class _PlexTrailerPreviewState extends State<PlexTrailerPreview> with WidgetsBin
             creationParams: <String, Object>{
               'url': trailerUrl,
               'audioEnabled': audioEnabled,
-              'blendColor': Theme.of(context).scaffoldBackgroundColor.toARGB32(),
             },
             creationParamsCodec: const StandardMessageCodec(),
             hitTestBehavior: PlatformViewHitTestBehavior.transparent,
