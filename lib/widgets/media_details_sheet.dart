@@ -32,7 +32,11 @@ class MediaDetailsSheet extends StatefulWidget {
   /// itself no longer renders them (#2217).
   final List<String> genres;
 
-  const MediaDetailsSheet({super.key, required this.item, this.description, this.genres = const []});
+  /// Optional TV rail below the sheet: DOWN at the end transfers focus there.
+  final VoidCallback? onNavigateDown;
+  final FocusNode? informationFocusNode;
+
+  const MediaDetailsSheet({super.key, required this.item, this.description, this.genres = const [], this.onNavigateDown, this.informationFocusNode});
 
   @override
   State<MediaDetailsSheet> createState() => _MediaDetailsSheetState();
@@ -56,7 +60,10 @@ class _MediaDetailsSheetState extends State<MediaDetailsSheet> {
       0.0,
       position.maxScrollExtent,
     );
-    if (target == position.pixels) return;
+    if (target == position.pixels) {
+      if (direction > 0) widget.onNavigateDown?.call();
+      return;
+    }
     _scrollController.animateTo(target, duration: const Duration(milliseconds: 150), curve: Curves.easeOut);
   }
 
@@ -94,6 +101,8 @@ class _MediaDetailsSheetState extends State<MediaDetailsSheet> {
       // sheet's fields there is nothing to activate, so no focus chrome is
       // drawn — the arrows only page the content beneath.
       child: FocusableWrapper(
+        focusNode: widget.informationFocusNode,
+        autofocus: widget.informationFocusNode != null,
         onNavigateUp: () => _scrollBy(-1),
         onNavigateDown: () => _scrollBy(1),
         delegateFocusBorder: true,
