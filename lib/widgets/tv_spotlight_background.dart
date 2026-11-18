@@ -37,6 +37,7 @@ class TvSpotlightBackground extends StatelessWidget {
   final String? Function(String? artworkPath)? localArtworkPathResolver;
   final bool allowNetwork;
   final bool allowTrailerPreview;
+  final bool detailTrailerArtworkLayout;
 
   /// Optional caller-owned fact appended to the existing metadata line.
   final Widget? metadataTrailing;
@@ -55,6 +56,7 @@ class TvSpotlightBackground extends StatelessWidget {
     this.localArtworkPathResolver,
     this.allowNetwork = true,
     this.allowTrailerPreview = true,
+    this.detailTrailerArtworkLayout = false,
     this.metadataTrailing,
     this.metadataBelow,
   });
@@ -241,7 +243,31 @@ class TvSpotlightBackground extends StatelessWidget {
                   // for its first rendered frame.
                   if (surfaceReady || !trailerPreview) backdrop else const ColoredBox(color: Colors.black),
                   if (trailerPreview && media != null && client != null && Platform.isAndroid)
-                    PlexTrailerPreview(key: ValueKey(media.globalKey), item: media, client: client),
+                    if (detailTrailerArtworkLayout)
+                      ValueListenableBuilder<String?>(
+                        valueListenable: PlexTrailerPreview.activeTrailerUrl,
+                        builder: (context, activeUrl, _) => Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            // Keep the native video in the upper portion; the
+                            // existing fanart stays visible directly below it.
+                            // The lower band remains right of the synopsis.
+                            Positioned(
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              height: activeUrl == null ? backdropSize.height : backdropSize.height * 0.76,
+                              child: PlexTrailerPreview(
+                                key: ValueKey(media.globalKey),
+                                item: media,
+                                client: client,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    else
+                      PlexTrailerPreview(key: ValueKey(media.globalKey), item: media, client: client),
                 ],
               ),
             ),
