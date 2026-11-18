@@ -3815,29 +3815,6 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                 )
               : const SizedBox.shrink(),
         ),
-        // The action row's track status sits at the screen's right edge,
-        // bottom-aligned with the row and outside the hero's 60% text column,
-        // so it reads as a note about the row rather than a sixth button
-        // (#2217).
-        Positioned(
-          left: size.width * 0.60 + spotlightLeft,
-          right: spotlightLeft,
-          bottom: foregroundBottom,
-          height: _tvDetailActionSize * detailScale,
-          child: ValueListenableBuilder<MediaItem?>(
-            valueListenable: _tvDetailFocusedEpisode,
-            builder: (context, _, _) => Align(
-              alignment: .bottomRight,
-              child: _buildPlaybackTracksStatus(
-                context,
-                metadata,
-                isTv: true,
-                tvScale: detailScale,
-                maxWidth: size.width * 0.40 - spotlightLeft * 2,
-              ),
-            ),
-          ),
-        ),
         if (!metadata.isMovie)
           Positioned(
             top: 0,
