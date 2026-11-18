@@ -163,6 +163,64 @@ class TvSpotlightBackground extends StatelessWidget {
                 stops: const [0.0, 0.38, 0.38, 1.0],
               ),
             ),
+            // Movie details only: a second, uncropped fanart floats at the
+            // lower-right corner and slightly overlaps the unchanged trailer.
+            // It is independent of the native video surface and never changes
+            // its bounds or shared playback session.
+            if (detailTrailerArtworkLayout && media != null)
+              ValueListenableBuilder<String?>(
+                valueListenable: PlexTrailerPreview.activeTrailerUrl,
+                builder: (context, activeUrl, _) => ValueListenableBuilder<bool>(
+                  valueListenable: PlexTrailerPreview.surfaceReady,
+                  builder: (context, surfaceReady, _) => AnimatedOpacity(
+                    opacity: activeUrl != null && surfaceReady ? 1 : 0,
+                    duration: const Duration(milliseconds: 420),
+                    curve: Curves.easeOutCubic,
+                    child: Align(
+                      alignment: Alignment.bottomRight,
+                      child: SizedBox(
+                        width: size.width * 0.51,
+                        height: size.height * 0.43,
+                        child: IgnorePointer(
+                          child: ShaderMask(
+                            blendMode: BlendMode.dstIn,
+                            shaderCallback: (rect) => const LinearGradient(
+                              begin: Alignment.centerLeft,
+                              end: Alignment.centerRight,
+                              colors: [Colors.transparent, Colors.white, Colors.white],
+                              stops: [0.0, 0.32, 1.0],
+                            ).createShader(rect),
+                            child: ShaderMask(
+                              blendMode: BlendMode.dstIn,
+                              shaderCallback: (rect) => const LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [Colors.transparent, Colors.white, Colors.white],
+                                stops: [0.0, 0.32, 1.0],
+                              ).createShader(rect),
+                              child: CyclingMediaBackdrop(
+                                mediaKey: media.globalKey,
+                                imagePaths: media.heroRotationPaths(containerAspectRatio: containerAspect),
+                                fallbackImagePaths: fallbackPaths,
+                                client: client,
+                                localArtworkPathResolver: localArtworkPathResolver == null
+                                    ? null
+                                    : (path) => localArtworkPathResolver!(path),
+                                allowNetwork: allowNetwork,
+                                width: size.width * 0.51,
+                                height: size.height * 0.43,
+                                fit: BoxFit.contain,
+                                alignment: Alignment.bottomRight,
+                                fallbackColor: Colors.transparent,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             if (media != null && showInfo)
               Positioned(
                 left: contentLeft ?? TvLayoutConstants.horizontalInset,
@@ -245,45 +303,7 @@ class TvSpotlightBackground extends StatelessWidget {
                   // for its first rendered frame.
                   if (surfaceReady || !trailerPreview) backdrop else const ColoredBox(color: Colors.black),
                   if (trailerPreview && media != null && client != null && Platform.isAndroid)
-                    if (detailTrailerArtworkLayout)
-                      ValueListenableBuilder<String?>(
-                        valueListenable: PlexTrailerPreview.activeTrailerUrl,
-                        builder: (context, activeUrl, _) => Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            // Preserve the original native trailer dimensions.
-                            PlexTrailerPreview(
-                              key: ValueKey(media.globalKey),
-                              item: media,
-                              client: client,
-                            ),
-                            // Experimental second fanart layer: overlap the
-                            // trailer's lower-right area without reaching the
-                            // synopsis column on the left.
-                            if (activeUrl != null && surfaceReady)
-                              Positioned(
-                                left: backdropSize.width * 0.46,
-                                right: 0,
-                                bottom: 0,
-                                height: backdropSize.height * 0.34,
-                                child: IgnorePointer(
-                                  child: ClipRect(
-                                    child: OverflowBox(
-                                      alignment: Alignment.bottomRight,
-                                      minWidth: backdropSize.width,
-                                      maxWidth: backdropSize.width,
-                                      minHeight: backdropSize.height,
-                                      maxHeight: backdropSize.height,
-                                      child: backdrop,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      )
-                    else
-                      PlexTrailerPreview(key: ValueKey(media.globalKey), item: media, client: client),
+                    PlexTrailerPreview(key: ValueKey(media.globalKey), item: media, client: client),
                 ],
               ),
             ),
