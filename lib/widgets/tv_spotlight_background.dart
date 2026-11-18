@@ -235,7 +235,11 @@ class TvSpotlightBackground extends StatelessWidget {
                   // Media3 transfers output between route-owned platform views.
                   // Keep that artwork covered until the replacement surface
                   // confirms its first rendered frame.
-                  if (surfaceReady) backdrop else const ColoredBox(color: Colors.black),
+                  // A missing trailer surface must not black out the artwork
+                  // when navigation focus disables the trailer preview.
+                  // Only hide the artwork while an active preview is waiting
+                  // for its first rendered frame.
+                  if (surfaceReady || !trailerPreview) backdrop else const ColoredBox(color: Colors.black),
                   if (trailerPreview && media != null && client != null && Platform.isAndroid)
                     PlexTrailerPreview(key: ValueKey(media.globalKey), item: media, client: client),
                 ],
