@@ -1117,13 +1117,11 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
         excluding: !revealed,
         child: IgnorePointer(
           ignoring: !revealed,
-          child: AnimatedOpacity(
-            // Keyed so tests can assert this specific gate rather than
-            // whichever AnimatedOpacity happens to be lowest on screen.
+          // Keep the foreground visible throughout the route's own fade.
+          // Readiness still gates focus and interaction, but must not create
+          // a second, delayed visual fade over an already-painted backdrop.
+          child: KeyedSubtree(
             key: tvDetailRevealGateKey,
-            opacity: revealed ? 1 : 0,
-            duration: const Duration(milliseconds: 160),
-            curve: Curves.easeOutCubic,
             child: child,
           ),
         ),
@@ -3787,7 +3785,9 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     final spotlightLeft = (24 * detailScale).clamp(18.0, 40.0).toDouble();
     // See _tvDetailRouteSettled. The children stay in place (only their
     // content is withheld) so the Stack keeps its elements across the swap.
-    final buildHiddenContent = _tvDetailRevealed || _tvDetailRouteSettled;
+    // Paint hero information from the first frame, together with its
+    // backdrop. Keep rail focus disabled until the data is ready.
+    final buildHiddenContent = true;
 
     final revealContent = Stack(
       fit: StackFit.expand,
