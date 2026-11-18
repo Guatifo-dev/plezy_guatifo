@@ -260,7 +260,6 @@ class TvSpotlightBackground extends StatelessWidget {
                     ),
                     ),
                   ),
-                  ),
                 ),
               ),
             if (media != null && showInfo)
