@@ -35,6 +35,9 @@ class PlexTrailerPreview extends StatefulWidget {
   /// Non-null only while a trailer has a resolved playback URL.
   static ValueListenable<String?> get activeTrailerUrl => _TrailerPreviewSession.url;
 
+  /// False after the native player reaches the end of this trailer.
+  static ValueListenable<bool> get trailerFinished => _TrailerPreviewSession.finished;
+
   /// Marks a route handoff before its new Android surface is attached.
   static void prepareForRoute(Object? routeToken) {
     _TrailerPreviewSession.initialize();
@@ -121,6 +124,7 @@ abstract final class _TrailerPreviewSession {
   static const _controlChannel = MethodChannel('com.guatifo.plezy/trailer_preview_control');
   static final ValueNotifier<String?> url = ValueNotifier<String?>(null);
   static final ValueNotifier<bool> surfaceReady = ValueNotifier<bool>(true);
+  static final ValueNotifier<bool> finished = ValueNotifier<bool>(false);
   static bool _channelHandlerInstalled = false;
   static Object? _lastPreparedRoute;
   static Timer? _timer;
@@ -155,6 +159,8 @@ abstract final class _TrailerPreviewSession {
         surfaceReady.value = false;
       } else if (call.method == 'surfaceReady') {
         surfaceReady.value = true;
+      } else if (call.method == 'trailerFinished') {
+        finished.value = true;
       }
     });
   }
@@ -183,6 +189,7 @@ abstract final class _TrailerPreviewSession {
     _itemKey = key;
     _lastPreparedRoute = null;
     surfaceReady.value = true;
+    finished.value = false;
     url.value = null;
 
     if (!Platform.isAndroid ||
@@ -218,6 +225,7 @@ abstract final class _TrailerPreviewSession {
       if (!_isCurrent(generation)) return;
       debugPrint('[TrailerPreview] Resolved shared trailer URL for item=' + item.id);
       surfaceReady.value = false;
+      finished.value = false;
       url.value = target.url;
     } catch (error) {
       debugPrint('[TrailerPreview] ERROR loading trailer: ' + error.toString());
