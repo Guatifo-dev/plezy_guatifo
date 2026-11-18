@@ -1117,12 +1117,15 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
         excluding: !revealed,
         child: IgnorePointer(
           ignoring: !revealed,
-          // Keep the foreground visible throughout the route's own fade.
-          // Readiness still gates focus and interaction, but must not create
-          // a second, delayed visual fade over an already-painted backdrop.
-          child: KeyedSubtree(
-            key: tvDetailRevealGateKey,
-            child: child,
+          // Build and lay out the foreground while metadata and rail geometry
+          // settle, but never paint that provisional composition. Reveal the
+          // final layout in one frame; the backdrop remains visible throughout.
+          child: Opacity(
+            opacity: revealed ? 1.0 : 0.0,
+            child: KeyedSubtree(
+              key: tvDetailRevealGateKey,
+              child: child,
+            ),
           ),
         ),
       ),
