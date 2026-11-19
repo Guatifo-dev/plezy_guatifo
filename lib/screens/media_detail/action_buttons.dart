@@ -14,13 +14,16 @@ class _DownloadButtonSpec {
 }
 
 extension _MediaDetailActionButtons on _MediaDetailScreenState {
-  Widget _buildActionButtons(MediaItem metadata) {
-    // Tie asynchronous playback prompts to the actionable subtree, not the
-    // route's State: a deleted first-route detail intentionally stays mounted.
-    return Builder(builder: (context) => _buildAvailableActionButtons(context, metadata));
+  Widget _buildActionButtons(MediaItem metadata, {bool vertical = false, bool hideMoreDetails = false}) {
+    // Keep all original actions and callbacks, changing only presentation.
+    return Builder(builder: (context) => _buildAvailableActionButtons(
+      context, metadata, vertical: vertical, hideMoreDetails: hideMoreDetails,
+    ));
   }
 
-  Widget _buildAvailableActionButtons(BuildContext context, MediaItem metadata) {
+  Widget _buildAvailableActionButtons(
+    BuildContext context, MediaItem metadata, {bool vertical = false, bool hideMoreDetails = false}
+  ) {
     final isTv = PlatformDetector.isTV();
     final tvScale = TvLayoutConstants.scaleOf(context);
     final actionSize = isTv ? _tvDetailActionSize * tvScale : 48.0;
@@ -407,7 +410,7 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
       ?downloadAction,
       watchedAction,
       ?watchlistAction,
-      ?movieDetailsAction,
+      if (!hideMoreDetails) ?movieDetailsAction,
       ?moreActionsAction,
     ];
 
@@ -456,7 +459,8 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
       return FocusableActionBar(
         actions: actions,
         spacing: gap,
-        onFocusChange: isTv ? _setTvDetailActionRowFocus : null,
+        vertical: vertical,
+        onFocusChange: isTv && !vertical ? _setTvDetailActionRowFocus : null,
         onNavigateUp: _focusAboveActionRow,
         onNavigateDown: _focusBelowActionRow,
       );
@@ -477,6 +481,7 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
     return LayoutBuilder(
       builder: (context, constraints) {
         final maxWidth = constraints.maxWidth;
+        if (vertical) return actionBar(allActions);
         // TV screens are wide and D-pad focus should see every direct action.
         // On smaller online screens, hidden actions remain available from ⋮.
         final actions = isTv || !maxWidth.isFinite || estimatedRowWidth(allActions) <= maxWidth
