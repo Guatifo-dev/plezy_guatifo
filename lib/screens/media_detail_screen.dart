@@ -4448,7 +4448,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                       ),
                     ),
                     Positioned(
-                      top: size.height * 0.145,
+                      top: size.height * 0.145 + 80,
                       left: posterWidth + 28,
                       right: 0,
                       bottom: 0,
@@ -4462,26 +4462,50 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                       ),
                     ),
                     Positioned(
-                      top: 0,
+                      top: 80,
                       left: posterWidth + 28,
                       right: 0,
                       height: size.height * 0.135,
                       child: Align(alignment: Alignment.centerLeft, child: logo),
                     ),
                      Positioned(
-                       bottom: 0, left: 8, right: 8,
+                       bottom: 0,
+                       left: 0,
+                       right: 0,
                        child: ListenableBuilder(
                          listenable: _playButtonFocusNode,
                          builder: (context, _) {
+                           if (!_playButtonFocusNode.hasFocus) return const SizedBox.shrink();
                            final movies = widget.movieBrowseItems;
-                           if (!_playButtonFocusNode.hasFocus || movies == null || movies.length < 2) return const SizedBox.shrink();
+                           final showArrows = movies != null && movies.length > 1;
+                           final origin = widget.movieOriginLabel?.trim() ?? '';
+                           if (!showArrows && origin.isEmpty) return const SizedBox.shrink();
+                           Widget arrow(IconData icon) => Container(
+                             width: 32,
+                             height: 32,
+                             decoration: BoxDecoration(
+                               shape: BoxShape.circle,
+                               color: Colors.black.withValues(alpha: 0.38),
+                               border: Border.all(color: Colors.white.withValues(alpha: 0.55)),
+                             ),
+                             child: Icon(icon, size: 19, color: Colors.white),
+                           );
                            return Row(
-                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                              children: [
-                               const Icon(Icons.chevron_left, size: 25),
-                               Flexible(child: Text(widget.movieOriginLabel ?? '', maxLines: 1, overflow: TextOverflow.ellipsis,
-                                   style: theme.textTheme.bodySmall, textAlign: TextAlign.center)),
-                               const Icon(Icons.chevron_right, size: 25),
+                               if (showArrows) arrow(Icons.arrow_back_ios_new_rounded) else const SizedBox(width: 32),
+                               Expanded(
+                                 child: Text(
+                                   origin,
+                                   maxLines: 1,
+                                   overflow: TextOverflow.ellipsis,
+                                   textAlign: TextAlign.center,
+                                   style: theme.textTheme.bodySmall?.copyWith(
+                                     color: Colors.white.withValues(alpha: 0.78),
+                                     fontWeight: FontWeight.w500,
+                                   ),
+                                 ),
+                               ),
+                               if (showArrows) arrow(Icons.arrow_forward_ios_rounded) else const SizedBox(width: 32),
                              ],
                            );
                          },
