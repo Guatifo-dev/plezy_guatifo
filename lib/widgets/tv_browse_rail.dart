@@ -501,6 +501,20 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
     _focusNode.requestFocus();
   }
 
+  /// Restore the exact poster selected in a movie details carousel.
+  void restoreMovieFocus(MediaHub sourceHub, MediaItem movie) {
+    final hubIndex = widget.hubs.indexWhere((hub) => _hubKey(hub) == _hubKey(sourceHub));
+    if (hubIndex < 0) return;
+    final hub = widget.hubs[hubIndex];
+    for (var slot = 0; slot < _totalItemCount(hub); slot++) {
+      if (_itemAtSlot(hub, slot)?.globalKey == movie.globalKey) {
+        _selectHubItem(hub, hubIndex, slot);
+        requestFocus();
+        return;
+      }
+    }
+  }
+
   /// [requestFocus] as the screen's first focus: held, not dropped, while a
   /// root route covers the session ([CoveredRouteFocusBoundary.requestInitialFocus]).
   void requestInitialFocus() {
