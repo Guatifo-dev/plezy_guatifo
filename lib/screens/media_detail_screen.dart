@@ -4192,13 +4192,13 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                   sheetContext,
                   artworkPaths: [fanartPath],
                   fit: BoxFit.cover,
-                  imageType: ImageType.backdrop,
+                  imageType: ImageType.art,
                 ) ??
                 OptimizedMediaImage(
                   client: _getMediaClientForMetadata(sheetContext),
                   imagePath: fanartPath,
                   fit: BoxFit.cover,
-                  imageType: ImageType.backdrop,
+                  imageType: ImageType.art,
                 ));
         final logo = _buildDetailLogoOrTitle(
           sheetContext,
