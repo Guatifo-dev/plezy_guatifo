@@ -24,6 +24,7 @@ import '../../../utils/error_message_utils.dart';
 import '../../../utils/app_logger.dart';
 import '../../../utils/grid_size_calculator.dart';
 import '../../../utils/media_image_helper.dart';
+import '../../../utils/media_navigation_helper.dart';
 import '../../../utils/provider_extensions.dart';
 import '../alpha_jump_bar.dart';
 import '../alpha_jump_helper.dart';
@@ -2237,6 +2238,32 @@ class _LibraryBrowseTabState extends BaseLibraryTabState<MediaItem, LibraryBrows
     );
   }
 
+  Future<void> _openBrowseMovie(MediaItem item) async {
+    // Preserve the active filter/sort order of the loaded library grid.
+    final movieEntries = loadedItems.entries
+        .where((entry) => entry.value.kind == MediaKind.movie)
+        .toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    final movies = movieEntries.map((entry) => entry.value).toList(growable: false);
+    var selectedMovie = item;
+    await navigateToMediaItem(
+      context,
+      item,
+      onRefresh: updateItem,
+      movieBrowseItems: movies,
+      onMovieSelectionChanged: (movie) => selectedMovie = movie,
+    );
+    if (!mounted) return;
+    for (final entry in movieEntries) {
+      if (entry.value.globalKey == selectedMovie.globalKey) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _focusGridItem(entry.key);
+        });
+        break;
+      }
+    }
+  }
+
   Widget _buildMediaCardItem(
     int index, {
     required bool isFirstRow,
@@ -2294,6 +2321,7 @@ class _LibraryBrowseTabState extends BaseLibraryTabState<MediaItem, LibraryBrows
       focusNode: focusNode,
       disableScale: disableScale,
       onRefresh: updateItem,
+      onTap: item.kind == MediaKind.movie ? () => unawaited(_openBrowseMovie(item)) : null,
       onNavigateUp: navigateUp,
       onNavigateDown: navigateDown,
       onNavigateLeft: navigateLeft,
