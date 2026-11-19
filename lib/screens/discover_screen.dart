@@ -1735,8 +1735,8 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       onLongPressItem: _openSynopsisPanel,
       onActivateItem: (hub, item) async {
         // Keep every non-movie and Continue Watching activation unchanged.
-        if (!item.isMovie || item.isCatalogItem || hub.isContinueWatchingHub || hub.usesContinueWatchingAction) return false;
-        final movies = hub.items.where((candidate) => candidate.isMovie && !candidate.isCatalogItem).toList(growable: false);
+        if (!item.isMovie || hub.isContinueWatchingHub || hub.usesContinueWatchingAction) return false;
+        final movies = hub.items.where((candidate) => candidate.isMovie).toList(growable: false);
         await navigateToMediaItem(context, item, onRefresh: _refreshDiscoverItem, movieBrowseItems: movies);
         return true;
       },
