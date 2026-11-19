@@ -4222,103 +4222,112 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
           clipBehavior: Clip.antiAlias,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(26, 16, 26, 20),
-            child: Column(
-              children: [
-                SizedBox(height: size.height * 0.13, child: Center(child: logo)),
-                const SizedBox(height: 12),
-                Expanded(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(
-                        width: size.width * 0.19,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Flexible(
-                              flex: 3,
-                              child: Center(
-                                child: AspectRatio(
-                                  aspectRatio: 2 / 3,
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(12),
-                                    child: poster ?? const PlaceholderContainer(),
-                                  ),
-                                ),
+            child: LayoutBuilder(
+              builder: (context, bounds) {
+                final posterWidth = size.width * 0.205;
+                final posterHeight = posterWidth * 1.5;
+                return Stack(
+                  children: [
+                    // Artwork starts at the same top inset as the poster.
+                    if (fanart != null)
+                      Positioned(
+                        top: 0,
+                        right: 0,
+                        width: size.width * 0.43,
+                        height: size.height * 0.48,
+                        child: IgnorePointer(
+                          child: ShaderMask(
+                            blendMode: BlendMode.dstIn,
+                            shaderCallback: (rect) => const LinearGradient(
+                              begin: Alignment.centerLeft,
+                              end: Alignment.centerRight,
+                              colors: [Colors.transparent, Color(0x99FFFFFF), Colors.white],
+                              stops: [0.0, 0.48, 1.0],
+                            ).createShader(rect),
+                            child: ShaderMask(
+                              blendMode: BlendMode.dstIn,
+                              shaderCallback: (rect) => const LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [Colors.transparent, Colors.white, Color(0xCCFFFFFF), Colors.transparent],
+                                stops: [0.0, 0.14, 0.54, 1.0],
+                              ).createShader(rect),
+                              child: ShaderMask(
+                                blendMode: BlendMode.dstIn,
+                                shaderCallback: (rect) => const LinearGradient(
+                                  begin: Alignment.centerLeft,
+                                  end: Alignment.centerRight,
+                                  colors: [Colors.white, Colors.white, Color(0xAAFFFFFF), Colors.transparent],
+                                  stops: [0.0, 0.62, 0.80, 1.0],
+                                ).createShader(rect),
+                                child: fanart,
                               ),
                             ),
-                            const SizedBox(height: 12),
-                            Flexible(
-                              flex: 2,
-                              child: SingleChildScrollView(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    if (item.directors?.isNotEmpty ?? false)
-                                      _buildMovieMoreDetailsCredit(theme, 'Dirección', item.directors!.join(', ')),
-                                    if (item.roles?.isNotEmpty ?? false)
-                                      _buildMovieMoreDetailsCredit(theme, 'Reparto',
-                                          item.roles!.take(5).map((role) => role.tag).join(', ')),
-                                    if (genres.isNotEmpty)
-                                      _buildMovieMoreDetailsCredit(theme, 'Género', genres.join(', ')),
-                                    if (item.countries?.isNotEmpty ?? false)
-                                      _buildMovieMoreDetailsCredit(theme, 'País', item.countries!.join(', ')),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
                       ),
-                      const SizedBox(width: 28),
-                      Expanded(
-                        child: Stack(
-                          children: [
-                            if (fanart != null)
-                              Positioned(
-                                top: 0,
-                                right: 0,
-                                width: size.width * 0.38,
-                                height: size.height * 0.40,
-                                child: IgnorePointer(
-                                  child: ShaderMask(
-                                    blendMode: BlendMode.dstIn,
-                                    shaderCallback: (rect) => const LinearGradient(
-                                      begin: Alignment.centerLeft,
-                                      end: Alignment.centerRight,
-                                      colors: [Colors.transparent, Color(0x99FFFFFF), Colors.white],
-                                      stops: [0.0, 0.45, 1.0],
-                                    ).createShader(rect),
-                                    child: ShaderMask(
-                                      blendMode: BlendMode.dstIn,
-                                      shaderCallback: (rect) => const LinearGradient(
-                                        begin: Alignment.topCenter,
-                                        end: Alignment.bottomCenter,
-                                        colors: [Colors.white, Color(0xCCFFFFFF), Colors.transparent],
-                                        stops: [0.0, 0.50, 1.0],
-                                      ).createShader(rect),
-                                      child: fanart,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            Positioned.fill(
-                              child: MediaDetailsSheet(
-                                item: item,
-                                description: description,
-                                genres: genres,
-                                informationFocusNode: _movieDetailsInfoFocusNode,
-                                showTitleHeader: false,
-                                emphasizeSynopsis: true,
+                    Positioned(
+                      top: 0,
+                      left: 0,
+                      width: posterWidth,
+                      bottom: 0,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            width: posterWidth,
+                            height: posterHeight,
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: poster ?? const PlaceholderContainer(),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Expanded(
+                            child: SingleChildScrollView(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (item.directors?.isNotEmpty ?? false)
+                                    _buildMovieMoreDetailsCredit(theme, 'Dirección', item.directors!.join(', ')),
+                                  if (item.roles?.isNotEmpty ?? false)
+                                    _buildMovieMoreDetailsCredit(theme, 'Reparto',
+                                        item.roles!.take(5).map((role) => role.tag).join(', ')),
+                                  if (genres.isNotEmpty)
+                                    _buildMovieMoreDetailsCredit(theme, 'Género', genres.join(', ')),
+                                  if (item.countries?.isNotEmpty ?? false)
+                                    _buildMovieMoreDetailsCredit(theme, 'País', item.countries!.join(', ')),
+                                ],
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                ),
-              ],
+                    ),
+                    Positioned(
+                      top: size.height * 0.145,
+                      left: posterWidth + 28,
+                      right: 0,
+                      bottom: 0,
+                      child: MediaDetailsSheet(
+                        item: item,
+                        description: description,
+                        genres: genres,
+                        informationFocusNode: _movieDetailsInfoFocusNode,
+                        showTitleHeader: false,
+                        emphasizeSynopsis: true,
+                      ),
+                    ),
+                    Positioned(
+                      top: 0,
+                      left: posterWidth + 28,
+                      right: 0,
+                      height: size.height * 0.135,
+                      child: Center(child: logo),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
         );
