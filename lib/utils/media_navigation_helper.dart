@@ -198,6 +198,7 @@ Future<MediaNavigationResult> navigateToMediaItem(
   bool playDirectly = false,
   List<MediaItem>? movieBrowseItems,
   ValueChanged<MediaItem>? onMovieSelectionChanged,
+  String? movieOriginLabel,
 }) async {
   if (item is MediaPlaylist) {
     final result = await Navigator.push<bool>(
