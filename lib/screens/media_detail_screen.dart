@@ -1104,8 +1104,8 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     final movies = widget.movieBrowseItems;
     if (movies == null || movies.isEmpty) return;
     final index = movies.indexWhere((movie) => movie.globalKey == widget.metadata.globalKey);
-    final nextIndex = index + direction;
-    if (index < 0 || nextIndex < 0 || nextIndex >= movies.length) return;
+    if (index < 0 || movies.length < 2) return;
+    final nextIndex = (index + direction + movies.length) % movies.length;
     _movieTransitioning = true;
     await PlexTrailerPreview.stop();
     if (!_canUseDetail) return;
