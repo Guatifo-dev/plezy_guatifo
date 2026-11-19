@@ -458,6 +458,7 @@ class HubSectionState extends State<HubSection> with MountedSetStateMixin, Skele
       onRefresh: widget.onRefresh,
       playDirectly: widget.usesContinueWatchingAction,
       movieBrowseItems: browseMovies,
+      movieOriginLabel: widget.hub.title,
       onMovieSelectionChanged: browseMovies == null ? null : (movie) => selectedMovie = movie,
     );
     if (!mounted || browseMovies == null) return;
