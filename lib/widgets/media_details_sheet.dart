@@ -82,7 +82,7 @@ class _MediaDetailsSheetState extends State<MediaDetailsSheet> {
         item.year.toString(),
       if (item.contentRating != null) formatContentRating(item.contentRating!),
       if (item.durationMs != null) formatDurationTextual(item.durationMs!),
-      ...buildMediaQualityLabels(item),
+      if (!widget.emphasizeSynopsis) ...buildMediaQualityLabels(item),
     ];
   }
 
@@ -96,6 +96,52 @@ class _MediaDetailsSheetState extends State<MediaDetailsSheet> {
     final episodeTitle = item.isEpisode ? item.title : null;
     final description = widget.description;
     final metadataStyle = theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600, letterSpacing: 0.1);
+
+    // TV movie layout: metadata and format badges remain fixed while only the
+    // complete synopsis scrolls under D-pad control.
+    if (widget.emphasizeSynopsis && item.isMovie) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (labels.isNotEmpty || ratings.isNotEmpty)
+            Text.rich(
+              TextSpan(children: [
+                TextSpan(text: labels.join(FittedMetadataLine.separator)),
+                if (labels.isNotEmpty && ratings.isNotEmpty)
+                  const TextSpan(text: FittedMetadataLine.separator),
+                if (ratings.isNotEmpty)
+                  WidgetSpan(
+                    alignment: PlaceholderAlignment.middle,
+                    child: InlineRatingBadges(ratings: ratings, textStyle: metadataStyle),
+                  ),
+              ]),
+              style: metadataStyle,
+            ),
+          const SizedBox(height: 10),
+          SelectedMediaFormatBadges(item: item),
+          const SizedBox(height: 20),
+          Text('Sinopsis', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Expanded(
+            child: FocusableWrapper(
+              focusNode: widget.informationFocusNode,
+              autofocus: widget.informationFocusNode != null,
+              onNavigateUp: () => _scrollBy(-1),
+              onNavigateDown: () => _scrollBy(1),
+              delegateFocusBorder: true,
+              disableScale: true,
+              autoScroll: false,
+              child: SingleChildScrollView(
+                controller: _scrollController,
+                padding: const EdgeInsets.only(right: 14, bottom: 24),
+                child: Text(description ?? '',
+                  style: theme.textTheme.bodyLarge?.copyWith(height: 1.35, fontSize: 16)),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
 
     return BottomSheetPageScaffold(
       title: widget.showTitleHeader ? item.displayTitle : '',
