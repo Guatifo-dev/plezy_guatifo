@@ -4235,15 +4235,38 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(12),
-                                child: poster ?? const PlaceholderContainer(),
+                            Flexible(
+                              flex: 3,
+                              child: Center(
+                                child: AspectRatio(
+                                  aspectRatio: 2 / 3,
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: poster ?? const PlaceholderContainer(),
+                                  ),
+                                ),
                               ),
                             ),
                             const SizedBox(height: 12),
-                            Text(genres.join(' • '),
-                                style: theme.textTheme.bodyMedium),
+                            Flexible(
+                              flex: 2,
+                              child: SingleChildScrollView(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if (item.directors?.isNotEmpty ?? false)
+                                      _buildMovieMoreDetailsCredit(theme, 'Dirección', item.directors!.join(', ')),
+                                    if (item.roles?.isNotEmpty ?? false)
+                                      _buildMovieMoreDetailsCredit(theme, 'Reparto',
+                                          item.roles!.take(5).map((role) => role.tag).join(', ')),
+                                    if (genres.isNotEmpty)
+                                      _buildMovieMoreDetailsCredit(theme, 'Género', genres.join(', ')),
+                                    if (item.countries?.isNotEmpty ?? false)
+                                      _buildMovieMoreDetailsCredit(theme, 'País', item.countries!.join(', ')),
+                                  ],
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -4300,6 +4323,21 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
           ),
         );
       },
+    );
+  }
+
+  Widget _buildMovieMoreDetailsCredit(ThemeData theme, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 9),
+      child: Text.rich(
+        TextSpan(
+          children: [
+            TextSpan(text: '$label: ', style: const TextStyle(fontWeight: FontWeight.w700)),
+            TextSpan(text: value),
+          ],
+        ),
+        style: theme.textTheme.bodySmall?.copyWith(height: 1.35),
+      ),
     );
   }
 
