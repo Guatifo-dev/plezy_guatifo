@@ -4448,7 +4448,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                       ),
                     ),
                     Positioned(
-                      top: size.height * 0.145 + 80,
+                      top: size.height * 0.145 + 20,
                       left: posterWidth + 28,
                       right: 0,
                       bottom: 0,
@@ -4462,7 +4462,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                       ),
                     ),
                     Positioned(
-                      top: 80,
+                      top: 20,
                       left: posterWidth + 28,
                       right: 0,
                       height: size.height * 0.135,
@@ -4481,20 +4481,25 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                            final origin = widget.movieOriginLabel?.trim() ?? '';
                            if (!showArrows && origin.isEmpty) return const SizedBox.shrink();
                            Widget arrow(IconData icon) => Container(
-                             width: 32,
-                             height: 32,
+                             width: 24,
+                             height: 24,
                              decoration: BoxDecoration(
                                shape: BoxShape.circle,
                                color: Colors.black.withValues(alpha: 0.38),
                                border: Border.all(color: Colors.white.withValues(alpha: 0.55)),
                              ),
-                             child: Icon(icon, size: 19, color: Colors.white),
+                             child: Icon(icon, size: 15, color: Colors.white),
                            );
                            return Row(
                              children: [
-                               if (showArrows) arrow(Icons.arrow_back_ios_new_rounded) else const SizedBox(width: 32),
+                               if (showArrows)
+                                 Transform.translate(offset: const Offset(-7, 9), child: arrow(Icons.arrow_back_ios_new_rounded))
+                               else
+                                 const SizedBox(width: 24),
                                Expanded(
-                                 child: Text(
+                                 child: Transform.translate(
+                                   offset: const Offset(0, 12),
+                                   child: Text(
                                    origin,
                                    maxLines: 1,
                                    overflow: TextOverflow.ellipsis,
@@ -4503,9 +4508,13 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                                      color: Colors.white.withValues(alpha: 0.78),
                                      fontWeight: FontWeight.w500,
                                    ),
+                                   ),
                                  ),
                                ),
-                               if (showArrows) arrow(Icons.arrow_forward_ios_rounded) else const SizedBox(width: 32),
+                               if (showArrows)
+                                 Transform.translate(offset: const Offset(7, 9), child: arrow(Icons.arrow_forward_ios_rounded))
+                               else
+                                 const SizedBox(width: 24),
                              ],
                            );
                          },
