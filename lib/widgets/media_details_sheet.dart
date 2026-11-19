@@ -99,6 +99,7 @@ class _MediaDetailsSheetState extends State<MediaDetailsSheet> {
     final genres = widget.genres;
     final episodeTitle = item.isEpisode ? item.title : null;
     final description = widget.description;
+    final tagline = item.tagline?.trim();
     final metadataStyle = theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600, letterSpacing: 0.1);
 
     // TV movie layout: metadata and format badges remain fixed while only the
@@ -139,9 +140,28 @@ class _MediaDetailsSheetState extends State<MediaDetailsSheet> {
               child: SingleChildScrollView(
                 controller: _scrollController,
                 padding: const EdgeInsets.only(right: 14, bottom: 24),
-                child: Text(description ?? '',
-                  textAlign: TextAlign.justify,
-                  style: theme.textTheme.bodyLarge?.copyWith(height: 1.35, fontSize: 16)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (tagline != null && tagline.isNotEmpty) ...[
+                      Text(
+                        tagline,
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                          fontSize: 19,
+                          fontStyle: FontStyle.italic,
+                          fontWeight: FontWeight.w500,
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.92),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    Text(
+                      description ?? '',
+                      textAlign: TextAlign.justify,
+                      style: theme.textTheme.bodyLarge?.copyWith(height: 1.35, fontSize: 16),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
