@@ -316,6 +316,7 @@ class MediaDetailScreen extends StatefulWidget {
   final List<MediaItem>? movieBrowseItems;
   final ValueChanged<MediaItem>? onMovieSelectionChanged;
   final MovieDetailNavigationSession? movieNavigationSession;
+  final String? movieOriginLabel;
 
   /// If provided, auto-selects this season index when the screen loads.
   /// Used when navigating to a show from a season context.
@@ -330,6 +331,7 @@ class MediaDetailScreen extends StatefulWidget {
     this.movieBrowseItems,
     this.onMovieSelectionChanged,
     this.movieNavigationSession,
+    this.movieOriginLabel,
     this.initialSeasonIndex,
     this.initialSeasonId,
     this.initialEpisodeId,
@@ -345,6 +347,7 @@ PageRoute<bool> mediaDetailRoute({
   List<MediaItem>? movieBrowseItems,
   ValueChanged<MediaItem>? onMovieSelectionChanged,
   MovieDetailNavigationSession? movieNavigationSession,
+  String? movieOriginLabel,
   int movieSlideDirection = 0,
   int? initialSeasonIndex,
   String? initialSeasonId,
@@ -356,6 +359,7 @@ PageRoute<bool> mediaDetailRoute({
     movieBrowseItems: movieBrowseItems,
     onMovieSelectionChanged: onMovieSelectionChanged,
     movieNavigationSession: movieNavigationSession,
+    movieOriginLabel: movieOriginLabel,
     initialSeasonIndex: initialSeasonIndex,
     initialSeasonId: initialSeasonId,
     initialEpisodeId: initialEpisodeId,
@@ -374,12 +378,15 @@ PageRoute<bool> mediaDetailRoute({
     transitionsBuilder: (_, animation, _, child) {
       if (metadata.isMovie) {
         if (movieSlideDirection != 0) {
-          return SlideTransition(
-            position: Tween<Offset>(
-              begin: Offset(movieSlideDirection.toDouble(), 0),
-              end: Offset.zero,
-            ).animate(CurvedAnimation(parent: animation, curve: Curves.easeInOutCubic)),
+          return AnimatedBuilder(
+            animation: animation,
             child: child,
+            builder: (context, child) {
+              final reverse = animation.status == AnimationStatus.reverse;
+              final progress = Curves.easeInOutCubic.transform(reverse ? 1 - animation.value : animation.value);
+              final offset = reverse ? Offset(0, progress) : Offset(movieSlideDirection * (1 - progress), 0);
+              return FractionalTranslation(translation: offset, child: child!);
+            },
           );
         }
         // Preserve the original bottom-to-top entrance of More Details.
@@ -1119,6 +1126,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
         movieBrowseItems: movies,
         onMovieSelectionChanged: widget.onMovieSelectionChanged,
         movieNavigationSession: widget.movieNavigationSession,
+        movieOriginLabel: widget.movieOriginLabel,
         movieSlideDirection: direction,
       ),
       result: _watchStateChanged,
@@ -3639,7 +3647,16 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
         duration: const Duration(milliseconds: 280),
         curve: Curves.easeInOutCubic,
         child: Focus(
-        onKeyEvent: _handleMediaDetailBackKey,
+        onKeyEvent: (node, event) {
+          if (event is KeyDownEvent && _playButtonFocusNode.hasFocus) {
+            if (event.logicalKey == LogicalKeyboardKey.arrowUp) return KeyEventResult.handled;
+            if (event.logicalKey == LogicalKeyboardKey.arrowLeft || event.logicalKey == LogicalKeyboardKey.arrowRight) {
+              unawaited(_navigateToAdjacentMovie(event.logicalKey == LogicalKeyboardKey.arrowLeft ? -1 : 1));
+              return KeyEventResult.handled;
+            }
+          }
+          return _handleMediaDetailBackKey(node, event);
+        },
         child: Scaffold(
           body: Center(
             child: _buildTvMovieMoreDetailsSheet(
@@ -4344,8 +4361,9 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
           height: size.height * 0.13,
           availableWidth: size.width * 0.75,
           alignment: Alignment.centerLeft,
-          titleBuilder: (context, title) => Center(
-            child: Text(title, textAlign: TextAlign.center,
+          titleBuilder: (context, title) => Align(
+             alignment: Alignment.centerLeft,
+             child: Text(title, textAlign: TextAlign.left,
                 style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
           ),
         );
@@ -4450,6 +4468,25 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                       height: size.height * 0.135,
                       child: Align(alignment: Alignment.centerLeft, child: logo),
                     ),
+                     Positioned(
+                       bottom: 0, left: 8, right: 8,
+                       child: ListenableBuilder(
+                         listenable: _playButtonFocusNode,
+                         builder: (context, _) {
+                           final movies = widget.movieBrowseItems;
+                           if (!_playButtonFocusNode.hasFocus || movies == null || movies.length < 2) return const SizedBox.shrink();
+                           return Row(
+                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                             children: [
+                               const Icon(Icons.chevron_left, size: 25),
+                               Flexible(child: Text(widget.movieOriginLabel ?? '', maxLines: 1, overflow: TextOverflow.ellipsis,
+                                   style: theme.textTheme.bodySmall, textAlign: TextAlign.center)),
+                               const Icon(Icons.chevron_right, size: 25),
+                             ],
+                           );
+                         },
+                       ),
+                     ),
                   ],
                 );
               },
