@@ -179,7 +179,9 @@ class TvSpotlightBackground extends StatelessWidget {
                     duration: const Duration(milliseconds: 420),
                     curve: Curves.easeOutCubic,
                     child: Transform.translate(
-                      offset: Offset(-size.width * 0.05, -size.height * 0.035),
+                      // Center the 42.4%-wide artwork box in the rightmost 40% of the TV.
+                      // Target center = 80% of screen width (synopsis ends near 60%).
+                      offset: Offset(size.width * 0.012, -size.height * 0.035),
                       child: Align(
                         alignment: Alignment.bottomRight,
                         child: SizedBox(
