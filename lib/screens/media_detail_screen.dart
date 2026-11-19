@@ -4283,15 +4283,11 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                             ),
                           ),
                           const SizedBox(height: 10),
-                          Expanded(
-                            child: SingleChildScrollView(
-                              child: _buildActionButtons(
-                                metadata,
-                                vertical: true,
-                                hideMoreDetails: true,
-                                compactVertical: true,
-                              ),
-                            ),
+                          _buildActionButtons(
+                            metadata,
+                            hideMoreDetails: true,
+                            compactVertical: true,
+                            threeRowLayout: true,
                           ),
                         ],
                       ),
