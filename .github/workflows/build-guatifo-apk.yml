@@ -17,6 +17,7 @@ on:
       - fix/movie-details-four-improvements-2fa806d
       - feature/movie-detail-slide-return-focus-7f59d4c
       - feature/movie-navigation-all-rails-3161dd1
+      - feature/detail-navigation-polish-464b398
 
 permissions:
   contents: write
