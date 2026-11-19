@@ -387,6 +387,7 @@ Future<MediaNavigationResult> navigateToMediaItemDetails(
       isOffline: isOffline,
       movieBrowseItems: movieBrowseItems,
       onMovieSelectionChanged: onMovieSelectionChanged,
+      movieOriginLabel: movieOriginLabel,
       movieNavigationSession: movieSession,
       initialSeasonIndex: target.initialSeasonIndex,
       initialSeasonId: target.initialSeasonId,
