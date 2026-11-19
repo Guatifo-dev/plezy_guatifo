@@ -376,18 +376,24 @@ Future<MediaNavigationResult> navigateToMediaItemDetails(
       }
     }
   }
-  final result = await Navigator.push<bool>(
+  final movieSession = movieBrowseItems != null && target.metadata.isMovie
+      ? MovieDetailNavigationSession()
+      : null;
+  final routeResult = Navigator.push<bool>(
     context,
     mediaDetailRoute(
       metadata: target.metadata,
       isOffline: isOffline,
       movieBrowseItems: movieBrowseItems,
       onMovieSelectionChanged: onMovieSelectionChanged,
+      movieNavigationSession: movieSession,
       initialSeasonIndex: target.initialSeasonIndex,
       initialSeasonId: target.initialSeasonId,
       initialEpisodeId: target.initialEpisodeId,
     ),
   );
+  movieSession?.track(routeResult);
+  final result = movieSession != null ? await movieSession.completed : await routeResult;
   if (result == true && context.mounted) {
     onRefresh?.call(mi);
   }
