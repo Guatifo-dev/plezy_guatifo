@@ -4475,9 +4475,9 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                        child: ListenableBuilder(
                          listenable: _playButtonFocusNode,
                          builder: (context, _) {
-                           if (!_playButtonFocusNode.hasFocus) return const SizedBox.shrink();
+                           // The section label stays visible even when Play loses focus.
                            final movies = widget.movieBrowseItems;
-                           final showArrows = movies != null && movies.length > 1;
+                           final showArrows = _playButtonFocusNode.hasFocus && movies != null && movies.length > 1;
                            final origin = widget.movieOriginLabel?.trim() ?? '';
                            if (!showArrows && origin.isEmpty) return const SizedBox.shrink();
                            Widget arrow(IconData icon) => Container(
