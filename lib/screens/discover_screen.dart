@@ -1737,7 +1737,20 @@ class _DiscoverScreenState extends State<DiscoverScreen>
         // Keep every non-movie and Continue Watching activation unchanged.
         if (!item.isMovie || hub.isContinueWatchingHub || hub.usesContinueWatchingAction) return false;
         final movies = hub.items.where((candidate) => candidate.isMovie).toList(growable: false);
-        await navigateToMediaItem(context, item, onRefresh: _refreshDiscoverItem, movieBrowseItems: movies);
+        // The detail carousel reports its final movie before returning here.
+        var selectedMovie = item;
+        await navigateToMediaItem(
+          context,
+          item,
+          onRefresh: _refreshDiscoverItem,
+          movieBrowseItems: movies,
+          onMovieSelectionChanged: (movie) => selectedMovie = movie,
+        );
+        if (mounted) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _tvBrowseRailKey.currentState?.restoreMovieFocus(hub, selectedMovie);
+          });
+        }
         return true;
       },
       onRefresh: _refreshDiscoverItem,
