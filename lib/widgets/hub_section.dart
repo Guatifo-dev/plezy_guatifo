@@ -19,6 +19,7 @@ import '../focus/locked_hub_controller.dart';
 import '../media/library_query.dart';
 import '../media/media_hub.dart';
 import '../media/media_item.dart';
+import '../media/media_kind.dart';
 import '../mixins/mounted_set_state_mixin.dart';
 import '../screens/hub_detail_screen.dart';
 import '../utils/media_navigation_helper.dart';
@@ -447,8 +448,8 @@ class HubSectionState extends State<HubSection> with MountedSetStateMixin, Skele
   }
 
   Future<void> _navigateToItem(MediaItem item) async {
-    final browseMovies = !widget.usesContinueWatchingAction && item.isMovie
-        ? widget.hub.items.where((candidate) => candidate.isMovie).toList(growable: false)
+    final browseMovies = !widget.usesContinueWatchingAction && item.kind == MediaKind.movie
+        ? widget.hub.items.where((candidate) => candidate.kind == MediaKind.movie).toList(growable: false)
         : null;
     var selectedMovie = item;
     await navigateToMediaItem(
