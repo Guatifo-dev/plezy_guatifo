@@ -1744,6 +1744,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
           item,
           onRefresh: _refreshDiscoverItem,
           movieBrowseItems: movies,
+          movieOriginLabel: hub.title,
           onMovieSelectionChanged: (movie) => selectedMovie = movie,
         );
         if (mounted) {
