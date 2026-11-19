@@ -91,7 +91,11 @@ class _MediaDetailsSheetState extends State<MediaDetailsSheet> {
     final theme = Theme.of(context);
     final item = widget.item;
     final labels = _metadataLabels(item);
-    final ratings = mediaRatingsFor(item);
+    // In the redesigned TV movie panel, show only Plex's first rating source.
+    final allRatings = mediaRatingsFor(item);
+    final ratings = widget.emphasizeSynopsis && item.isMovie && allRatings.isNotEmpty
+        ? allRatings.take(1).toList()
+        : allRatings;
     final genres = widget.genres;
     final episodeTitle = item.isEpisode ? item.title : null;
     final description = widget.description;
@@ -103,6 +107,7 @@ class _MediaDetailsSheetState extends State<MediaDetailsSheet> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const SizedBox(height: 18),
           if (labels.isNotEmpty || ratings.isNotEmpty)
             Text.rich(
               TextSpan(children: [
@@ -119,8 +124,9 @@ class _MediaDetailsSheetState extends State<MediaDetailsSheet> {
             ),
           const SizedBox(height: 10),
           SelectedMediaFormatBadges(item: item),
-          // Preserve the synopsis position after removing its heading.
-          const SizedBox(height: 56),
+          // Keep synopsis at the approved position; shift only the fixed
+          // metadata and badges down into the previously empty gap.
+          const SizedBox(height: 38),
           Expanded(
             child: FocusableWrapper(
               focusNode: widget.informationFocusNode,
