@@ -14,15 +14,15 @@ class _DownloadButtonSpec {
 }
 
 extension _MediaDetailActionButtons on _MediaDetailScreenState {
-  Widget _buildActionButtons(MediaItem metadata, {bool vertical = false, bool hideMoreDetails = false, bool compactVertical = false}) {
+  Widget _buildActionButtons(MediaItem metadata, {bool vertical = false, bool hideMoreDetails = false, bool compactVertical = false, bool threeRowLayout = false}) {
     // Keep all original actions and callbacks, changing only presentation.
     return Builder(builder: (context) => _buildAvailableActionButtons(
-      context, metadata, vertical: vertical, hideMoreDetails: hideMoreDetails, compactVertical: compactVertical,
+      context, metadata, vertical: vertical, hideMoreDetails: hideMoreDetails, compactVertical: compactVertical, threeRowLayout: threeRowLayout,
     ));
   }
 
   Widget _buildAvailableActionButtons(
-    BuildContext context, MediaItem metadata, {bool vertical = false, bool hideMoreDetails = false, bool compactVertical = false}
+    BuildContext context, MediaItem metadata, {bool vertical = false, bool hideMoreDetails = false, bool compactVertical = false, bool threeRowLayout = false}
   ) {
     final isTv = PlatformDetector.isTV();
     final tvScale = TvLayoutConstants.scaleOf(context) * (compactVertical ? 0.82 : 1.0);
@@ -481,6 +481,50 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
     return LayoutBuilder(
       builder: (context, constraints) {
         final maxWidth = constraints.maxWidth;
+        if (threeRowLayout) {
+          // Keep the split Play/Version pair together. Remaining actions
+          // form two compact rows, with no scrolling or hidden controls.
+          final firstRow = <FocusableAction>[playAction, ?versionAction];
+          final remaining = <FocusableAction>[
+            ?trailerAction,
+            ?shuffleAction,
+            ?downloadAction,
+            watchedAction,
+            ?watchlistAction,
+            ?moreActionsAction,
+          ];
+          final secondRow = remaining.take(3).toList();
+          final thirdRow = remaining.skip(3).toList();
+          final rowKeys = [GlobalKey<FocusableActionBarState>(),
+            GlobalKey<FocusableActionBarState>(),
+            GlobalKey<FocusableActionBarState>()];
+          Widget compactRow(int index, List<FocusableAction> actions) => FocusableActionBar(
+            key: rowKeys[index],
+            actions: actions,
+            spacing: gap,
+            onNavigateUp: index > 0
+                ? () => rowKeys[index - 1].currentState?.requestFocusOnFirst()
+                : null,
+            onNavigateDown: index < 2 && (index == 0 || thirdRow.isNotEmpty)
+                ? () => rowKeys[index + 1].currentState?.requestFocusOnFirst()
+                : null,
+          );
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              compactRow(0, firstRow),
+              if (secondRow.isNotEmpty) ...[
+                SizedBox(height: gap),
+                compactRow(1, secondRow),
+              ],
+              if (thirdRow.isNotEmpty) ...[
+                SizedBox(height: gap),
+                compactRow(2, thirdRow),
+              ],
+            ],
+          );
+        }
         if (vertical) return actionBar(allActions);
         // TV screens are wide and D-pad focus should see every direct action.
         // On smaller online screens, hidden actions remain available from ⋮.
