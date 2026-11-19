@@ -15,6 +15,7 @@ on:
       - feature/dynamic-ambient-background
       - stable/ambient-8aad4a8
       - fix/movie-details-four-improvements-2fa806d
+      - feature/movie-detail-slide-return-focus-7f59d4c
 
 permissions:
   contents: write
