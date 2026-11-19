@@ -125,9 +125,8 @@ class _MediaDetailsSheetState extends State<MediaDetailsSheet> {
             ),
           const SizedBox(height: 10),
           SelectedMediaFormatBadges(item: item),
-          // Keep synopsis at the approved position; shift only the fixed
-          // metadata and badges down into the previously empty gap.
-          const SizedBox(height: 38),
+          // Keep the badges-to-tagline gap twice the metadata-to-badges gap (10px).
+          const SizedBox(height: 20),
           Expanded(
             child: FocusableWrapper(
               focusNode: widget.informationFocusNode,
