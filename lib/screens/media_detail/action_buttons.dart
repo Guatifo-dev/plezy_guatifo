@@ -14,18 +14,18 @@ class _DownloadButtonSpec {
 }
 
 extension _MediaDetailActionButtons on _MediaDetailScreenState {
-  Widget _buildActionButtons(MediaItem metadata, {bool vertical = false, bool hideMoreDetails = false}) {
+  Widget _buildActionButtons(MediaItem metadata, {bool vertical = false, bool hideMoreDetails = false, bool compactVertical = false}) {
     // Keep all original actions and callbacks, changing only presentation.
     return Builder(builder: (context) => _buildAvailableActionButtons(
-      context, metadata, vertical: vertical, hideMoreDetails: hideMoreDetails,
+      context, metadata, vertical: vertical, hideMoreDetails: hideMoreDetails, compactVertical: compactVertical,
     ));
   }
 
   Widget _buildAvailableActionButtons(
-    BuildContext context, MediaItem metadata, {bool vertical = false, bool hideMoreDetails = false}
+    BuildContext context, MediaItem metadata, {bool vertical = false, bool hideMoreDetails = false, bool compactVertical = false}
   ) {
     final isTv = PlatformDetector.isTV();
-    final tvScale = TvLayoutConstants.scaleOf(context);
+    final tvScale = TvLayoutConstants.scaleOf(context) * (compactVertical ? 0.82 : 1.0);
     final actionSize = isTv ? _tvDetailActionSize * tvScale : 48.0;
     final playButtonLabel = isTv && metadata.isMovie ? t.common.play : _getPlayButtonLabel(metadata);
     final playIcon = _getPlayButtonIcon(metadata);
@@ -180,7 +180,7 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
             await navigateToVideoPlayer(context, metadata: primaryTrailer, isLaunchCurrent: () => _canUseDetail);
           }());
 
-    final gap = isTv ? 8.0 * tvScale : 12.0;
+    final gap = compactVertical ? 5.0 * tvScale : (isTv ? 8.0 * tvScale : 12.0);
 
     Widget playButton(FocusableActionBuildState state) {
       final prominentStyle = actionButtonStyle(
