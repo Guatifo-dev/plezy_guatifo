@@ -291,6 +291,7 @@ class MediaDetailScreen extends StatefulWidget {
   final bool isOffline;
   /// Ordered movies from the Discover rail used to open this TV screen.
   final List<MediaItem>? movieBrowseItems;
+  final ValueChanged<MediaItem>? onMovieSelectionChanged;
 
   /// If provided, auto-selects this season index when the screen loads.
   /// Used when navigating to a show from a season context.
@@ -303,6 +304,7 @@ class MediaDetailScreen extends StatefulWidget {
     required this.metadata,
     this.isOffline = false,
     this.movieBrowseItems,
+    this.onMovieSelectionChanged,
     this.initialSeasonIndex,
     this.initialSeasonId,
     this.initialEpisodeId,
@@ -316,6 +318,8 @@ PageRoute<bool> mediaDetailRoute({
   required MediaItem metadata,
   bool isOffline = false,
   List<MediaItem>? movieBrowseItems,
+  ValueChanged<MediaItem>? onMovieSelectionChanged,
+  int movieSlideDirection = 0,
   int? initialSeasonIndex,
   String? initialSeasonId,
   String? initialEpisodeId,
@@ -324,6 +328,7 @@ PageRoute<bool> mediaDetailRoute({
     metadata: metadata,
     isOffline: isOffline,
     movieBrowseItems: movieBrowseItems,
+    onMovieSelectionChanged: onMovieSelectionChanged,
     initialSeasonIndex: initialSeasonIndex,
     initialSeasonId: initialSeasonId,
     initialEpisodeId: initialEpisodeId,
@@ -341,6 +346,15 @@ PageRoute<bool> mediaDetailRoute({
     pageBuilder: (_, _, _) => page,
     transitionsBuilder: (_, animation, _, child) {
       if (metadata.isMovie) {
+        if (movieSlideDirection != 0) {
+          return SlideTransition(
+            position: Tween<Offset>(
+              begin: Offset(movieSlideDirection.toDouble(), 0),
+              end: Offset.zero,
+            ).animate(CurvedAnimation(parent: animation, curve: Curves.easeInOutCubic)),
+            child: child,
+          );
+        }
         // Preserve the original bottom-to-top entrance of More Details.
         return SlideTransition(
           position: Tween<Offset>(
@@ -358,7 +372,7 @@ PageRoute<bool> mediaDetailRoute({
         child: child,
       );
     },
-    transitionDuration: AppDurations.animMedium,
+    transitionDuration: movieSlideDirection != 0 ? const Duration(milliseconds: 280) : AppDurations.animMedium,
     reverseTransitionDuration: AppDurations.animMedium,
   );
 }
@@ -408,6 +422,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
   ];
   bool _movieInitialFocusScheduled = false;
   bool _movieTransitioning = false;
+  int _movieExitDirection = 0;
   final _hubFocusMemory = HubFocusMemory();
   PageRoute<dynamic>? _route;
   RouteObserver<PageRoute<dynamic>>? _routeObserver;
@@ -1067,9 +1082,17 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     _movieTransitioning = true;
     await PlexTrailerPreview.stop();
     if (!_canUseDetail) return;
+    widget.onMovieSelectionChanged?.call(movies[nextIndex]);
+    setState(() => _movieExitDirection = -direction);
     unawaited(Navigator.pushReplacement<bool, bool>(
       context,
-      mediaDetailRoute(metadata: movies[nextIndex], isOffline: widget.isOffline, movieBrowseItems: movies),
+      mediaDetailRoute(
+        metadata: movies[nextIndex],
+        isOffline: widget.isOffline,
+        movieBrowseItems: movies,
+        onMovieSelectionChanged: widget.onMovieSelectionChanged,
+        movieSlideDirection: direction,
+      ),
       result: _watchStateChanged,
     ));
   }
@@ -3582,7 +3605,11 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
         metadata,
         hideSpoilers: SettingsService.instance.read(SettingsService.hideSpoilers),
       );
-      final moviePage = Focus(
+      final moviePage = AnimatedSlide(
+        offset: Offset(_movieExitDirection.toDouble(), 0),
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeInOutCubic,
+        child: Focus(
         onKeyEvent: _handleMediaDetailBackKey,
         child: Scaffold(
           body: Center(
@@ -3590,6 +3617,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
               movieItem, movieDescription, metadata.genres ?? const <String>[], metadata,
             ),
           ),
+        ),
         ),
       );
       if (!InputModeTracker.shouldBlockSystemBack(context)) return moviePage;
