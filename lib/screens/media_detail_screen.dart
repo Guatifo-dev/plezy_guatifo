@@ -4146,62 +4146,101 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
         builder: (_) => metadata.isMovie && PlatformDetector.isTV()
             ? _buildTvMovieMoreDetailsSheet(item, description, genres, metadata)
             : MediaDetailsSheet(item: item, description: description, genres: genres),
+        constraints: metadata.isMovie && PlatformDetector.isTV()
+            ? BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.94,
+                maxHeight: MediaQuery.sizeOf(context).height * 0.92)
+            : null,
+        alignment: metadata.isMovie && PlatformDetector.isTV()
+            ? Alignment.center
+            : Alignment.bottomCenter,
       ),
     );
   }
 
-  /// Movie-only expanded information. The main movie hero never depends on
-  /// supplemental rail data; this sheet owns the cast/extras/related rails.
+  /// Full-height, centered movie information panel. It deliberately has no
+  /// recommendation rails: focus and trailer playback stay on the selected film.
   Widget _buildTvMovieMoreDetailsSheet(
     MediaItem item,
     String? description,
     List<String> genres,
     MediaItem metadata,
   ) {
-    final hubs = _tvDetailHubs(metadata);
     return Builder(
       builder: (sheetContext) {
         final size = MediaQuery.sizeOf(sheetContext);
-        final railHeight = hubs.isEmpty
-            ? 0.0
-            : math.min(_estimateTvBrowseRailHeight(size, hubs), size.height * 0.46);
-        return SizedBox(
-          height: size.height * 0.82,
-          child: Column(
-            children: [
-              Expanded(
-                child: MediaDetailsSheet(
-                  item: item,
-                  description: description,
-                  genres: genres,
-                  informationFocusNode: _movieDetailsInfoFocusNode,
-                  onNavigateDown: () => _movieDetailsRailKey.currentState?.requestFocus(),
-                ),
-              ),
-              if (hubs.isNotEmpty && railHeight > 0)
-                SizedBox(
-                  height: railHeight,
-                  child: TvBrowseRail(
-                    key: _movieDetailsRailKey,
-                    hubs: hubs,
-                    focusMemory: _hubFocusMemory,
-                    iconForHub: _getTvDetailHubIcon,
-                    onFocusedHubItemChanged: _handleTvDetailFocusedRailItemChanged,
-                    onRefresh: (source) => unawaited(_refreshItemInPlace(source)),
-                    onActiveHubChanged: _handleTvDetailHubChanged,
-                    onActivateItem: _handleTvDetailRailItemActivated,
-                    trailingForHub: _tvDetailTrailingState,
-                    leadingItemForHub: _tvDetailLeadingItemForHub,
-                    onRetryHub: _retryTvDetailHub,
-                    onNavigateUp: _movieDetailsInfoFocusNode.requestFocus,
-                    onBack: () => OverlaySheetController.of(sheetContext).pop(),
-                    tallPosterScale: _tvDetailTallPosterScale,
-                    widePosterScaleForHub: _tvDetailWidePosterScaleForHub,
-                    episodePosterModeForHub: _tvDetailEpisodePosterModeForHub,
-                    showTitleImpliedForHub: _isTvDetailEpisodeHub,
+        final theme = Theme.of(sheetContext);
+        final posterPath = metadata.thumbPath;
+        final poster = posterPath == null
+            ? null
+            : _buildOfflineArtworkIfAvailable(
+                sheetContext,
+                artworkPaths: [posterPath],
+                fit: BoxFit.cover,
+                imageType: ImageType.poster,
+              );
+        final logo = _buildDetailLogoOrTitle(
+          sheetContext,
+          metadata,
+          width: size.width * 0.42,
+          height: size.height * 0.13,
+          availableWidth: size.width * 0.75,
+          alignment: Alignment.center,
+          titleBuilder: (context, title) => Center(
+            child: Text(title, textAlign: TextAlign.center,
+                style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
+          ),
+        );
+        return Container(
+          height: size.height * 0.88,
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface.withValues(alpha: 0.96),
+            border: Border.all(color: Colors.white, width: 2),
+            borderRadius: BorderRadius.circular(22),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(26, 16, 26, 20),
+            child: Column(
+              children: [
+                SizedBox(height: size.height * 0.13, child: Center(child: logo)),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: size.width * 0.19,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: poster ?? const PlaceholderContainer(),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(genres.join(' • '),
+                                style: theme.textTheme.bodyMedium),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 28),
+                      Expanded(
+                        child: MediaDetailsSheet(
+                          item: item,
+                          description: description,
+                          genres: genres,
+                          informationFocusNode: _movieDetailsInfoFocusNode,
+                          showTitleHeader: false,
+                          emphasizeSynopsis: true,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-            ],
+              ],
+            ),
           ),
         );
       },
