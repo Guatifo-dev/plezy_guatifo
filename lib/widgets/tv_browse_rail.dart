@@ -18,6 +18,7 @@ import '../media/ids.dart';
 import '../media/library_query.dart';
 import '../media/media_hub.dart';
 import '../media/media_item.dart';
+import '../media/media_kind.dart';
 import '../navigation/main_screen_scope.dart';
 import '../screens/hub_detail_screen.dart';
 import '../services/device_performance.dart';
@@ -1222,8 +1223,8 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
     final handled = await widget.onActivateItem?.call(hub, item);
     if (handled == true) return;
     if (!mounted) return;
-    final browseMovies = !_usesContinueWatchingAction(hub) && item.isMovie
-        ? hub.items.where((candidate) => candidate.isMovie).toList(growable: false)
+    final browseMovies = !_usesContinueWatchingAction(hub) && item.kind == MediaKind.movie
+        ? hub.items.where((candidate) => candidate.kind == MediaKind.movie).toList(growable: false)
         : null;
     var selectedMovie = item;
     await navigateToMediaItem(
