@@ -120,8 +120,6 @@ class _MediaDetailsSheetState extends State<MediaDetailsSheet> {
           const SizedBox(height: 10),
           SelectedMediaFormatBadges(item: item),
           const SizedBox(height: 20),
-          Text('Sinopsis', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
           Expanded(
             child: FocusableWrapper(
               focusNode: widget.informationFocusNode,
@@ -135,6 +133,7 @@ class _MediaDetailsSheetState extends State<MediaDetailsSheet> {
                 controller: _scrollController,
                 padding: const EdgeInsets.only(right: 14, bottom: 24),
                 child: Text(description ?? '',
+                  textAlign: TextAlign.justify,
                   style: theme.textTheme.bodyLarge?.copyWith(height: 1.35, fontSize: 16)),
               ),
             ),
