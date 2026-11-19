@@ -225,8 +225,10 @@ class TvSpotlightBackground extends StatelessWidget {
                               shaderCallback: (rect) => const LinearGradient(
                                 begin: Alignment.centerLeft,
                                 end: Alignment.centerRight,
-                                colors: [Colors.white, Color(0xD9FFFFFF), Color(0x66FFFFFF), Colors.transparent],
-                                stops: [0.0, 0.59, 0.77, 0.97],
+                                // The contained image can end before the right edge of this box.
+                                // Fade sooner so its actual right boundary is not visible.
+                                colors: [Colors.white, Color(0xCCFFFFFF), Color(0x55FFFFFF), Colors.transparent],
+                                stops: [0.0, 0.42, 0.60, 0.82],
                               ).createShader(rect),
                               child: ShaderMask(
                                 blendMode: BlendMode.dstIn,
