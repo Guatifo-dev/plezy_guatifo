@@ -4221,7 +4221,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
           ),
           clipBehavior: Clip.antiAlias,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(26, 16, 26, 20),
+            padding: const EdgeInsets.fromLTRB(16, 16, 26, 20),
             child: LayoutBuilder(
               builder: (context, bounds) {
                 final posterWidth = size.width * 0.205;
@@ -4285,19 +4285,10 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                           const SizedBox(height: 16),
                           Expanded(
                             child: SingleChildScrollView(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  if (item.directors?.isNotEmpty ?? false)
-                                    _buildMovieMoreDetailsCredit(theme, 'Dirección', item.directors!.join(', ')),
-                                  if (item.roles?.isNotEmpty ?? false)
-                                    _buildMovieMoreDetailsCredit(theme, 'Reparto',
-                                        item.roles!.take(5).map((role) => role.tag).join(', ')),
-                                  if (genres.isNotEmpty)
-                                    _buildMovieMoreDetailsCredit(theme, 'Género', genres.join(', ')),
-                                  if (item.countries?.isNotEmpty ?? false)
-                                    _buildMovieMoreDetailsCredit(theme, 'País', item.countries!.join(', ')),
-                                ],
+                              child: _buildActionButtons(
+                                metadata,
+                                vertical: true,
+                                hideMoreDetails: true,
                               ),
                             ),
                           ),
