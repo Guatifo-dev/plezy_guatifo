@@ -2251,6 +2251,7 @@ class _LibraryBrowseTabState extends BaseLibraryTabState<MediaItem, LibraryBrows
       item,
       onRefresh: updateItem,
       movieBrowseItems: movies,
+      movieOriginLabel: 'Explorar',
       onMovieSelectionChanged: (movie) => selectedMovie = movie,
     );
     if (!mounted) return;
