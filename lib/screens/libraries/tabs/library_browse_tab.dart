@@ -2257,8 +2257,14 @@ class _LibraryBrowseTabState extends BaseLibraryTabState<MediaItem, LibraryBrows
     if (!mounted) return;
     for (final entry in movieEntries) {
       if (entry.value.globalKey == selectedMovie.globalKey) {
+        // Virtualized grid cards outside the viewport have detached FocusNodes.
+        // Scroll to the selected movie before restoring its actual card focus.
+        final selectedIndex = entry.key;
+        _scrollToItemIndex(selectedIndex);
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _focusGridItem(entry.key);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _focusGridItem(selectedIndex);
+          });
         });
         break;
       }
