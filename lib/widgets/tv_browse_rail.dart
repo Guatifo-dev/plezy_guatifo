@@ -1233,6 +1233,7 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
       onRefresh: widget.onRefresh,
       playDirectly: _usesContinueWatchingAction(hub),
       movieBrowseItems: browseMovies,
+      movieOriginLabel: hub.title,
       onMovieSelectionChanged: browseMovies == null ? null : (movie) => selectedMovie = movie,
     );
     if (mounted && browseMovies != null) {
