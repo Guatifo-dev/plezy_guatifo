@@ -1222,12 +1222,23 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
     final handled = await widget.onActivateItem?.call(hub, item);
     if (handled == true) return;
     if (!mounted) return;
+    final browseMovies = !_usesContinueWatchingAction(hub) && item.isMovie
+        ? hub.items.where((candidate) => candidate.isMovie).toList(growable: false)
+        : null;
+    var selectedMovie = item;
     await navigateToMediaItem(
       context,
       item,
       onRefresh: widget.onRefresh,
       playDirectly: _usesContinueWatchingAction(hub),
+      movieBrowseItems: browseMovies,
+      onMovieSelectionChanged: browseMovies == null ? null : (movie) => selectedMovie = movie,
     );
+    if (mounted && browseMovies != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) restoreMovieFocus(hub, selectedMovie);
+      });
+    }
   }
 
   void _navigateToHubDetail(MediaHub hub) {
