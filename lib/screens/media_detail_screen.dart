@@ -286,12 +286,36 @@ abstract final class _HeroChips {
   );
 }
 
+/// Tracks the final route in a replace-in-place TV movie carousel.
+class MovieDetailNavigationSession {
+  final Completer<bool> _completed = Completer<bool>();
+  int _generation = 0;
+  bool _changed = false;
+
+  Future<bool> get completed => _completed.future;
+
+  void track(Future<bool?> routeResult) {
+    final generation = ++_generation;
+    routeResult.then((changed) {
+      _changed = _changed || (changed ?? false);
+      if (generation == _generation && !_completed.isCompleted) {
+        _completed.complete(_changed);
+      }
+    }, onError: (Object error, StackTrace trace) {
+      if (generation == _generation && !_completed.isCompleted) {
+        _completed.completeError(error, trace);
+      }
+    });
+  }
+}
+
 class MediaDetailScreen extends StatefulWidget {
   final MediaItem metadata;
   final bool isOffline;
   /// Ordered movies from the Discover rail used to open this TV screen.
   final List<MediaItem>? movieBrowseItems;
   final ValueChanged<MediaItem>? onMovieSelectionChanged;
+  final MovieDetailNavigationSession? movieNavigationSession;
 
   /// If provided, auto-selects this season index when the screen loads.
   /// Used when navigating to a show from a season context.
@@ -305,6 +329,7 @@ class MediaDetailScreen extends StatefulWidget {
     this.isOffline = false,
     this.movieBrowseItems,
     this.onMovieSelectionChanged,
+    this.movieNavigationSession,
     this.initialSeasonIndex,
     this.initialSeasonId,
     this.initialEpisodeId,
@@ -319,6 +344,7 @@ PageRoute<bool> mediaDetailRoute({
   bool isOffline = false,
   List<MediaItem>? movieBrowseItems,
   ValueChanged<MediaItem>? onMovieSelectionChanged,
+  MovieDetailNavigationSession? movieNavigationSession,
   int movieSlideDirection = 0,
   int? initialSeasonIndex,
   String? initialSeasonId,
@@ -329,6 +355,7 @@ PageRoute<bool> mediaDetailRoute({
     isOffline: isOffline,
     movieBrowseItems: movieBrowseItems,
     onMovieSelectionChanged: onMovieSelectionChanged,
+    movieNavigationSession: movieNavigationSession,
     initialSeasonIndex: initialSeasonIndex,
     initialSeasonId: initialSeasonId,
     initialEpisodeId: initialEpisodeId,
@@ -1084,17 +1111,19 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     if (!_canUseDetail) return;
     widget.onMovieSelectionChanged?.call(movies[nextIndex]);
     setState(() => _movieExitDirection = -direction);
-    unawaited(Navigator.pushReplacement<bool, bool>(
+    final nextRoute = Navigator.pushReplacement<bool, bool>(
       context,
       mediaDetailRoute(
         metadata: movies[nextIndex],
         isOffline: widget.isOffline,
         movieBrowseItems: movies,
         onMovieSelectionChanged: widget.onMovieSelectionChanged,
+        movieNavigationSession: widget.movieNavigationSession,
         movieSlideDirection: direction,
       ),
       result: _watchStateChanged,
-    ));
+    );
+    widget.movieNavigationSession?.track(nextRoute);
   }
 
   KeyEventResult _handleMediaDetailBackKey(FocusNode _, KeyEvent event) {
