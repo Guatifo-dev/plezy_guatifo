@@ -4172,12 +4172,34 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
         final posterPath = metadata.thumbPath;
         final poster = posterPath == null
             ? null
-            : _buildOfflineArtworkIfAvailable(
-                sheetContext,
-                artworkPaths: [posterPath],
-                fit: BoxFit.cover,
-                imageType: ImageType.poster,
-              );
+            : (_buildOfflineArtworkIfAvailable(
+                  sheetContext,
+                  artworkPaths: [posterPath],
+                  fit: BoxFit.cover,
+                  imageType: ImageType.poster,
+                ) ??
+                OptimizedMediaImage(
+                  client: _getMediaClientForMetadata(sheetContext),
+                  imagePath: posterPath,
+                  fit: BoxFit.cover,
+                  imageType: ImageType.poster,
+                ));
+        final fanartPaths = metadata.heroRotationPaths(containerAspectRatio: 16 / 9);
+        final fanartPath = fanartPaths.isEmpty ? null : fanartPaths.first;
+        final fanart = fanartPath == null
+            ? null
+            : (_buildOfflineArtworkIfAvailable(
+                  sheetContext,
+                  artworkPaths: [fanartPath],
+                  fit: BoxFit.cover,
+                  imageType: ImageType.backdrop,
+                ) ??
+                OptimizedMediaImage(
+                  client: _getMediaClientForMetadata(sheetContext),
+                  imagePath: fanartPath,
+                  fit: BoxFit.cover,
+                  imageType: ImageType.backdrop,
+                ));
         final logo = _buildDetailLogoOrTitle(
           sheetContext,
           metadata,
@@ -4227,13 +4249,47 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                       ),
                       const SizedBox(width: 28),
                       Expanded(
-                        child: MediaDetailsSheet(
-                          item: item,
-                          description: description,
-                          genres: genres,
-                          informationFocusNode: _movieDetailsInfoFocusNode,
-                          showTitleHeader: false,
-                          emphasizeSynopsis: true,
+                        child: Stack(
+                          children: [
+                            if (fanart != null)
+                              Positioned(
+                                top: 0,
+                                right: 0,
+                                width: size.width * 0.38,
+                                height: size.height * 0.40,
+                                child: IgnorePointer(
+                                  child: ShaderMask(
+                                    blendMode: BlendMode.dstIn,
+                                    shaderCallback: (rect) => const LinearGradient(
+                                      begin: Alignment.centerLeft,
+                                      end: Alignment.centerRight,
+                                      colors: [Colors.transparent, Color(0x99FFFFFF), Colors.white],
+                                      stops: [0.0, 0.45, 1.0],
+                                    ).createShader(rect),
+                                    child: ShaderMask(
+                                      blendMode: BlendMode.dstIn,
+                                      shaderCallback: (rect) => const LinearGradient(
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                        colors: [Colors.white, Color(0xCCFFFFFF), Colors.transparent],
+                                        stops: [0.0, 0.50, 1.0],
+                                      ).createShader(rect),
+                                      child: fanart,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            Positioned.fill(
+                              child: MediaDetailsSheet(
+                                item: item,
+                                description: description,
+                                genres: genres,
+                                informationFocusNode: _movieDetailsInfoFocusNode,
+                                showTitleHeader: false,
+                                emphasizeSynopsis: true,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
