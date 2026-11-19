@@ -181,7 +181,9 @@ class TvSpotlightBackground extends StatelessWidget {
                     child: Transform.translate(
                       // Center the 42.4%-wide artwork box in the rightmost 40% of the TV.
                       // Target center = 80% of screen width (synopsis ends near 60%).
-                      offset: Offset(size.width * 0.012, -size.height * 0.035),
+                      // Center the visible contained fanart at 70% of the screen width.
+                      // Box center before translation: 100% - (42.4% / 2) = 78.8%.
+                      offset: Offset(-size.width * 0.088, -size.height * 0.035),
                       child: Align(
                         alignment: Alignment.bottomRight,
                         child: SizedBox(
@@ -265,7 +267,7 @@ class TvSpotlightBackground extends StatelessWidget {
                                 width: size.width * 0.424,
                                 height: size.height * 0.36,
                                 fit: BoxFit.contain,
-                                alignment: Alignment.bottomRight,
+                                alignment: Alignment.bottomCenter,
                                 fallbackColor: Colors.transparent,
                               ),
                             ),
