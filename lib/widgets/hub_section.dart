@@ -447,12 +447,22 @@ class HubSectionState extends State<HubSection> with MountedSetStateMixin, Skele
   }
 
   Future<void> _navigateToItem(MediaItem item) async {
+    final browseMovies = !widget.usesContinueWatchingAction && item.isMovie
+        ? widget.hub.items.where((candidate) => candidate.isMovie).toList(growable: false)
+        : null;
+    var selectedMovie = item;
     await navigateToMediaItem(
       context,
       item,
       onRefresh: widget.onRefresh,
       playDirectly: widget.usesContinueWatchingAction,
+      movieBrowseItems: browseMovies,
+      onMovieSelectionChanged: browseMovies == null ? null : (movie) => selectedMovie = movie,
     );
+    if (!mounted || browseMovies == null) return;
+    final index = widget.hub.items.indexWhere((candidate) => candidate.globalKey == selectedMovie.globalKey);
+    if (index < 0) return;
+    _onItemTapped(index);
   }
 
   void _navigateToHubDetail(BuildContext context) {
