@@ -119,7 +119,8 @@ class _MediaDetailsSheetState extends State<MediaDetailsSheet> {
             ),
           const SizedBox(height: 10),
           SelectedMediaFormatBadges(item: item),
-          const SizedBox(height: 20),
+          // Preserve the synopsis position after removing its heading.
+          const SizedBox(height: 56),
           Expanded(
             child: FocusableWrapper(
               focusNode: widget.informationFocusNode,
