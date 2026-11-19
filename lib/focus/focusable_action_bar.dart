@@ -76,6 +76,8 @@ class FocusableActionBar extends StatefulWidget {
   final ValueChanged<bool>? onFocusChange;
 
   final double spacing;
+  /// Layout and D-pad navigation for a vertical action column.
+  final bool vertical;
 
   const FocusableActionBar({
     super.key,
@@ -87,6 +89,7 @@ class FocusableActionBar extends StatefulWidget {
     this.onBack,
     this.onFocusChange,
     this.spacing = 0,
+    this.vertical = false,
   });
 
   @override
@@ -281,15 +284,16 @@ class FocusableActionBarState extends State<FocusableActionBar> {
     final isKeyboard = InputModeTracker.isKeyboardMode(context);
     final duration = FocusTheme.getAnimationDuration(context);
 
-    final row = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (var i = 0; i < widget.actions.length; i++) ...[
-          if (i > 0 && _gapBefore(i) > 0) SizedBox(width: _gapBefore(i)),
-          _buildButton(i, isKeyboard, duration),
-        ],
+    final buttons = <Widget>[
+      for (var i = 0; i < widget.actions.length; i++) ...[
+        if (i > 0 && _gapBefore(i) > 0)
+          widget.vertical ? SizedBox(height: _gapBefore(i)) : SizedBox(width: _gapBefore(i)),
+        _buildButton(i, isKeyboard, duration),
       ],
-    );
+    ];
+    final row = widget.vertical
+        ? Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: buttons)
+        : Row(mainAxisSize: MainAxisSize.min, children: buttons);
     // While focus is outside the row (the common state — the user is browsing
     // content), every button is equally dimmed, so dim once at row level:
     // each sub-1.0 opacity is its own saveLayer, i.e. a full render-pass
@@ -327,13 +331,11 @@ class FocusableActionBarState extends State<FocusableActionBar> {
         final nextIndex = _nextEnabledIndex(index);
         return dpadKeyHandler(
           onSelect: action.onPressed,
-          onLeft: previousIndex != null ? () => _focusNodes[previousIndex].requestFocus() : widget.onNavigateLeft,
-          onRight: nextIndex != null ? () => _focusNodes[nextIndex].requestFocus() : widget.onNavigateRight,
-          onDown: widget.onNavigateDown,
-          onUp: widget.onNavigateUp,
-          // Consume LEFT/RIGHT at the row's first/last enabled button when no
-          // edge callback is wired, so focus can't fall off the row (#1181).
-          trapHorizontalEdges: true,
+          onLeft: widget.vertical ? widget.onNavigateLeft : (previousIndex != null ? () => _focusNodes[previousIndex].requestFocus() : widget.onNavigateLeft),
+          onRight: widget.vertical ? widget.onNavigateRight : (nextIndex != null ? () => _focusNodes[nextIndex].requestFocus() : widget.onNavigateRight),
+          onDown: widget.vertical ? (nextIndex != null ? () => _focusNodes[nextIndex].requestFocus() : widget.onNavigateDown) : widget.onNavigateDown,
+          onUp: widget.vertical ? (previousIndex != null ? () => _focusNodes[previousIndex].requestFocus() : widget.onNavigateUp) : widget.onNavigateUp,
+          trapHorizontalEdges: !widget.vertical,
         )(node, event);
       },
       child: ClickableCursor(
