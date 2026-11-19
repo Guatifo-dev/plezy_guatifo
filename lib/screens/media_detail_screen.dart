@@ -4206,7 +4206,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
           width: size.width * 0.42,
           height: size.height * 0.13,
           availableWidth: size.width * 0.75,
-          alignment: Alignment.center,
+          alignment: Alignment.centerLeft,
           titleBuilder: (context, title) => Center(
             child: Text(title, textAlign: TextAlign.center,
                 style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
@@ -4323,7 +4323,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                       left: posterWidth + 28,
                       right: 0,
                       height: size.height * 0.135,
-                      child: Center(child: logo),
+                      child: Align(alignment: Alignment.centerLeft, child: logo),
                     ),
                   ],
                 );
