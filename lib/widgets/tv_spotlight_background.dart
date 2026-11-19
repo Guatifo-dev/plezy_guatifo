@@ -179,12 +179,12 @@ class TvSpotlightBackground extends StatelessWidget {
                     duration: const Duration(milliseconds: 420),
                     curve: Curves.easeOutCubic,
                     child: Transform.translate(
-                      offset: Offset(-size.width * 0.025, -size.height * 0.035),
+                      offset: Offset(-size.width * 0.05, -size.height * 0.035),
                       child: Align(
                         alignment: Alignment.bottomRight,
                         child: SizedBox(
-                        width: size.width * 0.53,
-                        height: size.height * 0.45,
+                        width: size.width * 0.424,
+                        height: size.height * 0.36,
                         child: IgnorePointer(
                           // The contained artwork does not fill this wide box.
                           // Start the left fade inside the actual image area,
@@ -260,8 +260,8 @@ class TvSpotlightBackground extends StatelessWidget {
                                     ? null
                                     : (path) => localArtworkPathResolver!(path),
                                 allowNetwork: allowNetwork,
-                                width: size.width * 0.53,
-                                height: size.height * 0.45,
+                                width: size.width * 0.424,
+                                height: size.height * 0.36,
                                 fit: BoxFit.contain,
                                 alignment: Alignment.bottomRight,
                                 fallbackColor: Colors.transparent,
