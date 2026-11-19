@@ -197,6 +197,7 @@ Future<MediaNavigationResult> navigateToMediaItem(
   bool isOffline = false,
   bool playDirectly = false,
   List<MediaItem>? movieBrowseItems,
+  ValueChanged<MediaItem>? onMovieSelectionChanged,
 }) async {
   if (item is MediaPlaylist) {
     final result = await Navigator.push<bool>(
@@ -302,7 +303,7 @@ Future<MediaNavigationResult> navigateToMediaItem(
         }
         return MediaNavigationResult.navigated;
       }
-      return navigateToMediaItemDetails(context, mi, isOffline: isOffline, onRefresh: onRefresh, movieBrowseItems: movieBrowseItems);
+      return navigateToMediaItemDetails(context, mi, isOffline: isOffline, onRefresh: onRefresh, movieBrowseItems: movieBrowseItems, onMovieSelectionChanged: onMovieSelectionChanged);
 
     case MediaKind.season:
       return navigateToMediaItemDetails(context, mi, isOffline: isOffline, onRefresh: onRefresh);
@@ -319,6 +320,7 @@ Future<MediaNavigationResult> navigateToMediaItemDetails(
   void Function(MediaItem source)? onRefresh,
   MediaItem? metadataOverride,
   List<MediaItem>? movieBrowseItems,
+  ValueChanged<MediaItem>? onMovieSelectionChanged,
 }) async {
   // Catalog stand-ins (Explore tab) must never reach MediaDetailScreen — it
   // hard-requires a server id. Guarded here (not only in navigateToMediaItem)
@@ -380,6 +382,7 @@ Future<MediaNavigationResult> navigateToMediaItemDetails(
       metadata: target.metadata,
       isOffline: isOffline,
       movieBrowseItems: movieBrowseItems,
+      onMovieSelectionChanged: onMovieSelectionChanged,
       initialSeasonIndex: target.initialSeasonIndex,
       initialSeasonId: target.initialSeasonId,
       initialEpisodeId: target.initialEpisodeId,
