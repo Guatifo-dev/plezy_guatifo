@@ -4224,7 +4224,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
             padding: const EdgeInsets.fromLTRB(16, 16, 26, 20),
             child: LayoutBuilder(
               builder: (context, bounds) {
-                final posterWidth = size.width * 0.205;
+                final posterWidth = size.width * 0.19;
                 final posterHeight = posterWidth * 1.5;
                 return Stack(
                   children: [
@@ -4282,13 +4282,14 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                               child: poster ?? const PlaceholderContainer(),
                             ),
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 10),
                           Expanded(
                             child: SingleChildScrollView(
                               child: _buildActionButtons(
                                 metadata,
                                 vertical: true,
                                 hideMoreDetails: true,
+                                compactVertical: true,
                               ),
                             ),
                           ),
