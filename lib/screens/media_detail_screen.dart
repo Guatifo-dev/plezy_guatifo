@@ -3521,6 +3521,34 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
               _heroBottomInset;
     final headerHeight = isTv ? size.height : math.max(size.height * 0.6, heroFloor);
 
+    if (isTv && metadata.isMovie) {
+      // The former More Details sheet is now the movie's sole TV detail page.
+      // Keep the sheet itself (including its poster, actions and synopsis)
+      // instead of building the old hero underneath it.
+      final movieItem = metadata.copyWith(ratings: _titleRatings(metadata));
+      final movieDescription = _tvDetailDescription(
+        metadata,
+        hideSpoilers: SettingsService.instance.read(SettingsService.hideSpoilers),
+      );
+      final moviePage = Focus(
+        onKeyEvent: _handleMediaDetailBackKey,
+        child: Scaffold(
+          body: Center(
+            child: _buildTvMovieMoreDetailsSheet(
+              movieItem, movieDescription, metadata.genres ?? const <String>[], metadata,
+            ),
+          ),
+        ),
+      );
+      if (!InputModeTracker.shouldBlockSystemBack(context)) return moviePage;
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) {
+          if (!didPop) _handleMediaDetailSystemBack();
+        },
+        child: moviePage,
+      );
+    }
     if (isTv) {
       return _buildTvDetailScreen(context, metadata, _handleMediaDetailBackKey);
     }
