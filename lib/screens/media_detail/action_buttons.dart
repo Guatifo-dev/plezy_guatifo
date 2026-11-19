@@ -25,7 +25,7 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
     BuildContext context, MediaItem metadata, {bool vertical = false, bool hideMoreDetails = false, bool compactVertical = false, bool threeRowLayout = false}
   ) {
     final isTv = PlatformDetector.isTV();
-    final tvScale = TvLayoutConstants.scaleOf(context) * (compactVertical ? 0.82 : 1.0);
+    final tvScale = TvLayoutConstants.scaleOf(context) * (compactVertical ? 1.06 : 1.0);
     final actionSize = isTv ? _tvDetailActionSize * tvScale : 48.0;
     final playButtonLabel = isTv && metadata.isMovie ? t.common.play : _getPlayButtonLabel(metadata);
     final playIcon = _getPlayButtonIcon(metadata);
@@ -57,7 +57,7 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
     final versionSegmentWidth = actionSize * 0.75;
     final splitInnerRadius = Radius.circular(isTv ? 8.0 * tvScale : 8.0);
     final splitOuterRadius = Radius.circular(actionSize / 2);
-    final playShape = showVersionSplit
+    final playShape = showVersionSplit && !threeRowLayout
         ? RoundedRectangleBorder(
             borderRadius: BorderRadiusDirectional.horizontal(start: splitOuterRadius, end: splitInnerRadius),
           )
@@ -158,9 +158,9 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
 
       return ButtonStyle(
         padding: padding != null ? WidgetStatePropertyAll(padding) : null,
-        minimumSize: WidgetStatePropertyAll(padding == null ? Size.square(actionSize) : Size(0, actionSize)),
-        maximumSize: padding == null ? WidgetStatePropertyAll(Size.square(actionSize)) : null,
-        fixedSize: padding == null ? WidgetStatePropertyAll(Size.square(actionSize)) : null,
+        minimumSize: WidgetStatePropertyAll(padding == null && !threeRowLayout ? Size.square(actionSize) : Size(0, actionSize)),
+        maximumSize: padding == null && !threeRowLayout ? WidgetStatePropertyAll(Size.square(actionSize)) : null,
+        fixedSize: padding == null && !threeRowLayout ? WidgetStatePropertyAll(Size.square(actionSize)) : null,
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         visualDensity: VisualDensity.compact,
         overlayColor: noOverlay,
@@ -232,14 +232,14 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
         child: Tooltip(
           message: t.mediaMenu.playVersion,
           child: SizedBox(
-            width: versionSegmentWidth,
+            width: threeRowLayout ? double.infinity : versionSegmentWidth,
             height: actionSize,
             child: FilledButton(
               onPressed: onPlayVersionPressed,
               style: actionButtonStyle(
                 showFocus: state.showFocus,
                 padding: .zero,
-                shape: RoundedRectangleBorder(
+                shape: threeRowLayout ? const StadiumBorder() : RoundedRectangleBorder(
                   borderRadius: BorderRadiusDirectional.horizontal(start: splitInnerRadius, end: splitOuterRadius),
                 ),
               ),
@@ -257,12 +257,15 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
       String? tooltip,
       Color? foregroundColor,
     }) {
-      return IconButton.filledTonal(
-        onPressed: onPressed,
-        icon: icon,
-        tooltip: tooltip,
-        iconSize: isTv ? 21 * tvScale : 20,
-        style: actionButtonStyle(foregroundColor: foregroundColor, showFocus: state.showFocus),
+      return SizedBox(
+        width: threeRowLayout ? double.infinity : null,
+        child: IconButton.filledTonal(
+          onPressed: onPressed,
+          icon: icon,
+          tooltip: tooltip,
+          iconSize: isTv ? 21 * tvScale : 20,
+          style: actionButtonStyle(foregroundColor: foregroundColor, showFocus: state.showFocus),
+        ),
       );
     }
 
@@ -328,7 +331,7 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
       debugLabel: 'detail_watched',
       onPressed: () => unawaited(_handleWatchedTogglePressed(metadata)),
       builder: (context, state) =>
-          _buildWatchedToggleButton(metadata, actionButtonStyle, tvScale, showFocus: state.showFocus),
+          _buildWatchedToggleButton(_fresh(metadata), actionButtonStyle, tvScale, showFocus: state.showFocus),
     );
 
     // Watchlist toggle for the connected catalog sources (Trakt, MAL).
@@ -482,10 +485,10 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
       builder: (context, constraints) {
         final maxWidth = constraints.maxWidth;
         if (threeRowLayout) {
-          // Keep the split Play/Version pair together. Remaining actions
-          // form two compact rows, with no scrolling or hidden controls.
-          final firstRow = <FocusableAction>[playAction, ?versionAction];
+          // Movie-only TV page: one full poster-width Play and two aligned rows.
+          final cellWidth = (maxWidth - 2 * gap) / 3;
           final remaining = <FocusableAction>[
+            ?versionAction,
             ?trailerAction,
             ?shuffleAction,
             ?downloadAction,
@@ -495,32 +498,40 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
           ];
           final secondRow = remaining.take(3).toList();
           final thirdRow = remaining.skip(3).toList();
-          final rowKeys = [GlobalKey<FocusableActionBarState>(),
-            GlobalKey<FocusableActionBarState>(),
-            GlobalKey<FocusableActionBarState>()];
-          Widget compactRow(int index, List<FocusableAction> actions) => FocusableActionBar(
-            key: rowKeys[index],
-            actions: actions,
+          final keys = _movieActionRowKeys;
+          FocusableAction sizedAction(FocusableAction action, double width) => FocusableAction(
+            debugLabel: action.debugLabel,
+            focusNode: action.focusNode,
+            autofocus: action.autofocus,
+            onPressed: action.onPressed,
+            builder: (context, state) => SizedBox(
+              width: width,
+              height: actionSize,
+              child: action.builder!(context, state),
+            ),
+          );
+          Widget movieRow(int index, List<FocusableAction> source, {bool play = false}) => FocusableActionBar(
+            key: keys[index],
+            actions: [for (final action in source) sizedAction(action, play ? maxWidth : cellWidth)],
             spacing: gap,
-            onNavigateUp: index > 0
-                ? () => rowKeys[index - 1].currentState?.requestFocusOnFirst()
-                : null,
+            onNavigateLeft: play ? () => unawaited(_navigateToAdjacentMovie(-1)) : null,
+            onNavigateRight: play ? () => unawaited(_navigateToAdjacentMovie(1)) : null,
+            onNavigateUp: index > 0 ? () => keys[index - 1].currentState?.requestFocusOnFirst() : null,
             onNavigateDown: index < 2 && (index == 0 || thirdRow.isNotEmpty)
-                ? () => rowKeys[index + 1].currentState?.requestFocusOnFirst()
-                : null,
+                ? () => keys[index + 1].currentState?.requestFocusOnFirst() : null,
           );
           return Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              compactRow(0, firstRow),
+              movieRow(0, [playAction], play: true),
               if (secondRow.isNotEmpty) ...[
                 SizedBox(height: gap),
-                compactRow(1, secondRow),
+                movieRow(1, secondRow),
               ],
               if (thirdRow.isNotEmpty) ...[
                 SizedBox(height: gap),
-                compactRow(2, thirdRow),
+                movieRow(2, thirdRow),
               ],
             ],
           );
@@ -600,8 +611,9 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
   Future<void> _handleWatchedTogglePressed(MediaItem metadata) async {
     if (!_canUseDetail) return;
     try {
-      final isWatched = metadata.isWatched;
-      final outcome = await WatchActions.setWatched(context, metadata, watched: !isWatched, offline: widget.isOffline);
+      final current = _fresh(metadata);
+      final isWatched = current.isWatched;
+      final outcome = await WatchActions.setWatched(context, current, watched: !isWatched, offline: widget.isOffline);
       if (!mounted || !_canUseDetail) return;
       switch (outcome) {
         case WatchMarkOutcome.queuedOffline:
@@ -626,13 +638,15 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
     double tvScale, {
     bool showFocus = false,
   }) {
-    return IconButton.filledTonal(
+    return SizedBox(
+      width: PlatformDetector.isTV() && _metadata.isMovie ? double.infinity : null,
+      child: IconButton.filledTonal(
       onPressed: () => unawaited(_handleWatchedTogglePressed(metadata)),
       icon: AppIcon(metadata.isWatched ? Symbols.remove_done_rounded : Symbols.check_rounded, fill: 1),
       tooltip: metadata.isWatched ? t.tooltips.markAsUnwatched : t.tooltips.markAsWatched,
       iconSize: PlatformDetector.isTV() ? 21 * tvScale : 20,
       style: actionButtonStyle(showFocus: showFocus),
-    );
+    ));
   }
 
   Widget _buildMoreActionsButton(

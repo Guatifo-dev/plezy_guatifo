@@ -14,6 +14,7 @@ on:
       - fix/trailer-audio-on-navigation
       - feature/dynamic-ambient-background
       - stable/ambient-8aad4a8
+      - fix/movie-details-four-improvements-2fa806d
 
 permissions:
   contents: write

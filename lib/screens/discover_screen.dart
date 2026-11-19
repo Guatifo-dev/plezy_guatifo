@@ -1733,6 +1733,13 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       iconForHub: (hub, _) => hubIconFor(hub),
       onFocusedItemChanged: _setSpotlightItem,
       onLongPressItem: _openSynopsisPanel,
+      onActivateItem: (hub, item) async {
+        // Keep every non-movie and Continue Watching activation unchanged.
+        if (!item.isMovie || item.isCatalogItem || hub.isContinueWatchingHub || hub.usesContinueWatchingAction) return false;
+        final movies = hub.items.where((candidate) => candidate.isMovie && !candidate.isCatalogItem).toList(growable: false);
+        await navigateToMediaItem(context, item, onRefresh: _refreshDiscoverItem, movieBrowseItems: movies);
+        return true;
+      },
       onRefresh: _refreshDiscoverItem,
       onRemoveFromContinueWatching: _discover.refreshContinueWatching,
       isContinueWatchingHub: (hub) => hub.isContinueWatchingHub,

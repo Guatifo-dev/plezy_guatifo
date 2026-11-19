@@ -289,6 +289,8 @@ abstract final class _HeroChips {
 class MediaDetailScreen extends StatefulWidget {
   final MediaItem metadata;
   final bool isOffline;
+  /// Ordered movies from the Discover rail used to open this TV screen.
+  final List<MediaItem>? movieBrowseItems;
 
   /// If provided, auto-selects this season index when the screen loads.
   /// Used when navigating to a show from a season context.
@@ -300,6 +302,7 @@ class MediaDetailScreen extends StatefulWidget {
     super.key,
     required this.metadata,
     this.isOffline = false,
+    this.movieBrowseItems,
     this.initialSeasonIndex,
     this.initialSeasonId,
     this.initialEpisodeId,
@@ -312,6 +315,7 @@ class MediaDetailScreen extends StatefulWidget {
 PageRoute<bool> mediaDetailRoute({
   required MediaItem metadata,
   bool isOffline = false,
+  List<MediaItem>? movieBrowseItems,
   int? initialSeasonIndex,
   String? initialSeasonId,
   String? initialEpisodeId,
@@ -319,6 +323,7 @@ PageRoute<bool> mediaDetailRoute({
   final page = MediaDetailScreen(
     metadata: metadata,
     isOffline: isOffline,
+    movieBrowseItems: movieBrowseItems,
     initialSeasonIndex: initialSeasonIndex,
     initialSeasonId: initialSeasonId,
     initialEpisodeId: initialEpisodeId,
@@ -395,6 +400,14 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
   final _tvDetailRailKey = GlobalKey<TvBrowseRailState>();
   final _movieDetailsRailKey = GlobalKey<TvBrowseRailState>();
   final _movieDetailsInfoFocusNode = FocusNode(debugLabel: 'movie_more_details_info');
+  // Stable focus bindings across watch-state or metadata rebuilds.
+  final List<GlobalKey<FocusableActionBarState>> _movieActionRowKeys = [
+    GlobalKey<FocusableActionBarState>(),
+    GlobalKey<FocusableActionBarState>(),
+    GlobalKey<FocusableActionBarState>(),
+  ];
+  bool _movieInitialFocusScheduled = false;
+  bool _movieTransitioning = false;
   final _hubFocusMemory = HubFocusMemory();
   PageRoute<dynamic>? _route;
   RouteObserver<PageRoute<dynamic>>? _routeObserver;
@@ -1041,6 +1054,24 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     if (!_suppressBackAfterPop || !event.logicalKey.isBackKey) return false;
     if (event is KeyUpEvent) _suppressBackAfterPop = false;
     return true;
+  }
+
+  /// Navigate in the exact Discover movie row, without stacking detail routes.
+  Future<void> _navigateToAdjacentMovie(int direction) async {
+    if (!_canUseDetail || _movieTransitioning || !PlatformDetector.isTV()) return;
+    final movies = widget.movieBrowseItems;
+    if (movies == null || movies.isEmpty) return;
+    final index = movies.indexWhere((movie) => movie.globalKey == widget.metadata.globalKey);
+    final nextIndex = index + direction;
+    if (index < 0 || nextIndex < 0 || nextIndex >= movies.length) return;
+    _movieTransitioning = true;
+    await PlexTrailerPreview.stop();
+    if (!_canUseDetail) return;
+    unawaited(Navigator.pushReplacement<bool, bool>(
+      context,
+      mediaDetailRoute(metadata: movies[nextIndex], isOffline: widget.isOffline, movieBrowseItems: movies),
+      result: _watchStateChanged,
+    ));
   }
 
   KeyEventResult _handleMediaDetailBackKey(FocusNode _, KeyEvent event) {
@@ -3535,6 +3566,14 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     final headerHeight = isTv ? size.height : math.max(size.height * 0.6, heroFloor);
 
     if (isTv && metadata.isMovie) {
+      if (!_movieInitialFocusScheduled) {
+        _movieInitialFocusScheduled = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_canUseDetail && _playButtonFocusNode.canRequestFocus) {
+            _playButtonFocusNode.requestFocus();
+          }
+        });
+      }
       // The former More Details sheet is now the movie's sole TV detail page.
       // Keep the sheet itself (including its poster, actions and synopsis)
       // instead of building the old hero underneath it.
