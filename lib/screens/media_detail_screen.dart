@@ -4490,7 +4490,10 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                              ),
                              child: Icon(icon, size: 15, color: Colors.white),
                            );
-                           return Row(
+                           // Keep a constant row height so the origin label never jumps with focus.
+                           return SizedBox(
+                             height: 24,
+                             child: Row(
                              children: [
                                if (showArrows)
                                  Transform.translate(offset: const Offset(-7, 9), child: arrow(Icons.arrow_back_ios_new_rounded))
@@ -4516,6 +4519,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                                else
                                  const SizedBox(width: 24),
                              ],
+                             ),
                            );
                          },
                        ),
