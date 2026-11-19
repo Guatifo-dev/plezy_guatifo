@@ -304,7 +304,7 @@ Future<MediaNavigationResult> navigateToMediaItem(
         }
         return MediaNavigationResult.navigated;
       }
-      return navigateToMediaItemDetails(context, mi, isOffline: isOffline, onRefresh: onRefresh, movieBrowseItems: movieBrowseItems, onMovieSelectionChanged: onMovieSelectionChanged);
+      return navigateToMediaItemDetails(context, mi, isOffline: isOffline, onRefresh: onRefresh, movieBrowseItems: movieBrowseItems, onMovieSelectionChanged: onMovieSelectionChanged, movieOriginLabel: movieOriginLabel);
 
     case MediaKind.season:
       return navigateToMediaItemDetails(context, mi, isOffline: isOffline, onRefresh: onRefresh);
@@ -322,6 +322,7 @@ Future<MediaNavigationResult> navigateToMediaItemDetails(
   MediaItem? metadataOverride,
   List<MediaItem>? movieBrowseItems,
   ValueChanged<MediaItem>? onMovieSelectionChanged,
+  String? movieOriginLabel,
 }) async {
   // Catalog stand-ins (Explore tab) must never reach MediaDetailScreen — it
   // hard-requires a server id. Guarded here (not only in navigateToMediaItem)
