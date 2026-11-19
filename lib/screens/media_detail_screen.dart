@@ -335,6 +335,19 @@ PageRoute<bool> mediaDetailRoute({
     opaque: true,
     pageBuilder: (_, _, _) => page,
     transitionsBuilder: (_, animation, _, child) {
+      if (metadata.isMovie) {
+        // Preserve the original bottom-to-top entrance of More Details.
+        return SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0, 1), end: Offset.zero,
+          ).animate(CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeInCubic,
+          )),
+          child: child,
+        );
+      }
       return FadeTransition(
         opacity: CurvedAnimation(parent: animation, curve: Curves.easeOutCubic, reverseCurve: Curves.easeInCubic),
         child: child,
