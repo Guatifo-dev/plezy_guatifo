@@ -9,6 +9,7 @@ import '../utils/media_quality_labels.dart';
 import 'bottom_sheet_page_scaffold.dart';
 import 'fitted_metadata_line.dart';
 import 'media_rating_badge.dart';
+import 'selected_media_format_badges.dart';
 
 /// The complete, non-truncating version of a detail hero's information block:
 /// every metadata field, every rating badge, the genres, and the full
@@ -138,7 +139,11 @@ class _MediaDetailsSheetState extends State<MediaDetailsSheet> {
                   ),
                   style: metadataStyle,
                 ),
-              if (genres.isNotEmpty) ...[
+              if (widget.emphasizeSynopsis && item.isMovie) ...[
+                const SizedBox(height: 10),
+                SelectedMediaFormatBadges(item: item),
+              ],
+              if (genres.isNotEmpty && !widget.emphasizeSynopsis) ...[
                 const SizedBox(height: 8),
                 Text(
                   genres.join(FittedMetadataLine.separator),
@@ -151,7 +156,7 @@ class _MediaDetailsSheetState extends State<MediaDetailsSheet> {
                   Text('Sinopsis', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
                 if (widget.emphasizeSynopsis) const SizedBox(height: 8),
                 Text(description, style: theme.textTheme.bodyLarge?.copyWith(
-                  height: 1.5, fontSize: widget.emphasizeSynopsis ? 19 : null)),
+                  height: 1.42, fontSize: widget.emphasizeSynopsis ? 16 : null)),
               ],
             ],
           ),
