@@ -35,8 +35,10 @@ class MediaDetailsSheet extends StatefulWidget {
   /// Optional TV rail below the sheet: DOWN at the end transfers focus there.
   final VoidCallback? onNavigateDown;
   final FocusNode? informationFocusNode;
+  final bool showTitleHeader;
+  final bool emphasizeSynopsis;
 
-  const MediaDetailsSheet({super.key, required this.item, this.description, this.genres = const [], this.onNavigateDown, this.informationFocusNode});
+  const MediaDetailsSheet({super.key, required this.item, this.description, this.genres = const [], this.onNavigateDown, this.informationFocusNode, this.showTitleHeader = true, this.emphasizeSynopsis = false});
 
   @override
   State<MediaDetailsSheet> createState() => _MediaDetailsSheetState();
@@ -95,7 +97,7 @@ class _MediaDetailsSheetState extends State<MediaDetailsSheet> {
     final metadataStyle = theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600, letterSpacing: 0.1);
 
     return BottomSheetPageScaffold(
-      title: item.displayTitle,
+      title: widget.showTitleHeader ? item.displayTitle : '',
       showHeaderBorder: false,
       // One chrome-less focus stop around the viewport: like the file-info
       // sheet's fields there is nothing to activate, so no focus chrome is
@@ -145,7 +147,11 @@ class _MediaDetailsSheetState extends State<MediaDetailsSheet> {
               ],
               if (description != null && description.isNotEmpty) ...[
                 const SizedBox(height: 16),
-                Text(description, style: theme.textTheme.bodyLarge?.copyWith(height: 1.5)),
+                if (widget.emphasizeSynopsis)
+                  Text('Sinopsis', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                if (widget.emphasizeSynopsis) const SizedBox(height: 8),
+                Text(description, style: theme.textTheme.bodyLarge?.copyWith(
+                  height: 1.5, fontSize: widget.emphasizeSynopsis ? 19 : null)),
               ],
             ],
           ),
