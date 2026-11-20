@@ -4427,28 +4427,12 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                                         if (!enabled || widget.isOffline || !Platform.isAndroid) {
                                           return const SizedBox.shrink();
                                         }
-                                        return ValueListenableBuilder<String?>(
-                                          valueListenable: PlexTrailerPreview.activeTrailerUrl,
-                                          builder: (context, url, _) => ValueListenableBuilder<bool>(
-                                            valueListenable: PlexTrailerPreview.surfaceReady,
-                                            builder: (context, ready, _) => ValueListenableBuilder<bool>(
-                                              valueListenable: PlexTrailerPreview.trailerFinished,
-                                              builder: (context, finished, _) => Stack(
-                                                fit: StackFit.expand,
-                                                children: [
-                                                  PlexTrailerPreview(
-                                                    key: ValueKey(metadata.globalKey),
-                                                    item: metadata,
-                                                    client: _getMediaClientForMetadata(context),
-                                                  ),
-                                                  if (url == null || !ready || finished)
-                                                    const IgnorePointer(
-                                                      child: SizedBox.expand(),
-                                                    ),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
+                                        final trailerClient = _getMediaClientForMetadata(context);
+                                        if (trailerClient == null) return const SizedBox.shrink();
+                                        return PlexTrailerPreview(
+                                          key: ValueKey(metadata.globalKey),
+                                          item: metadata,
+                                          client: trailerClient,
                                         );
                                       },
                                     ),
