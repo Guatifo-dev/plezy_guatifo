@@ -258,7 +258,7 @@ class _ActorMediaScreenState extends BaseMediaListDetailScreen<ActorMediaScreen>
               ConstrainedBox(
                 constraints: BoxConstraints(
                   maxWidth: _biographyMaxWidth,
-                  if (PlatformDetector.isTV()) maxHeight: 92,
+                  maxHeight: PlatformDetector.isTV() ? 92 : double.infinity,
                 ),
                 child: PlatformDetector.isTV()
                     ? SingleChildScrollView(
@@ -267,7 +267,6 @@ class _ActorMediaScreenState extends BaseMediaListDetailScreen<ActorMediaScreen>
                       )
                     : _buildBiographyText(biography, theme),
               ),
-
             ],
           ],
         ),
