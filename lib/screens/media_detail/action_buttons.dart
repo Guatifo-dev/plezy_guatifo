@@ -405,6 +405,19 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
           )
         : null;
 
+    final castAction = threeRowLayout && metadata.isMovie
+        ? FocusableAction(
+            debugLabel: 'detail_movie_cast',
+            onPressed: () => _openTvMovieCastPanel(metadata),
+            builder: (context, state) => iconActionButton(
+              state,
+              onPressed: () => _openTvMovieCastPanel(metadata),
+              icon: const AppIcon(Symbols.group_rounded, fill: 1),
+              tooltip: t.discover.cast,
+            ),
+          )
+        : null;
+
     final allActions = <FocusableAction>[
       playAction,
       ?versionAction,
@@ -494,6 +507,7 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
             ?downloadAction,
             watchedAction,
             ?watchlistAction,
+            ?castAction,
             ?moreActionsAction,
           ];
           final secondRow = remaining.take(3).toList();
