@@ -59,6 +59,18 @@ class _PlexTrailerPreviewState extends State<PlexTrailerPreview> with WidgetsBin
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // A new visible route gets its own full wait, but only while the
+    // shared trailer has not started. An active trailer keeps playing.
+    _TrailerPreviewSession.enterRoute(
+      ModalRoute.of(context),
+      widget.item,
+      widget.client,
+    );
+  }
+
+  @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
       // A preview is never allowed to keep playing after Plezy leaves the
@@ -127,6 +139,7 @@ abstract final class _TrailerPreviewSession {
   static final ValueNotifier<bool> finished = ValueNotifier<bool>(false);
   static bool _channelHandlerInstalled = false;
   static Object? _lastPreparedRoute;
+  static Object? _lastPendingRoute;
   static Timer? _timer;
   static Timer? _orphanStopTimer;
   // Allow the detail route to finish popping and Discover to reattach its
@@ -173,6 +186,18 @@ abstract final class _TrailerPreviewSession {
     _lastPreparedRoute = routeToken;
     if (url.value != null) surfaceReady.value = false;
   }
+  static void enterRoute(Object? route, MediaItem item, MediaServerClient client) {
+    if (route == null || identical(_lastPendingRoute, route)) return;
+    final hadPendingTrailer = _itemKey == item.globalKey && url.value == null && _timer != null;
+    final wasOnAnotherRoute = _lastPendingRoute != null;
+    _lastPendingRoute = route;
+    if (!wasOnAnotherRoute || !hadPendingTrailer) return;
+    _timer?.cancel();
+    final generation = ++_generation;
+    debugPrint('[TrailerPreview] Restarting pending delay after route change');
+    _timer = Timer(_settleDelay, () => _load(item, client, generation));
+  }
+
   static String? _itemKey;
   static int _generation = 0;
   static Future<void> _pendingNativeStop = Future<void>.value();
@@ -245,6 +270,7 @@ abstract final class _TrailerPreviewSession {
     _generation++;
     _itemKey = null;
     _lastPreparedRoute = null;
+    _lastPendingRoute = null;
     surfaceReady.value = true;
     url.value = null;
     await _stopNative();
