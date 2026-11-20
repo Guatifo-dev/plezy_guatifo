@@ -1743,7 +1743,8 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                       child: Text('No hay información de reparto disponible.'),
                     )
                   else
-                    SizedBox(
+                    ClipRect(
+                      child: SizedBox(
                       height: CastMemberStrip.heightForCardWidth(cardWidth),
                       child: CastMemberStrip(
                         key: stripKey,
@@ -1770,6 +1771,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                           ));
                         },
                         debugLabel: 'tv_movie_cast_dialog',
+                      ),
                       ),
                     ),
                 ],
