@@ -1745,7 +1745,13 @@ class _DiscoverScreenState extends State<DiscoverScreen>
           onRefresh: _refreshDiscoverItem,
           movieBrowseItems: movies,
           movieOriginLabel: hub.title,
-          onMovieSelectionChanged: (movie) => selectedMovie = movie,
+          onMovieSelectionChanged: (movie) {
+            selectedMovie = movie;
+            // Synchronize the covered Discover spotlight before the detail
+            // route is replaced. On Back the same movie is already selected,
+            // avoiding a stale trailer session and a fresh preview delay.
+            if (mounted) _setSpotlightItem(movie);
+          },
         );
         if (mounted) {
           // The details carousel can leave on a different movie than the one
