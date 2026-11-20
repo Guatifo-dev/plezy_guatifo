@@ -340,15 +340,15 @@ class _ActorMediaScreenState extends BaseMediaListDetailScreen<ActorMediaScreen>
   Widget _buildTvActorPanel() {
     final theme = Theme.of(context);
     final screenSize = MediaQuery.sizeOf(context);
-    // Reserve room for the pinned app bar and TV overscan.
-    final maxPanelHeight = screenSize.height * 0.79;
-    final posterHeight = (screenSize.height * 0.225).clamp(112.0, 170.0);
+    // Fixed TV panel: keep the actor header stationary and reserve poster space.
+    final panelHeight = screenSize.height * 0.90;
+    final posterHeight = (screenSize.height * 0.28).clamp(145.0, 210.0);
     final posterWidth = posterHeight * 2 / 3;
     return SliverToBoxAdapter(
       child: Center(
         child: Container(
           width: screenSize.width * 0.94,
-          constraints: BoxConstraints(maxHeight: maxPanelHeight),
+          height: panelHeight,
           margin: const EdgeInsets.symmetric(vertical: 10),
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
@@ -359,7 +359,7 @@ class _ActorMediaScreenState extends BaseMediaListDetailScreen<ActorMediaScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildActorHeaderContent(),
+              Expanded(child: _buildActorHeaderContent()),
               if (hasItems) ...[
                 const SizedBox(height: 12),
                 Text('Filmografía en mi biblioteca', style: theme.textTheme.titleMedium),
