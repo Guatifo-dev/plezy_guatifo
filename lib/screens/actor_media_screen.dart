@@ -237,7 +237,7 @@ class _ActorMediaScreenState extends BaseMediaListDetailScreen<ActorMediaScreen>
             Row(
               children: [
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(40),
+                  borderRadius: BorderRadius.circular(4),
                   child: OptimizedMediaImage(
                     client: _mediaClientOrNull,
                     imagePath: widget.actorThumb,
