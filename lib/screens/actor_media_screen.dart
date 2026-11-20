@@ -262,7 +262,7 @@ class _ActorMediaScreenState extends BaseMediaListDetailScreen<ActorMediaScreen>
                   style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
                   focusNode: _biographyFocusNode,
                   onOverflowChanged: (overflows) => setState(() => _biographyExpandable = overflows),
-                  onNavigateUp: navigateToAppBar,
+                  onNavigateUp: PlatformDetector.isTV() ? () {} : navigateToAppBar,
                   onNavigateDown: navigateToGrid,
                   onNavigateLeft: () {},
                   onNavigateRight: () {},
@@ -356,9 +356,10 @@ class _ActorMediaScreenState extends BaseMediaListDetailScreen<ActorMediaScreen>
                 Text('Filmografía en mi biblioteca', style: theme.textTheme.titleMedium),
                 const SizedBox(height: 8),
                 SizedBox(
-                  height: posterHeight,
+                  height: posterHeight + 20,
                   child: ClipRect(
                     child: ListView.separated(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                       scrollDirection: Axis.horizontal,
                       itemCount: totalSize,
                       separatorBuilder: (_, _) => const SizedBox(width: 14),
@@ -401,12 +402,13 @@ class _ActorMediaScreenState extends BaseMediaListDetailScreen<ActorMediaScreen>
   Widget build(BuildContext context) {
     return buildDetailScaffold(
       slivers: [
-        CustomAppBar(
-          title: Text(widget.actorName),
-          pinned: true,
-          actions: buildFocusableAppBarActions(),
-          onBackPressed: popFromAppBar,
-        ),
+        if (!PlatformDetector.isTV())
+          CustomAppBar(
+            title: Text(widget.actorName),
+            pinned: true,
+            actions: buildFocusableAppBarActions(),
+            onBackPressed: popFromAppBar,
+          ),
         if (PlatformDetector.isTV()) _buildTvActorPanel() else _buildActorHeader(),
         ...buildStateSlivers(),
         if (hasItems && !PlatformDetector.isTV())
