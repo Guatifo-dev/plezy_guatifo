@@ -58,6 +58,7 @@ import '../widgets/settings_builder.dart';
 import '../widgets/fitting_title_text.dart';
 import '../widgets/tv_browse_rail.dart';
 import '../widgets/tv_spotlight_scaffold.dart';
+import '../widgets/plex_trailer_preview.dart';
 import '../mixins/refreshable.dart';
 import '../mixins/tab_visibility_aware.dart';
 import '../i18n/strings.g.dart';
@@ -957,6 +958,10 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   }
 
   void _navigateToSidebar() {
+    // Leaving Discover's posters for the sidebar is not a route handoff.
+    // Stop immediately; keep the shared session's three-second grace period
+    // intact for Discover <-> movie detail navigation.
+    if (PlatformDetector.isTV()) unawaited(PlexTrailerPreview.stop());
     MainScreenFocusScope.focusSidebarOf(context);
   }
 
