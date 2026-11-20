@@ -368,13 +368,9 @@ PageRoute<bool> mediaDetailRoute({
   if (!PlatformDetector.isTV()) return MaterialPageRoute<bool>(builder: (_) => page);
 
   return PageRouteBuilder<bool>(
-    // Opaque so the covered route stops painting/building once the fade
-    // completes (the framework only offstages routes below after the
-    // transition settles, so push/pop fades still composite over live
-    // content). The detail screen paints a full-screen opaque background
-    // immediately, and the video player route is itself opaque and never
-    // sits below a detail route, so nothing can leak through.
-    opaque: true,
+    // TV movie details are an overlay: keep the originating Discover/library
+    // screen painted underneath. Non-movie details retain their opaque route.
+    opaque: !metadata.isMovie,
     pageBuilder: (_, _, _) => page,
     transitionsBuilder: (_, animation, _, child) {
       if (metadata.isMovie) {
@@ -3659,6 +3655,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
           return _handleMediaDetailBackKey(node, event);
         },
         child: Scaffold(
+          backgroundColor: Colors.transparent,
           body: Center(
             child: _buildTvMovieMoreDetailsSheet(
               movieItem, movieDescription, metadata.genres ?? const <String>[], metadata,
