@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:async';
 import 'dart:math' as math;
 import '../media/ids.dart';
@@ -4424,7 +4425,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                                     SettingValueBuilder<bool>(
                                       pref: SettingsService.plexTrailerPreview,
                                       builder: (context, enabled, _) {
-                                        if (!enabled || widget.isOffline || !PlatformDetector.isAndroid()) {
+                                        if (!enabled || widget.isOffline || !Platform.isAndroid) {
                                           return const SizedBox.shrink();
                                         }
                                         final trailerClient = _getMediaClientForMetadata(context);
