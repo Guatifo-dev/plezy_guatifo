@@ -1444,7 +1444,10 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
         // Active-hub state is observed through _focusModel so a hub move
         // repaints only the two affected headers/artwork tints; the row content
         // below is passed through as a stable child.
-        bool isActiveHub() => _focusModel.hubIndex == hubIndex;
+        (bool, int) headerSelection() => (
+          _focusModel.hubIndex == hubIndex,
+          _focusModel.hubIndex == hubIndex ? _focusModel.position.$2 : -1,
+        );
 
         return SnapshotWidget(
           controller: _verticalScrollSnapshotController,
@@ -1456,11 +1459,17 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
             child: Column(
               crossAxisAlignment: .stretch,
               children: [
-                ListenableSelector<bool>(
+                ListenableSelector<(bool, int)>(
                   listenable: _focusModel,
-                  selector: isActiveHub,
-                  builder: (context, isActive, _) =>
-                      _buildHubHeader(context, hub: hub, hubIndex: hubIndex, isActive: isActive, scale: scale),
+                  selector: headerSelection,
+                  builder: (context, selection, _) => _buildHubHeader(
+                    context,
+                    hub: hub,
+                    hubIndex: hubIndex,
+                    isActive: selection.$1,
+                    selectedSlot: selection.$2,
+                    scale: scale,
+                  ),
                 ),
                 _buildHubRail(
                   hub: hub,
@@ -1550,12 +1559,17 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
     required MediaHub hub,
     required int hubIndex,
     required bool isActive,
+    required int selectedSlot,
     required double scale,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
     final titleColor = isActive ? colorScheme.onSurface : colorScheme.onSurface.withValues(alpha: 0.54);
     final iconColor = isActive ? colorScheme.onSurface : colorScheme.onSurface.withValues(alpha: 0.42);
     final showServerName = widget.showServerName && hub.serverName != null;
+    final totalItems = hub.items.length;
+    final selectedItemIndex = selectedSlot - _leadingCountFor(hub);
+    final showPosition = isActive && totalItems > 0 &&
+        selectedItemIndex >= 0 && selectedItemIndex < totalItems;
     final serverColor = colorScheme.primary.withValues(alpha: isActive ? 0.7 : 0.4);
     final serverStyle = Theme.of(
       context,
@@ -1586,6 +1600,19 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
                         ),
                       ),
                     ),
+                    if (showPosition) ...[
+                      SizedBox(width: 18 * scale),
+                      Text(
+                        '(${selectedItemIndex + 1}/$totalItems)',
+                        maxLines: 1,
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          color: titleColor.withValues(alpha: 0.78),
+                          fontSize: 16 * scale,
+                          height: 1,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                     if (showServerName) ...[
                       SizedBox(width: 8 * scale),
                       Text('•', style: serverStyle),
