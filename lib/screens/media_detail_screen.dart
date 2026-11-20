@@ -4415,7 +4415,45 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                                   colors: [Colors.white, Colors.white, Color(0xAAFFFFFF), Colors.transparent],
                                   stops: [0.0, 0.62, 0.80, 1.0],
                                 ).createShader(rect),
-                                child: fanart,
+                                child: Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    fanart,
+                                    // Reuse the existing shared Plex trailer session.
+                                    // The entire stack keeps the approved fanart gradients.
+                                    SettingValueBuilder<bool>(
+                                      pref: SettingsService.plexTrailerPreview,
+                                      builder: (context, enabled, _) {
+                                        if (!enabled || widget.isOffline || !Platform.isAndroid) {
+                                          return const SizedBox.shrink();
+                                        }
+                                        return ValueListenableBuilder<String?>(
+                                          valueListenable: PlexTrailerPreview.activeTrailerUrl,
+                                          builder: (context, url, _) => ValueListenableBuilder<bool>(
+                                            valueListenable: PlexTrailerPreview.surfaceReady,
+                                            builder: (context, ready, _) => ValueListenableBuilder<bool>(
+                                              valueListenable: PlexTrailerPreview.trailerFinished,
+                                              builder: (context, finished, _) => Stack(
+                                                fit: StackFit.expand,
+                                                children: [
+                                                  PlexTrailerPreview(
+                                                    key: ValueKey(metadata.globalKey),
+                                                    item: metadata,
+                                                    client: _getMediaClientForMetadata(context),
+                                                  ),
+                                                  if (url == null || !ready || finished)
+                                                    const IgnorePointer(
+                                                      child: SizedBox.expand(),
+                                                    ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
