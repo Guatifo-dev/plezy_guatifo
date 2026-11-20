@@ -1753,8 +1753,21 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                         ],
                         imageClient: imageClient,
                         onMemberTap: (index) {
-                          Navigator.of(dialogContext).pop();
-                          _navigateToActorMedia(actors[index]);
+                          final actor = actors[index];
+                          final personId = actor.id;
+                          final serverId = metadata.serverId;
+                          if (personId == null || personId.isEmpty || serverId == null) return;
+                          // Leave the cast dialog on the navigator stack.
+                          unawaited(navigateToPersonMedia(
+                            dialogContext,
+                            personId: personId,
+                            name: actor.tag,
+                            thumbPath: actor.thumbPath,
+                            characterName: actor.role,
+                            serverId: serverId,
+                            serverName: metadata.serverName,
+                            backend: metadata.backend,
+                          ));
                         },
                         debugLabel: 'tv_movie_cast_dialog',
                       ),
@@ -4569,7 +4582,15 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                            final movies = widget.movieBrowseItems;
                            final showArrows = _playButtonFocusNode.hasFocus && movies != null && movies.length > 1;
                            final origin = widget.movieOriginLabel?.trim() ?? '';
-                           if (!showArrows && origin.isEmpty) return const SizedBox.shrink();
+                           final currentMovieIndex = movies?.indexWhere(
+                              (movie) => movie.globalKey == widget.metadata.globalKey,
+                            ) ?? -1;
+                            final positionLabel = currentMovieIndex >= 0
+                                ? '(${currentMovieIndex + 1}/${movies!.length})'
+                                : '';
+                            if (!showArrows && origin.isEmpty && positionLabel.isEmpty) {
+                              return const SizedBox.shrink();
+                            }
                            Widget arrow(IconData icon) => Container(
                              width: 24,
                              height: 24,
@@ -4592,9 +4613,16 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                                Expanded(
                                  child: Transform.translate(
                                    offset: const Offset(0, 12),
-                                   child: Text(
-                                   origin,
-                                   maxLines: 1,
+                                   child: Text.rich(
+                                    TextSpan(children: [
+                                      TextSpan(text: origin),
+                                      if (positionLabel.isNotEmpty)
+                                        TextSpan(
+                                          text: '${origin.isNotEmpty ? '    ' : ''}$positionLabel',
+                                          style: TextStyle(color: Colors.white.withValues(alpha: 0.58)),
+                                        ),
+                                    ]),
+                                    maxLines: 1,
                                    overflow: TextOverflow.ellipsis,
                                    textAlign: TextAlign.center,
                                    style: theme.textTheme.bodySmall?.copyWith(
