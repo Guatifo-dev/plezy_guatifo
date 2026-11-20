@@ -1432,6 +1432,11 @@ class _MainScreenState extends State<MainScreen>
   }
 
   void _focusSidebar() {
+    // Back from Discover can be handled by MainScreen instead of DiscoverScreen.
+    // This is a focus exit, not a route handoff: stop the native trailer now.
+    if (_currentTab == NavigationTabId.discover && !_isSidebarFocused) {
+      unawaited(PlexTrailerPreview.stop());
+    }
     // Capture target before requestFocus() auto-focuses a sidebar descendant
     // and overwrites lastFocusedKey (e.g. to the Libraries toggle button).
     final targetKey = _sideNavKey.currentState?.lastFocusedKey;
