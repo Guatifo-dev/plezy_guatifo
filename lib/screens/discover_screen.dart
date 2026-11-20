@@ -1748,6 +1748,10 @@ class _DiscoverScreenState extends State<DiscoverScreen>
           onMovieSelectionChanged: (movie) => selectedMovie = movie,
         );
         if (mounted) {
+          // The details carousel can leave on a different movie than the one
+          // originally opened. Restore the spotlight immediately so its shared
+          // trailer session matches the movie before the rail regains focus.
+          _setSpotlightItem(selectedMovie);
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) _tvBrowseRailKey.currentState?.restoreMovieFocus(hub, selectedMovie);
           });
