@@ -73,6 +73,7 @@ class _ActorMediaScreenState extends BaseMediaListDetailScreen<ActorMediaScreen>
   MediaPersonDetails _details = MediaPersonDetails.empty;
   String? _focusedCharacter;
   String? _focusedFilmId;
+  String? _focusedFilmTitle;
   final Map<String, String?> _characterCache = {};
 
 
@@ -178,6 +179,7 @@ class _ActorMediaScreenState extends BaseMediaListDetailScreen<ActorMediaScreen>
     if (_focusedFilmId != id) {
       setState(() {
         _focusedFilmId = id;
+        _focusedFilmTitle = item.title;
         _focusedCharacter = _characterCache[id] ?? _characterFromRoles(item);
       });
     }
@@ -257,12 +259,16 @@ class _ActorMediaScreenState extends BaseMediaListDetailScreen<ActorMediaScreen>
                         maxLines: 2,
                         overflow: .ellipsis,
                       ),
-                      if ((PlatformDetector.isTV() ? _focusedCharacter ?? (_focusedFilmId == null ? widget.characterName : null) : widget.characterName) != null) ...[
+                      if ((PlatformDetector.isTV()
+                              ? (_focusedFilmId == null ? widget.characterName : _focusedCharacter)
+                              : widget.characterName) case final character?) ...[
                         const SizedBox(height: 4),
                         Text(
-                          (PlatformDetector.isTV() ? _focusedCharacter ?? widget.characterName : widget.characterName)!,
+                          PlatformDetector.isTV() && _focusedFilmTitle != null
+                              ? 'Interpreta a "$character" en "${_focusedFilmTitle!}"'
+                              : character,
                           style: theme.textTheme.bodyMedium?.copyWith(color: mutedColor),
-                          maxLines: 1,
+                          maxLines: 2,
                           overflow: .ellipsis,
                         ),
                       ],
