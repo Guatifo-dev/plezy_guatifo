@@ -71,6 +71,10 @@ class _ActorMediaScreenState extends BaseMediaListDetailScreen<ActorMediaScreen>
   final AbortController _detailsAbort = AbortController();
   late final FocusNode _biographyFocusNode = FocusNode(debugLabel: 'person_biography');
   MediaPersonDetails _details = MediaPersonDetails.empty;
+  String? _focusedCharacter;
+  String? _focusedFilmId;
+  final Map<String, String?> _characterCache = {};
+
 
   /// Whether the biography is truncated, so D-pad focus has a reason to stop
   /// on it (SELECT expands it) between the grid and the app bar.
@@ -158,6 +162,44 @@ class _ActorMediaScreenState extends BaseMediaListDetailScreen<ActorMediaScreen>
 
   void _focusBiography() => _biographyFocusNode.requestFocus();
 
+  String? _characterFromRoles(MediaItem item) {
+    for (final person in item.roles ?? const []) {
+      if ((person.id != null && person.id == widget.personId) ||
+          person.tag.trim().toLowerCase() == widget.actorName.trim().toLowerCase()) {
+        final role = person.role?.trim();
+        return role == null || role.isEmpty ? null : role;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _updateFocusedCharacter(MediaItem item) async {
+    final id = item.id;
+    if (_focusedFilmId != id) {
+      setState(() {
+        _focusedFilmId = id;
+        _focusedCharacter = _characterCache[id] ?? _characterFromRoles(item);
+      });
+    }
+    if (_characterCache.containsKey(id)) return;
+    final inlineRole = _characterFromRoles(item);
+    if (inlineRole != null) {
+      _characterCache[id] = inlineRole;
+      return;
+    }
+    final client = _mediaClientOrNull;
+    if (client == null) return;
+    try {
+      final fullItem = await client.fetchItem(id);
+      if (!mounted) return;
+      final role = fullItem == null ? null : _characterFromRoles(fullItem);
+      _characterCache[id] = role;
+      if (_focusedFilmId == id) setState(() => _focusedCharacter = role);
+    } catch (error, stackTrace) {
+      appLogger.w('Actor role lookup failed for $id', error: error, stackTrace: stackTrace);
+    }
+  }
+
   @override
   Future<LibraryPage<MediaItem>> fetchPage(int start, int size, AbortController? abort) {
     return _mediaClient.fetchPersonMediaPage(widget.personId, start: start, size: size, abort: abort);
@@ -215,10 +257,10 @@ class _ActorMediaScreenState extends BaseMediaListDetailScreen<ActorMediaScreen>
                         maxLines: 2,
                         overflow: .ellipsis,
                       ),
-                      if (widget.characterName != null) ...[
+                      if ((PlatformDetector.isTV() ? _focusedCharacter ?? (_focusedFilmId == null ? widget.characterName : null) : widget.characterName) != null) ...[
                         const SizedBox(height: 4),
                         Text(
-                          widget.characterName!,
+                          (PlatformDetector.isTV() ? _focusedCharacter ?? widget.characterName : widget.characterName)!,
                           style: theme.textTheme.bodyMedium?.copyWith(color: mutedColor),
                           maxLines: 1,
                           overflow: .ellipsis,
@@ -253,7 +295,7 @@ class _ActorMediaScreenState extends BaseMediaListDetailScreen<ActorMediaScreen>
                 ),
               ],
             ),
-            if (biography != null) ...[
+            if (biography != null && !PlatformDetector.isTV()) ...[
               const SizedBox(height: 12),
               ConstrainedBox(
                 constraints: BoxConstraints(
@@ -342,7 +384,7 @@ class _ActorMediaScreenState extends BaseMediaListDetailScreen<ActorMediaScreen>
     final screenSize = MediaQuery.sizeOf(context);
     // Fixed TV panel: keep the actor header stationary and reserve poster space.
     final panelHeight = screenSize.height * 0.90;
-    final posterHeight = (screenSize.height * 0.28).clamp(145.0, 210.0);
+    final posterHeight = (screenSize.height * 0.34).clamp(160.0, 245.0);
     final posterWidth = posterHeight * 2 / 3;
     return SliverToBoxAdapter(
       child: Center(
@@ -389,9 +431,12 @@ class _ActorMediaScreenState extends BaseMediaListDetailScreen<ActorMediaScreen>
                             fullBleedImage: true,
                             disableScale: true,
                             onTap: () => unawaited(_showFilmographyInfo(item)),
-                            onNavigateUp: _biographyExpandable ? _focusBiography : null,
+                            onNavigateUp: null,
                             onBack: handleBackFromContent,
-                            onFocusChange: (focused) => trackGridItemFocus(index, focused),
+                            onFocusChange: (focused) {
+                              trackGridItemFocus(index, focused);
+                              if (focused) unawaited(_updateFocusedCharacter(item));
+                            },
                           ),
                         );
                       },
