@@ -256,23 +256,35 @@ class _ActorMediaScreenState extends BaseMediaListDetailScreen<ActorMediaScreen>
             if (biography != null) ...[
               const SizedBox(height: 12),
               ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: _biographyMaxWidth),
-                child: CollapsibleText(
-                  text: biography,
-                  style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
-                  focusNode: _biographyFocusNode,
-                  onOverflowChanged: (overflows) => setState(() => _biographyExpandable = overflows),
-                  onNavigateUp: PlatformDetector.isTV() ? () {} : navigateToAppBar,
-                  onNavigateDown: navigateToGrid,
-                  onNavigateLeft: () {},
-                  onNavigateRight: () {},
+                constraints: BoxConstraints(
+                  maxWidth: _biographyMaxWidth,
+                  if (PlatformDetector.isTV()) maxHeight: 92,
                 ),
+                child: PlatformDetector.isTV()
+                    ? SingleChildScrollView(
+                        primary: false,
+                        child: _buildBiographyText(biography, theme),
+                      )
+                    : _buildBiographyText(biography, theme),
               ),
+
             ],
           ],
         ),
     );
   }
+
+  Widget _buildBiographyText(String biography, ThemeData theme) => CollapsibleText(
+    text: biography,
+    maxLines: PlatformDetector.isTV() ? 3 : 4,
+    style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
+    focusNode: _biographyFocusNode,
+    onOverflowChanged: (overflows) => setState(() => _biographyExpandable = overflows),
+    onNavigateUp: PlatformDetector.isTV() ? () {} : navigateToAppBar,
+    onNavigateDown: navigateToGrid,
+    onNavigateLeft: () {},
+    onNavigateRight: () {},
+  );
 
   Widget _buildActorHeader() => SliverToBoxAdapter(child: _buildActorHeaderContent());
 
@@ -345,9 +357,7 @@ class _ActorMediaScreenState extends BaseMediaListDetailScreen<ActorMediaScreen>
             borderRadius: BorderRadius.circular(22),
             border: Border.all(color: Colors.white, width: 2),
           ),
-          child: SingleChildScrollView(
-            primary: false,
-            child: Column(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildActorHeaderContent(),
@@ -391,7 +401,6 @@ class _ActorMediaScreenState extends BaseMediaListDetailScreen<ActorMediaScreen>
                 ),
               ],
             ],
-            ),
           ),
         ),
       ),
