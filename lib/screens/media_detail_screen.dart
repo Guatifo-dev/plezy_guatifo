@@ -1698,6 +1698,76 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     return downloadProvider.syncRuleKeyForClient(client, metadata.id, serverId: ServerId(serverId));
   }
 
+  Future<void> _openTvMovieCastPanel(MediaItem metadata) async {
+    final actors = metadata.roles?.where((actor) => actor.tag.trim().isNotEmpty).toList() ?? <MediaRole>[];
+    final stripKey = GlobalKey<CastMemberStripState>();
+    final imageClient = _getMediaClientForMetadata(context);
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (dialogContext.mounted) stripKey.currentState?.requestFocus();
+        });
+        final width = MediaQuery.sizeOf(dialogContext).width * 0.78;
+        final cardWidth = CastMemberStrip.responsiveCardWidth(dialogContext);
+        return Dialog(
+          backgroundColor: Theme.of(dialogContext).colorScheme.surface.withValues(alpha: 0.96),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(22),
+            side: const BorderSide(color: Colors.white, width: 2),
+          ),
+          child: SizedBox(
+            width: width,
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const AppIcon(Symbols.group_rounded, fill: 1, size: 26),
+                      const SizedBox(width: 12),
+                      Text(t.discover.cast, style: Theme.of(dialogContext).textTheme.titleLarge),
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded),
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  if (actors.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: Text('No hay información de reparto disponible.'),
+                    )
+                  else
+                    SizedBox(
+                      height: CastMemberStrip.heightForCardWidth(cardWidth),
+                      child: CastMemberStrip(
+                        key: stripKey,
+                        members: [
+                          for (final actor in actors)
+                            (name: actor.tag, secondary: actor.role, imagePath: actor.thumbPath),
+                        ],
+                        imageClient: imageClient,
+                        onMemberTap: (index) {
+                          Navigator.of(dialogContext).pop();
+                          _navigateToActorMedia(actors[index]);
+                        },
+                        debugLabel: 'tv_movie_cast_dialog',
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   void _navigateToActorMedia(MediaRole actor) {
     final personId = actor.id;
     if (personId == null || _metadata.serverId == null) return;
