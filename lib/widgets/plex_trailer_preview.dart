@@ -129,6 +129,9 @@ abstract final class _TrailerPreviewSession {
   static Object? _lastPreparedRoute;
   static Timer? _timer;
   static Timer? _orphanStopTimer;
+  // Allow the detail route to finish popping and Discover to reattach its
+  // Android view without retiring the shared playback position.
+  static const Duration _routeHandoffGrace = Duration(seconds: 3);
   static int _attachedWidgets = 0;
 
   static void attachWidget() {
@@ -145,7 +148,7 @@ abstract final class _TrailerPreviewSession {
     // route mounts its replacement. Wait one short handoff window; if no
     // spotlight has claimed the session again, stop native playback entirely.
     _orphanStopTimer?.cancel();
-    _orphanStopTimer = Timer(const Duration(milliseconds: 700), () {
+    _orphanStopTimer = Timer(_routeHandoffGrace, () {
       _orphanStopTimer = null;
       if (_attachedWidgets == 0) unawaited(stop());
     });
