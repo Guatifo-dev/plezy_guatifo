@@ -29,6 +29,7 @@ import '../focus/focusable_action_bar.dart';
 import '../utils/platform_detector.dart';
 import '../services/settings_service.dart';
 import '../widgets/focusable_media_card.dart';
+import '../widgets/cast_member_strip.dart';
 import '../widgets/media_details_sheet.dart';
 
 /// Screen to browse all media featuring a specific actor.
@@ -228,6 +229,7 @@ class _ActorMediaScreenState extends BaseMediaListDetailScreen<ActorMediaScreen>
     final theme = Theme.of(context);
     final mutedColor = theme.colorScheme.onSurfaceVariant;
     final facts = _personFacts();
+    final actorPhotoSize = PlatformDetector.isTV() ? CastMemberStrip.responsiveCardWidth(context) : 80.0;
     final biography = _details.biography;
     return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -241,10 +243,10 @@ class _ActorMediaScreenState extends BaseMediaListDetailScreen<ActorMediaScreen>
                   child: OptimizedMediaImage(
                     client: _mediaClientOrNull,
                     imagePath: widget.actorThumb,
-                    width: 80,
-                    height: 80,
+                    width: actorPhotoSize,
+                    height: actorPhotoSize,
                     fit: BoxFit.cover,
-                    imageType: ImageType.avatar,
+                    imageType: ImageType.square,
                     fallbackIcon: Symbols.person_rounded,
                   ),
                 ),
