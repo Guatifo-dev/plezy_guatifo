@@ -366,7 +366,7 @@ class _ActorMediaScreenState extends BaseMediaListDetailScreen<ActorMediaScreen>
                         final item = loadedItems[index];
                         if (item == null) {
                           ensureIndexLoaded(index, pageSize: _pageSize);
-                          return const SizedBox(width: posterWidth);
+                          return SizedBox(width: posterWidth);
                         }
                         return SizedBox(
                           width: posterWidth,
