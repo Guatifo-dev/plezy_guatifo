@@ -328,27 +328,33 @@ class _ActorMediaScreenState extends BaseMediaListDetailScreen<ActorMediaScreen>
 
   Widget _buildTvActorPanel() {
     final theme = Theme.of(context);
-    const posterWidth = 146.0;
-    const posterHeight = 224.0;
+    final screenSize = MediaQuery.sizeOf(context);
+    // Reserve room for the pinned app bar and TV overscan.
+    final maxPanelHeight = screenSize.height * 0.79;
+    final posterHeight = (screenSize.height * 0.225).clamp(112.0, 170.0);
+    final posterWidth = posterHeight * 2 / 3;
     return SliverToBoxAdapter(
       child: Center(
         child: Container(
-          width: MediaQuery.sizeOf(context).width * 0.94,
-          margin: const EdgeInsets.symmetric(vertical: 18),
-          padding: const EdgeInsets.all(22),
+          width: screenSize.width * 0.94,
+          constraints: BoxConstraints(maxHeight: maxPanelHeight),
+          margin: const EdgeInsets.symmetric(vertical: 10),
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: theme.colorScheme.surface.withValues(alpha: 0.94),
             borderRadius: BorderRadius.circular(22),
             border: Border.all(color: Colors.white, width: 2),
           ),
-          child: Column(
+          child: SingleChildScrollView(
+            primary: false,
+            child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildActorHeaderContent(),
               if (hasItems) ...[
-                const SizedBox(height: 20),
-                Text('Filmografía en mi biblioteca', style: theme.textTheme.titleMedium),
                 const SizedBox(height: 12),
+                Text('Filmografía en mi biblioteca', style: theme.textTheme.titleMedium),
+                const SizedBox(height: 8),
                 SizedBox(
                   height: posterHeight,
                   child: ClipRect(
@@ -384,6 +390,7 @@ class _ActorMediaScreenState extends BaseMediaListDetailScreen<ActorMediaScreen>
                 ),
               ],
             ],
+            ),
           ),
         ),
       ),
