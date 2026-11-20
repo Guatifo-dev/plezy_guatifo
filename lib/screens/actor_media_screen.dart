@@ -26,6 +26,10 @@ import 'base_media_list_detail_screen.dart';
 import 'focusable_detail_screen_mixin.dart';
 import '../mixins/grid_focus_node_mixin.dart';
 import '../focus/focusable_action_bar.dart';
+import '../utils/platform_detector.dart';
+import '../services/settings_service.dart';
+import '../widgets/focusable_media_card.dart';
+import '../widgets/media_details_sheet.dart';
 
 /// Screen to browse all media featuring a specific actor.
 class ActorMediaScreen extends StatefulWidget {
@@ -176,13 +180,12 @@ class _ActorMediaScreenState extends BaseMediaListDetailScreen<ActorMediaScreen>
     return [];
   }
 
-  Widget _buildActorHeader() {
+  Widget _buildActorHeaderContent() {
     final theme = Theme.of(context);
     final mutedColor = theme.colorScheme.onSurfaceVariant;
     final facts = _personFacts();
     final biography = _details.biography;
-    return SliverToBoxAdapter(
-      child: Padding(
+    return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Column(
           crossAxisAlignment: .start,
@@ -268,6 +271,121 @@ class _ActorMediaScreenState extends BaseMediaListDetailScreen<ActorMediaScreen>
             ],
           ],
         ),
+    );
+  }
+
+  Widget _buildActorHeader() => SliverToBoxAdapter(child: _buildActorHeaderContent());
+
+  // Read-only filmography preview: no playback or detail action buttons.
+  Future<void> _showFilmographyInfo(MediaItem item) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        final theme = Theme.of(dialogContext);
+        return Dialog(
+          backgroundColor: theme.colorScheme.surface.withValues(alpha: 0.96),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(22),
+            side: const BorderSide(color: Colors.white, width: 2),
+          ),
+          child: SizedBox(
+            width: MediaQuery.sizeOf(dialogContext).width * 0.86,
+            height: MediaQuery.sizeOf(dialogContext).height * 0.76,
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 180,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: OptimizedMediaImage(
+                        client: _mediaClientOrNull,
+                        imagePath: item.thumbPath,
+                        fit: BoxFit.cover,
+                        imageType: ImageType.poster,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 26),
+                  Expanded(
+                    child: MediaDetailsSheet(
+                      item: item,
+                      description: item.summary,
+                      genres: item.genres ?? const <String>[],
+                      emphasizeSynopsis: true,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildTvActorPanel() {
+    final theme = Theme.of(context);
+    const posterWidth = 146.0;
+    const posterHeight = 224.0;
+    return SliverToBoxAdapter(
+      child: Center(
+        child: Container(
+          width: MediaQuery.sizeOf(context).width * 0.94,
+          margin: const EdgeInsets.symmetric(vertical: 18),
+          padding: const EdgeInsets.all(22),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface.withValues(alpha: 0.94),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: Colors.white, width: 2),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildActorHeaderContent(),
+              if (hasItems) ...[
+                const SizedBox(height: 20),
+                Text('Filmografía en mi biblioteca', style: theme.textTheme.titleMedium),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: posterHeight,
+                  child: ClipRect(
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: totalSize,
+                      separatorBuilder: (_, _) => const SizedBox(width: 14),
+                      itemBuilder: (context, index) {
+                        final item = loadedItems[index];
+                        if (item == null) {
+                          ensureIndexLoaded(index, pageSize: _pageSize);
+                          return const SizedBox(width: posterWidth);
+                        }
+                        return SizedBox(
+                          width: posterWidth,
+                          height: posterHeight,
+                          child: FocusableMediaCard(
+                            key: ValueKey(item.globalKey),
+                            item: item,
+                            focusNode: getGridItemFocusNode(index, debugLabel: 'actor_filmography_$index'),
+                            viewModeOverride: ViewMode.grid,
+                            fullBleedImage: true,
+                            disableScale: true,
+                            onTap: () => unawaited(_showFilmographyInfo(item)),
+                            onNavigateUp: _biographyExpandable ? _focusBiography : null,
+                            onBack: handleBackFromContent,
+                            onFocusChange: (focused) => trackGridItemFocus(index, focused),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -282,13 +400,17 @@ class _ActorMediaScreenState extends BaseMediaListDetailScreen<ActorMediaScreen>
           actions: buildFocusableAppBarActions(),
           onBackPressed: popFromAppBar,
         ),
-        _buildActorHeader(),
+        if (PlatformDetector.isTV()) _buildTvActorPanel() else _buildActorHeader(),
         ...buildStateSlivers(),
-        if (hasItems)
+        if (hasItems && !PlatformDetector.isTV())
           buildSparseFocusableGrid(
             totalItems: totalSize,
             itemAt: (index) => loadedItems[index],
             onRefresh: updateItem,
+            onItemTap: (index) {
+              final item = loadedItems[index];
+              if (item != null) unawaited(_showFilmographyInfo(item));
+            },
             onSkeletonVisible: (index) => ensureIndexLoaded(index, pageSize: _pageSize),
             onFirstRowNavigateUp: _biographyExpandable ? _focusBiography : null,
           ),
