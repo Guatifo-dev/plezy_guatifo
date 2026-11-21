@@ -2713,7 +2713,12 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     final metadata = _metadata;
 
     if (PlatformDetector.isTV()) {
-      if (!metadata.isMovie) _tvDetailRailKey.currentState?.requestFocus();
+      if (metadata.isShow && _seasons.length > 1 && _seasonTabFocusNodes.length > _selectedSeasonIndex) {
+        _seasonTabFocusNodes[_selectedSeasonIndex].requestFocus();
+      } else if (!metadata.isMovie) {
+        _tvDetailActionRowHasFocus = false;
+        _tvDetailRailKey.currentState?.requestFocus();
+      }
       return;
     }
 
@@ -4500,7 +4505,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
               builder: (context, bounds) {
                 final posterWidth = series ? math.min(size.width * 0.19, bounds.maxHeight * (_seasons.length > 1 ? 0.34 : 0.39)) : size.width * 0.19;
                 final posterHeight = posterWidth * 1.5;
-                final seriesRailHeight = bounds.maxHeight * 0.32 + (series && _seasons.length > 1 ? 38 * TvLayoutConstants.scaleOf(context) : 0);
+                final seriesRailHeight = bounds.maxHeight * 0.32 + (series && _seasons.length > 1 ? 42 * TvLayoutConstants.scaleOf(context) : 0);
                 return Stack(
                   children: [
                     // Artwork starts at the same top inset as the poster.
@@ -4747,6 +4752,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
           SizedBox(
             height: 34 * TvLayoutConstants.scaleOf(context),
             child: FocusableWrapper(
+              focusNode: _seasonTabFocusNodes.length > _selectedSeasonIndex ? _seasonTabFocusNodes[_selectedSeasonIndex] : null,
               disableScale: true,
               autoScroll: false,
               onNavigateUp: _focusTvDetailActionRow,
@@ -4770,9 +4776,12 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
         Expanded(
           child: hubs.isEmpty
               ? Center(child: _isLoadingSeasons || _isLoadingEpisodes ? const CircularProgressIndicator() : const SizedBox.shrink())
-              : ClipRect(child: Align(
+              : ClipRect(child: FittedBox(
+                fit: BoxFit.scaleDown,
                 alignment: Alignment.topLeft,
-                child: TvBrowseRail(
+                child: SizedBox(
+                  width: MediaQuery.sizeOf(context).width * 0.98 - 46,
+                  child: TvBrowseRail(
                   key: _tvDetailRailKey,
                   hubs: hubs,
                   focusMemory: _hubFocusMemory,
@@ -4783,13 +4792,20 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                   trailingForHub: _tvDetailTrailingState,
                   leadingItemForHub: _tvDetailLeadingItemForHub,
                   onRetryHub: _retryTvDetailHub,
-                  onNavigateUp: _focusTvDetailActionRow,
+                  onNavigateUp: () {
+                    if (_seasons.length > 1 && _seasonTabFocusNodes.length > _selectedSeasonIndex) {
+                      _seasonTabFocusNodes[_selectedSeasonIndex].requestFocus();
+                    } else {
+                      _focusTvDetailActionRow();
+                    }
+                  },
                   onBack: _popMediaDetailIfBackNotSuppressed,
                   widePosterScaleForHub: (_) => 0.56,
                   initialHubId: _tvDetailInitialHubId(metadata),
                   initialItemId: _tvDetailInitialItemId(metadata),
                   episodePosterModeForHub: _tvDetailEpisodePosterModeForHub,
                   showTitleImpliedForHub: _isTvDetailEpisodeHub,
+                ),
                 ),
               )),
         ),

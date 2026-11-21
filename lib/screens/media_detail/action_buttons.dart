@@ -479,7 +479,7 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
         vertical: vertical,
         onFocusChange: isTv && !vertical ? _setTvDetailActionRowFocus : null,
         onNavigateUp: _focusAboveActionRow,
-        onNavigateDown: metadata.isShow && isTv ? null : _focusBelowActionRow,
+        onNavigateDown: _focusBelowActionRow,
       );
     }
 
