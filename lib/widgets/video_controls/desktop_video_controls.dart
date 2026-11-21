@@ -770,7 +770,7 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
     ]);
   }
 
-  Widget _buildTopBarContent(BuildContext _, double leftPadding) {
+  Widget _buildTopBarContent(BuildContext context, double leftPadding) {
     final topBar = Padding(
       padding: .only(left: leftPadding, right: 16),
       child: Row(
@@ -778,7 +778,7 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
           Expanded(
             child: VideoControlsHeader(
               metadata: widget.metadata,
-              titleArtwork: _visionVod ? _visionHeaderArtwork(_) : null,
+              titleArtwork: _visionVod ? _visionHeaderArtwork(context) : null,
               style: Platform.isMacOS ? VideoHeaderStyle.singleLine : VideoHeaderStyle.multiLine,
               onBack: widget.onBack,
               onCancelAutoHide: widget.onCancelAutoHide,
