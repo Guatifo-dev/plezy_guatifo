@@ -177,6 +177,16 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   final ValueNotifier<int> _heroIndex = ValueNotifier<int>(0);
   final Map<String, ({MediaItem item, MediaSourceInfo? source, int mediaIndex})> _heroFormatMetadata = {};
   final Set<String> _heroFormatMetadataRequests = {};
+  int _heroFormatGeneration = 0;
+
+  void _invalidateHeroFormatMetadata() {
+    if (!mounted) return;
+    setState(() {
+      _heroFormatGeneration++;
+      _heroFormatMetadata.clear();
+      _heroFormatMetadataRequests.clear();
+    });
+  }
 
   /// Discover hub rows can omit stream details. Probe the same cached source
   /// metadata used by the detail screen, so the hero reports the server-selected
@@ -188,6 +198,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
 
     final key = item.globalKey;
     if (_heroFormatMetadata.containsKey(key) || !_heroFormatMetadataRequests.add(key)) return;
+    final generation = _heroFormatGeneration;
 
     Future<void>(() async {
       try {
@@ -199,8 +210,9 @@ class _DiscoverScreenState extends State<DiscoverScreen>
           serverId: item.serverId ?? fetched.serverId,
           serverName: item.serverName ?? fetched.serverName,
         );
+        await client.fetchPlaybackExtras(detailedItem.id, forceRefresh: true);
         final source = await client.fetchCachedMediaSourceInfo(detailedItem.id);
-        if (!mounted) return;
+        if (!mounted || generation != _heroFormatGeneration) return;
         setState(() => _heroFormatMetadata[key] = (
           item: detailedItem,
           source: source,
@@ -209,7 +221,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       } catch (error, stackTrace) {
         appLogger.w('Unable to load hero movie or episode format metadata', error: error, stackTrace: stackTrace);
       } finally {
-        _heroFormatMetadataRequests.remove(key);
+        if (generation == _heroFormatGeneration) _heroFormatMetadataRequests.remove(key);
       }
     });
   }
@@ -601,6 +613,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   /// Those shelves own their item lists, so DiscoverProvider.updateItem alone
   /// cannot refresh their artwork after MetadataEditScreen returns.
   Future<void> _refreshDiscoverItem(MediaItem source) async {
+    _invalidateHeroFormatMetadata();
     await _discover.updateItem(source);
     if (!mounted || source.serverId == null) return;
     final globalKey = source.globalKey;
@@ -1268,6 +1281,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   void manualRefresh() => unawaited(_refreshFromToolbar());
 
   Future<void> _refreshFromToolbar() async {
+    _invalidateHeroFormatMetadata();
     unawaited(_refreshCatalogHubs(force: true));
     final outcome = await _discover.refreshNow();
     if (!mounted) return;
@@ -1285,6 +1299,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   // Public method to refresh content (for normal navigation)
   @override
   void refresh() {
+    _invalidateHeroFormatMetadata();
     _refreshCatalogIfDue();
     // A stale-resume refresh must also refetch the home hubs; otherwise new
     // server-side media never appears until a restart (#1646). When fresh,
@@ -2491,7 +2506,9 @@ class _DiscoverScreenState extends State<DiscoverScreen>
             return InkWell(
               onTap: () {
                 appLogger.d('Playing: ${heroItem.title}');
-                navigateToVideoPlayer(context, metadata: heroItem);
+                unawaited(navigateToVideoPlayer(context, metadata: heroItem).then((_) {
+                  if (mounted) _invalidateHeroFormatMetadata();
+                }));
               },
               borderRadius: BorderRadius.all(Radius.circular(isTv ? 32 : 24)),
               child: AnimatedContainer(
