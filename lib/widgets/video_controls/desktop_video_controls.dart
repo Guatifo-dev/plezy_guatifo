@@ -718,18 +718,38 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
           RegExp(r'HDR[ -]?10(?![+])').hasMatch([s.profile, s.title, s.displayTitle].whereType<String>().join(' ').toUpperCase())) == true) {
         logos.add('hdr10.png');
       }
-      for (final a in state.sourceAudioTracks) {
-        if (a.id != state.selectedAudioStreamId) continue;
-        final label = [a.label.primary, a.label.secondary].whereType<String>().join(' ').toUpperCase();
-        if (label.contains('ATMOS')) { logos.add('dolby_atmos.png'); }
-        else if (label.contains('DTS:X') || label.contains('DTS X')) { logos.add('dts_x.png'); }
-        else if (label.contains('DTS') && (label.contains('MASTER') || label.contains(' MA'))) { logos.add('dts_hd_master_audio.png'); }
-        else if (label.contains('TRUEHD') || label.contains('TRUE HD')) { logos.add('dolby_truehd.png'); }
-        else if (label.contains('EAC3') || label.contains('E-AC3') || label.contains('DD+') || label.contains('DOLBY DIGITAL PLUS')) { logos.add('dolby_digital_plus_5_1.png'); }
-        else if (label.contains('AC3') || label.contains('AC-3') || label.contains('DOLBY DIGITAL')) { logos.add('dolby_digital_5_1.png'); }
-        else if (label.contains('DTS')) { logos.add('dts_5_1.png'); }
-        else if (a.channels == 2) { logos.add('stereo_2_0.png'); }
-        break;
+      // Resolve the active Plex audio track even when the stream ID is not
+      // populated yet (common during direct play on Android TV).
+      final audioTracks = state.sourceAudioTracks;
+      final selectedAudio = audioTracks.where((a) => a.id == state.selectedAudioStreamId).firstOrNull ??
+          audioTracks.where((a) => a.selected).firstOrNull ??
+          audioTracks.where((a) => a.isDefault).firstOrNull ??
+          (audioTracks.isNotEmpty ? audioTracks.first : null);
+      if (selectedAudio != null) {
+        final label = [
+          selectedAudio.codec,
+          selectedAudio.title,
+          selectedAudio.displayTitle,
+          selectedAudio.label.primary,
+          selectedAudio.label.secondary,
+        ].whereType<String>().join(' ').toUpperCase();
+        if (label.contains('ATMOS')) {
+          logos.add('dolby_atmos.png');
+        } else if (label.contains('DTS:X') || label.contains('DTS X')) {
+          logos.add('dts_x.png');
+        } else if (label.contains('DTS') && (label.contains('MASTER') || label.contains(' MA') || label.contains('DCA-MA'))) {
+          logos.add('dts_hd_master_audio.png');
+        } else if (label.contains('TRUEHD') || label.contains('TRUE HD')) {
+          logos.add('dolby_truehd.png');
+        } else if (label.contains('EAC3') || label.contains('E-AC3') || label.contains('DD+') || label.contains('DOLBY DIGITAL PLUS')) {
+          logos.add('dolby_digital_plus_5_1.png');
+        } else if (label.contains('AC3') || label.contains('AC-3') || label.contains('DOLBY DIGITAL')) {
+          logos.add('dolby_digital_5_1.png');
+        } else if (label.contains('DTS') || label.contains('DCA')) {
+          logos.add('dts_5_1.png');
+        } else if (selectedAudio.channels == 2) {
+          logos.add('stereo_2_0.png');
+        }
       }
     }
     for (final sub in state.sourceSubtitleTracks) {
@@ -738,6 +758,7 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
       if (RegExp(r'(^|[^a-z])(es|es-es|spa|spanish|español|castellano)([^a-z]|$)').hasMatch(lang)) logos.add('forzado_es.png');
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const SizedBox(height: 12),
       Row(children: [
         ClearLogoImage(
           client: client,
