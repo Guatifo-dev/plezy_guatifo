@@ -613,10 +613,10 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return LayoutBuilder(builder: (context, constraints) => Column(
       children: [
         // Top bar with back button and title (always visible)
-        _buildTopBar(context),
+        _buildTopBar(context, visionLogoHeight: (constraints.maxHeight - 430.4).clamp(0.0, 300.0).toDouble()),
         FirstFrameGuard(
           hasFirstFrame: widget.hasFirstFrame,
           placeholder: const Expanded(child: SizedBox.shrink()),
@@ -651,8 +651,8 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
                                         serverIdOrNull(widget.metadata.serverId),
                                       ),
                                       imagePath: widget.metadata.posterThumb(),
-                                      width: 122.6666667,
-                                      height: 184,
+                                      width: 135,
+                                      height: 202.4,
                                       fit: BoxFit.cover,
                                     ),
                                   ),
@@ -694,7 +694,7 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
           ),
         ),
       ],
-    );
+    ));
   }
 
   /// A bar is chrome, not video. The controls overlay behind it treats every
@@ -711,7 +711,7 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
     child: bar,
   );
 
-  Widget _buildTopBar(BuildContext _) {
+  Widget _buildTopBar(BuildContext _, {required double visionLogoHeight}) {
     // Use global fullscreen state for padding
     return ListenableBuilder(
       listenable: FullscreenStateManager(),
@@ -719,7 +719,7 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
         // On macOS the traffic lights need clearing in normal mode; they auto-hide in fullscreen.
         final leftPadding = Platform.isMacOS ? DesktopWindowPadding.macOSLeftCurrent : 0.0;
 
-        return _buildTopBarContent(context, leftPadding);
+        return _buildTopBarContent(context, leftPadding, visionLogoHeight);
       },
     );
   }
@@ -802,7 +802,7 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
   String? _visionSeriesLogoKey;
   Future<String?>? _visionSeriesLogoFuture;
 
-  Widget _visionHeaderArtwork(BuildContext context) {
+  Widget _visionHeaderArtwork(BuildContext context, double logoHeight) {
     final item = widget.metadata;
     final client = context.tryGetMediaClientWithFallback(serverIdOrNull(item.serverId));
     final seriesId = item.grandparentId;
@@ -814,16 +814,15 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
     Widget logo(String? path) => ClearLogoImage(
       client: client,
       logoPath: client == null ? null : path,
-      width: 200, height: 65, fallbackWidth: 200,
-      alignment: Alignment.center,
-      fallbackBuilder: (_) => Align(alignment: Alignment.center, child: Text(
+      width: 400, height: logoHeight, fallbackWidth: 400,
+      alignment: Alignment.centerLeft,
+      fallbackBuilder: (_) => Align(alignment: Alignment.centerLeft, child: Text(
         item.grandparentTitle ?? item.title ?? t.common.unknown,
         maxLines: 2, overflow: TextOverflow.ellipsis,
         style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
       )),
     );
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const SizedBox(height: 32),
       if (_visionSeriesLogoFuture != null)
         FutureBuilder<String?>(
           key: ValueKey(key),
@@ -835,15 +834,17 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
     ]);
   }
 
-  Widget _buildTopBarContent(BuildContext context, double leftPadding) {
+  Widget _buildTopBarContent(BuildContext context, double leftPadding, double visionLogoHeight) {
     final topBar = Padding(
-      padding: .only(left: leftPadding, right: 16),
+      padding: .only(left: _visionVod ? 24 : leftPadding, right: 16, top: _visionVod ? 24 : 0),
       child: Row(
         children: [
           Expanded(
             child: VideoControlsHeader(
               metadata: widget.metadata,
-              titleArtwork: _visionVod ? _visionHeaderArtwork(context) : null,
+              titleArtwork: _visionVod ? _visionHeaderArtwork(context, visionLogoHeight) : null,
+              showBackButton: !_visionVod,
+              alignTop: _visionVod,
               style: Platform.isMacOS ? VideoHeaderStyle.singleLine : VideoHeaderStyle.multiLine,
               onBack: widget.onBack,
               onCancelAutoHide: widget.onCancelAutoHide,
@@ -941,9 +942,94 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
             child: Focus(
             onFocusChange: _onButtonRowFocusChange,
             skipTraversal: true,
-            child: Row(
+            child: _visionVod ? Stack(
+              alignment: Alignment.center,
               children: [
-                if (_visionVod) const Spacer(),
+                Row(mainAxisSize: MainAxisSize.min, children: _buildTransportButtons()),
+                Align(alignment: Alignment.centerRight, child: _buildTrackControls()),
+              ],
+            ) : Row(
+              children: [
+                ..._buildTransportButtons(),
+                // Live TV: Go to Live, only while time-shifted behind the live
+                // edge. A labelled pill, since no glyph names this action and
+                // a tooltip never shows under D-pad focus. It takes the slot
+                // VOD gives the finish time, so a long translation ellipsizes
+                // instead of overflowing the row.
+                // VOD: finish time, faded when too narrow.
+                if (_isLive)
+                  Expanded(
+                    child: widget.captureBuffer != null && !widget.isAtLiveEdge && widget.onJumpToLive != null
+                        ? Align(
+                            alignment: AlignmentDirectional.centerStart,
+                            child: _buildFocusableButton(
+                              focusNode: _goToLiveFocusNode,
+                              index: 7,
+                              icon: Symbols.fiber_manual_record_rounded,
+                              iconSize: 12,
+                              label: t.liveTv.goToLive,
+                              onPressed: _canControl ? widget.onJumpToLive : null,
+                              semanticLabel: t.liveTv.goToLive,
+                            ),
+                          )
+                        : const SizedBox.shrink(),
+                  )
+                else if (_visionVod)
+                  const Spacer()
+                else
+                  Expanded(
+                    child: FinishTimeBuilder(
+                      player: widget.player,
+                      builder: (context, finishTime) {
+                        if (finishTime == null) return const SizedBox.shrink();
+
+                        final text = t.videoControls.endsAt(
+                          time: formatClockTime(finishTime, is24Hour: MediaQuery.alwaysUse24HourFormatOf(context)),
+                        );
+                        const style = TextStyle(color: Colors.white70, fontSize: 13);
+
+                        return Padding(
+                          padding: const EdgeInsets.only(left: 8),
+                          child: Text(text, style: style, maxLines: 1, softWrap: false, overflow: .fade),
+                        );
+                      },
+                    ),
+                  ),
+                // Volume control (hidden on TV — hardware handles volume)
+                if (!PlatformDetector.isTV()) ...[
+                  VolumeControl(
+                    volumeController: widget.volumeController,
+                    focusNode: _volumeFocusNode,
+                    onKeyEvent: _handleVolumeKeyEvent,
+                    onFocusChange: _onFocusChange,
+                    onFocusActivity: widget.onFocusActivity,
+                  ),
+                  const SizedBox(width: 16),
+                ],
+                // Audio track, subtitle, and chapter controls
+                _buildTrackControls(),
+              ],
+            ),
+          ),
+          ),
+          if (_visionVod) ...[
+            const Divider(height: 4, color: Colors.white24),
+            SizedBox(height: 16, child:
+            FinishTimeBuilder(
+              player: widget.player,
+              builder: (context, finishTime) => finishTime == null
+                ? const SizedBox.shrink()
+                : Text(t.videoControls.endsAt(time: formatClockTime(finishTime,
+                    is24Hour: MediaQuery.alwaysUse24HourFormatOf(context))),
+                    style: const TextStyle(color: Colors.white70, fontSize: 13)),
+            )),
+          ],
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildTransportButtons() => [
                 if (!_isLive) ...[
                   Opacity(
                     opacity: _canControl ? 1.0 : 0.5,
@@ -1052,63 +1138,9 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
                     ),
                   ),
                 ],
-                // Live TV: Go to Live, only while time-shifted behind the live
-                // edge. A labelled pill, since no glyph names this action and
-                // a tooltip never shows under D-pad focus. It takes the slot
-                // VOD gives the finish time, so a long translation ellipsizes
-                // instead of overflowing the row.
-                // VOD: finish time, faded when too narrow.
-                if (_isLive)
-                  Expanded(
-                    child: widget.captureBuffer != null && !widget.isAtLiveEdge && widget.onJumpToLive != null
-                        ? Align(
-                            alignment: AlignmentDirectional.centerStart,
-                            child: _buildFocusableButton(
-                              focusNode: _goToLiveFocusNode,
-                              index: 7,
-                              icon: Symbols.fiber_manual_record_rounded,
-                              iconSize: 12,
-                              label: t.liveTv.goToLive,
-                              onPressed: _canControl ? widget.onJumpToLive : null,
-                              semanticLabel: t.liveTv.goToLive,
-                            ),
-                          )
-                        : const SizedBox.shrink(),
-                  )
-                else if (_visionVod)
-                  const Spacer()
-                else
-                  Expanded(
-                    child: FinishTimeBuilder(
-                      player: widget.player,
-                      builder: (context, finishTime) {
-                        if (finishTime == null) return const SizedBox.shrink();
+  ];
 
-                        final text = t.videoControls.endsAt(
-                          time: formatClockTime(finishTime, is24Hour: MediaQuery.alwaysUse24HourFormatOf(context)),
-                        );
-                        const style = TextStyle(color: Colors.white70, fontSize: 13);
-
-                        return Padding(
-                          padding: const EdgeInsets.only(left: 8),
-                          child: Text(text, style: style, maxLines: 1, softWrap: false, overflow: .fade),
-                        );
-                      },
-                    ),
-                  ),
-                // Volume control (hidden on TV — hardware handles volume)
-                if (!PlatformDetector.isTV()) ...[
-                  VolumeControl(
-                    volumeController: widget.volumeController,
-                    focusNode: _volumeFocusNode,
-                    onKeyEvent: _handleVolumeKeyEvent,
-                    onFocusChange: _onFocusChange,
-                    onFocusActivity: widget.onFocusActivity,
-                  ),
-                  const SizedBox(width: 16),
-                ],
-                // Audio track, subtitle, and chapter controls
-                TrackChapterControls(
+  Widget _buildTrackControls() => TrackChapterControls(
                   player: widget.player,
                   chapters: widget.chapters,
                   chaptersLoaded: widget.chaptersLoaded,
@@ -1128,27 +1160,7 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
                     }
                   },
                   hideChaptersAndQueue: widget.useDpadNavigation && _hasStripContent,
-                ),
-              ],
-            ),
-          ),
-          ),
-          if (_visionVod) ...[
-            const Divider(height: 4, color: Colors.white24),
-            SizedBox(height: 16, child:
-            FinishTimeBuilder(
-              player: widget.player,
-              builder: (context, finishTime) => finishTime == null
-                ? const SizedBox.shrink()
-                : Text(t.videoControls.endsAt(time: formatClockTime(finishTime,
-                    is24Hour: MediaQuery.alwaysUse24HourFormatOf(context))),
-                    style: const TextStyle(color: Colors.white70, fontSize: 13)),
-            )),
-          ],
-        ],
-      ),
-    );
-  }
+                );
 
   /// Returns the label of the next chapter the user would seek to, or null.
   String? _getNextChapterLabel(Duration position) {

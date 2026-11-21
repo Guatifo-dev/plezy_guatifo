@@ -46,18 +46,17 @@ class PlayerFocusDisc extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final showFocus = CardFocusScope.maybeOf(context) ?? false;
-    final visionFocus = showFocus && PlatformDetector.isTV() && !isActive;
+    final visionFocus = showFocus && PlatformDetector.isTV();
     return AnimatedContainer(
       duration: FocusTheme.getAnimationDuration(context),
       curve: Curves.easeOutCubic,
       decoration: BoxDecoration(
         shape: borderRadius == null ? BoxShape.circle : BoxShape.rectangle,
         borderRadius: borderRadius,
-        color: visionFocus ? const Color(0xCC102B43) : showFocus ? (isActive ? _activeFill : _fill) : Colors.transparent,
-        border: visionFocus ? Border.all(color: const Color(0xFF43E4FF), width: 2) : null,
-        boxShadow: visionFocus ? const [BoxShadow(color: Color(0x8843E4FF), blurRadius: 10)] : showFocus ? const [playerFocusShadow] : const [],
+        color: visionFocus ? _fill : showFocus ? (isActive ? _activeFill : _fill) : Colors.transparent,
+        boxShadow: showFocus && !visionFocus ? const [playerFocusShadow] : const [],
       ),
-      child: builder(context, showFocus && !visionFocus ? Colors.black.withValues(alpha: iconColor.a) : iconColor),
+      child: builder(context, showFocus ? Colors.black.withValues(alpha: visionFocus ? 1.0 : iconColor.a) : iconColor),
     );
   }
 }

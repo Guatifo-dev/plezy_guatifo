@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:plezy/widgets/app_icon.dart';
 
 import '../../focus/focus_theme.dart';
+import '../../utils/platform_detector.dart';
 import '../../focus/focusable_wrapper.dart';
 import 'widgets/player_focus_disc.dart';
 
@@ -78,6 +79,7 @@ class VideoControlButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final idleColor = color ?? (isActive ? Colors.amber : Colors.white);
     final label = this.label;
+    final fixedTvButton = PlatformDetector.isTV() && label == null;
     final effectiveSemanticLabel = semanticLabel ?? label ?? tooltip;
 
     Widget button(Color iconColor) => label == null
@@ -86,7 +88,9 @@ class VideoControlButton extends StatelessWidget {
             iconSize: iconSize,
             onPressed: onPressed,
             tooltip: tooltip,
-            constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+            padding: fixedTvButton ? EdgeInsets.zero : null,
+            alignment: Alignment.center,
+            constraints: fixedTvButton ? const BoxConstraints.tightFor(width: 40, height: 40) : const BoxConstraints(minWidth: 40, minHeight: 40),
           )
         : Material(
             type: MaterialType.transparency,
@@ -131,6 +135,7 @@ class VideoControlButton extends StatelessWidget {
         autoScroll: false,
         delegateFocusBorder: true,
         focusScale: FocusTheme.playerControlFocusScale,
+        disableScale: fixedTvButton,
         child: PlayerFocusDisc(
           iconColor: idleColor,
           isActive: isActive,

@@ -39,6 +39,8 @@ class VideoControlsHeader extends StatelessWidget {
   /// header is too narrow to fit the clock beside the title and trailing
   /// controls.
   final bool showClock;
+  final bool showBackButton;
+  final bool alignTop;
 
   const VideoControlsHeader({
     super.key,
@@ -50,15 +52,20 @@ class VideoControlsHeader extends StatelessWidget {
     this.onCancelAutoHide,
     this.onStartAutoHide,
     this.showClock = true,
+    this.showBackButton = true,
+    this.alignTop = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final itemTitle = metadata.title ?? t.common.unknown;
     return Row(
+      crossAxisAlignment: alignTop ? CrossAxisAlignment.start : CrossAxisAlignment.center,
       children: [
-        AppBarBackButton(style: BackButtonStyle.video, onPressed: onBack ?? () => Navigator.of(context).pop(true)),
-        const SizedBox(width: 16),
+        if (showBackButton) ...[
+          AppBarBackButton(style: BackButtonStyle.video, onPressed: onBack ?? () => Navigator.of(context).pop(true)),
+          const SizedBox(width: 16),
+        ],
         Expanded(
           child: titleArtwork ?? (style == VideoHeaderStyle.singleLine
               ? _buildSingleLineTitle(itemTitle)
