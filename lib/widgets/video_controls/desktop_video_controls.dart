@@ -7,6 +7,11 @@ import 'package:flutter/services.dart';
 
 import '../../focus/dpad_navigator.dart';
 import '../../media/media_item.dart';
+import '../../media/ids.dart';
+import '../../media/media_stream.dart';
+import '../../utils/provider_extensions.dart';
+import '../../services/settings_service.dart';
+import '../optimized_media_image.dart';
 import '../../media/stepped_seek.dart';
 import '../../mpv/mpv.dart';
 import '../../media/media_source_info.dart';
@@ -689,6 +694,82 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
     );
   }
 
+  bool get _visionVod => PlatformDetector.isTV() && !_isLive;
+
+  Widget _visionHeaderArtwork(BuildContext context) {
+    final item = widget.metadata;
+    final client = context.tryGetMediaClientWithFallback(serverIdOrNull(item.serverId));
+    final state = _trackControlsState;
+    final versions = state.availableVersions;
+    final index = state.selectedMediaIndex;
+    final version = index >= 0 && index < versions.length ? versions[index] : null;
+    final streams = version?.parts.expand((part) => part.streams).where((s) => s.kind == MediaStreamKind.video);
+    final logos = <String>[];
+    if (!state.isTranscoding) {
+      final resolution = version?.videoResolution?.toLowerCase();
+      if (resolution == '4k' || (version?.width ?? 0) >= 3800 || (version?.height ?? 0) >= 2160) {
+        logos.add('4k_uhd.png');
+      } else if (resolution == '1080' || resolution == '1080p' || version?.height == 1080) {
+        logos.add('full_hd.png');
+      }
+      if (streams?.any((s) => s.dolbyVision) == true) logos.add('dolby_vision.png');
+      if (streams?.any((s) => s.hdr10Plus) == true) logos.add('hdr10_plus.png');
+      if (streams?.any((s) => !s.dolbyVision && !s.hdr10Plus &&
+          RegExp(r'HDR[ -]?10(?![+])').hasMatch([s.profile, s.title, s.displayTitle].whereType<String>().join(' ').toUpperCase())) == true) {
+        logos.add('hdr10.png');
+      }
+      for (final a in state.sourceAudioTracks) {
+        if (a.id != state.selectedAudioStreamId) continue;
+        final label = [a.label.primary, a.label.secondary].whereType<String>().join(' ').toUpperCase();
+        if (label.contains('ATMOS')) { logos.add('dolby_atmos.png'); }
+        else if (label.contains('DTS:X') || label.contains('DTS X')) { logos.add('dts_x.png'); }
+        else if (label.contains('DTS') && (label.contains('MASTER') || label.contains(' MA'))) { logos.add('dts_hd_master_audio.png'); }
+        else if (label.contains('TRUEHD') || label.contains('TRUE HD')) { logos.add('dolby_truehd.png'); }
+        else if (label.contains('EAC3') || label.contains('E-AC3') || label.contains('DD+') || label.contains('DOLBY DIGITAL PLUS')) { logos.add('dolby_digital_plus_5_1.png'); }
+        else if (label.contains('AC3') || label.contains('AC-3') || label.contains('DOLBY DIGITAL')) { logos.add('dolby_digital_5_1.png'); }
+        else if (label.contains('DTS')) { logos.add('dts_5_1.png'); }
+        else if (a.channels == 2) { logos.add('stereo_2_0.png'); }
+        break;
+      }
+    }
+    for (final sub in state.sourceSubtitleTracks) {
+      if (sub.id != state.selectedSubtitleChoice?.sourceStreamId || !sub.forced) continue;
+      final lang = [sub.languageCode, sub.language].whereType<String>().join(' ').toLowerCase();
+      if (RegExp(r'(^|[^a-z])(es|es-es|spa|spanish|español|castellano)([^a-z]|$)').hasMatch(lang)) logos.add('forzado_es.png');
+    }
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        ClearLogoImage(
+          client: client,
+          logoPath: client == null ? null : item.clearLogoPath,
+          width: 160, height: 52, fallbackWidth: 160,
+          fallbackBuilder: (_) => Align(alignment: Alignment.centerLeft, child: Text(
+            item.grandparentTitle ?? item.title ?? t.common.unknown,
+            maxLines: 2, overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+          )),
+        ),
+        if (SettingsService.instance.read(SettingsService.showHeroFormatBadges) && logos.isNotEmpty)
+          Flexible(child: Padding(
+            padding: const EdgeInsets.only(left: 14),
+            child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [for (final logo in logos) Padding(
+                padding: const EdgeInsets.only(right: 9),
+                child: Image.asset('assets/hero_badges/$logo', height: 20, fit: BoxFit.contain),
+              )],
+            )),
+          )),
+      ]),
+      if (item.durationMs != null || item.grandparentTitle != null)
+        Text([
+          if (item.grandparentTitle != null) 'S${item.parentIndex ?? 0}E${item.index ?? 0} · ${item.title ?? ""}',
+          if (item.durationMs != null) formatDurationTextual(item.durationMs!),
+        ].join(' · '), maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: Colors.white70, fontSize: 14)),
+    ]);
+  }
+
   Widget _buildTopBarContent(BuildContext _, double leftPadding) {
     final topBar = Padding(
       padding: .only(left: leftPadding, right: 16),
@@ -697,6 +778,7 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
           Expanded(
             child: VideoControlsHeader(
               metadata: widget.metadata,
+              titleArtwork: _visionVod ? _visionHeaderArtwork(_) : null,
               style: Platform.isMacOS ? VideoHeaderStyle.singleLine : VideoHeaderStyle.multiLine,
               onBack: widget.onBack,
               onCancelAutoHide: widget.onCancelAutoHide,
@@ -723,8 +805,14 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
 
   Widget _buildBottomControlsContent(BuildContext _, {required bool hasFrame}) {
     final canInteract = _canControl && hasFrame;
-    return Padding(
+    return Container(
+      margin: _visionVod ? const EdgeInsets.fromLTRB(16, 0, 16, 10) : EdgeInsets.zero,
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      decoration: _visionVod ? BoxDecoration(
+        color: const Color(0xD90A122B),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: const Color(0x556DADFF)),
+      ) : null,
       child: Column(
         children: [
           if (_isLive && widget.captureBuffer != null) ...[
@@ -765,6 +853,7 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
             skipTraversal: true,
             child: Row(
               children: [
+                if (_visionVod) const Spacer(),
                 if (!_isLive) ...[
                   Opacity(
                     opacity: _canControl ? 1.0 : 0.5,
@@ -896,6 +985,8 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
                           )
                         : const SizedBox.shrink(),
                   )
+                else if (_visionVod)
+                  const Spacer()
                 else
                   Expanded(
                     child: FinishTimeBuilder(
@@ -951,6 +1042,17 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
               ],
             ),
           ),
+          if (_visionVod) ...[
+            const Divider(height: 12, color: Colors.white24),
+            FinishTimeBuilder(
+              player: widget.player,
+              builder: (context, finishTime) => finishTime == null
+                ? const SizedBox.shrink()
+                : Text(t.videoControls.endsAt(time: formatClockTime(finishTime,
+                    is24Hour: MediaQuery.alwaysUse24HourFormatOf(context))),
+                    style: const TextStyle(color: Colors.white70, fontSize: 13)),
+            ),
+          ],
         ],
       ),
     );
