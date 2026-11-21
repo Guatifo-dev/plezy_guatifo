@@ -637,16 +637,23 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
                             if (_visionVod && widget.metadata.posterThumb() != null)
                               Padding(
                                 padding: const EdgeInsets.only(left: 24, bottom: 12),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(14),
-                                  child: OptimizedMediaImage(
-                                    client: context.tryGetMediaClientWithFallback(
-                                      serverIdOrNull(widget.metadata.serverId),
+                                child: DecoratedBox(
+                                  position: DecorationPosition.foreground,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(color: const Color(0x556DADFF)),
+                                  ),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(14),
+                                    child: OptimizedMediaImage(
+                                      client: context.tryGetMediaClientWithFallback(
+                                        serverIdOrNull(widget.metadata.serverId),
+                                      ),
+                                      imagePath: widget.metadata.posterThumb(),
+                                      width: 122.6666667,
+                                      height: 184,
+                                      fit: BoxFit.cover,
                                     ),
-                                    imagePath: widget.metadata.posterThumb(),
-                                    width: 92,
-                                    height: 138,
-                                    fit: BoxFit.cover,
                                   ),
                                 ),
                               ),
@@ -780,7 +787,7 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
       if (RegExp(r'(^|[^a-z])(es|es-es|spa|spanish|español|castellano)([^a-z]|$)').hasMatch(lang)) logos.add('forzado_es.png');
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const SizedBox(height: 12),
+      const SizedBox(height: 32),
       Row(children: [
         ClearLogoImage(
           client: client,
