@@ -3759,6 +3759,36 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
         child: moviePage,
       );
     }
+    if (isTv && metadata.isShow) {
+      if (!_movieInitialFocusScheduled) {
+        _movieInitialFocusScheduled = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_canUseDetail && widget.initialEpisodeId == null) _playButtonFocusNode.requestFocus();
+        });
+      }
+      if (widget.initialEpisodeId != null && !_initialEpisodePagingDone) _maybeLoadMoreForInitialEpisode();
+      return PopScope(
+        canPop: !InputModeTracker.shouldBlockSystemBack(context),
+        onPopInvokedWithResult: (didPop, result) {
+          if (!didPop) _handleMediaDetailSystemBack();
+        },
+        child: Focus(
+          onKeyEvent: _handleMediaDetailBackKey,
+          child: Scaffold(
+            body: Center(
+              child: ListenableBuilder(
+                listenable: _tvDetailForegroundListenable,
+                builder: (context, _) => _buildTvMovieMoreDetailsSheet(
+                  _tvDetailFocusedEpisode.value ?? metadata.copyWith(ratings: _titleRatings(metadata)),
+                  _tvDetailDescription(metadata, hideSpoilers: SettingsService.instance.read(SettingsService.hideSpoilers)),
+                  metadata.genres ?? const <String>[], metadata,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     if (isTv) {
       return _buildTvDetailScreen(context, metadata, _handleMediaDetailBackKey);
     }
@@ -4011,9 +4041,6 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     KeyEventResult Function(FocusNode, KeyEvent) handleBack,
   ) {
     final size = MediaQuery.sizeOf(context);
-    final selectedSeason = metadata.isShow && _selectedSeasonIndex >= 0 && _selectedSeasonIndex < _seasons.length
-        ? _seasons[_selectedSeasonIndex] : null;
-    final seriesPosterPath = selectedSeason?.thumbPath ?? metadata.thumbPath;
     final detailHubs = metadata.isMovie ? const <MediaHub>[] : _tvDetailHubs(metadata);
     if (widget.initialEpisodeId != null && !_initialEpisodePagingDone) {
       _maybeLoadMoreForInitialEpisode();
@@ -4056,24 +4083,6 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                 )
               : const SizedBox.shrink(),
         ),
-        if (metadata.isShow && seriesPosterPath != null)
-          Positioned(
-            right: spotlightLeft,
-            top: spotlightTop,
-            bottom: foregroundBottom,
-            width: size.width * 0.30,
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: AspectRatio(
-                aspectRatio: 2 / 3,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12 * detailScale),
-                  child: _buildOfflineArtworkIfAvailable(context, artworkPaths: [seriesPosterPath], fit: BoxFit.cover, imageType: ImageType.poster) ??
-                      OptimizedMediaImage(client: _getMediaClientForMetadata(context), imagePath: seriesPosterPath, fit: BoxFit.cover, imageType: ImageType.poster),
-                ),
-              ),
-            ),
-          ),
         if (!metadata.isMovie)
           Positioned(
             top: 0,
@@ -4428,7 +4437,10 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
       builder: (sheetContext) {
         final size = MediaQuery.sizeOf(sheetContext);
         final theme = Theme.of(sheetContext);
-        final posterPath = metadata.thumbPath;
+        final series = metadata.isShow;
+        final season = series && _selectedSeasonIndex >= 0 && _selectedSeasonIndex < _seasons.length
+            ? _seasons[_selectedSeasonIndex] : null;
+        final posterPath = season?.thumbPath ?? metadata.thumbPath;
         final poster = posterPath == null
             ? null
             : (_buildOfflineArtworkIfAvailable(
@@ -4443,7 +4455,8 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                   fit: BoxFit.cover,
                   imageType: ImageType.poster,
                 ));
-        final fanartPaths = metadata.heroRotationPaths(containerAspectRatio: 16 / 9);
+        final seasonArt = season?.heroRotationPaths(containerAspectRatio: 16 / 9) ?? const <String>[];
+        final fanartPaths = seasonArt.isNotEmpty ? seasonArt : metadata.heroRotationPaths(containerAspectRatio: 16 / 9);
         final fanartPath = fanartPaths.isEmpty ? null : fanartPaths.first;
         final fanart = fanartPath == null
             ? null
@@ -4473,7 +4486,8 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
           ),
         );
         return Container(
-          height: size.height * 0.88,
+          height: size.height * (series ? 0.96 : 0.88),
+          width: series ? size.width * 0.98 : null,
           decoration: BoxDecoration(
             color: theme.colorScheme.surface.withValues(alpha: 0.96),
             border: Border.all(color: Colors.white, width: 2),
@@ -4484,8 +4498,9 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
             padding: const EdgeInsets.fromLTRB(16, 16, 26, 20),
             child: LayoutBuilder(
               builder: (context, bounds) {
-                final posterWidth = size.width * 0.19;
+                final posterWidth = series ? math.min(size.width * 0.19, bounds.maxHeight * 0.39) : size.width * 0.19;
                 final posterHeight = posterWidth * 1.5;
+                final seriesRailHeight = bounds.maxHeight * 0.32;
                 return Stack(
                   children: [
                     // Artwork starts at the same top inset as the poster.
@@ -4494,7 +4509,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                         top: 0,
                         right: 0,
                         width: size.width * 0.43,
-                        height: size.height * 0.48,
+                        height: size.height * (series ? 0.37 : 0.48),
                         child: IgnorePointer(
                           child: ShaderMask(
                             blendMode: BlendMode.dstIn,
@@ -4552,7 +4567,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                       top: 0,
                       left: 0,
                       width: posterWidth,
-                      bottom: 0,
+                      bottom: series ? seriesRailHeight + 12 : 0,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -4564,8 +4579,8 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                               child: poster ?? const PlaceholderContainer(),
                             ),
                           ),
-                          const SizedBox(height: 10),
-                          _buildActionButtons(
+                          if (!series) const SizedBox(height: 10),
+                          if (!series) _buildActionButtons(
                             metadata,
                             hideMoreDetails: true,
                             compactVertical: true,
@@ -4578,8 +4593,19 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                       top: size.height * 0.145 + 20,
                       left: posterWidth + 28,
                       right: 0,
-                      bottom: 0,
-                      child: MediaDetailsSheet(
+                      bottom: series ? seriesRailHeight + 72 : 0,
+                      child: series ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildTvDetailMetadataLine(context, metadata, TvLayoutConstants.scaleOf(context)),
+                          if (item.isEpisode) ...[
+                            Text(item.displayTitle, maxLines: 1, overflow: TextOverflow.ellipsis),
+                            SelectedMediaFormatBadges(key: ValueKey(item.globalKey), item: item),
+                          ],
+                          const SizedBox(height: 8),
+                          Expanded(child: Text(description ?? '', overflow: TextOverflow.fade, style: theme.textTheme.bodyLarge)),
+                        ],
+                      ) : MediaDetailsSheet(
                         item: item,
                         description: description,
                         genres: genres,
@@ -4595,7 +4621,15 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                       height: size.height * 0.135,
                       child: Align(alignment: Alignment.centerLeft, child: logo),
                     ),
-                     Positioned(
+                     if (series) Positioned(
+                       left: posterWidth + 28, right: 0, bottom: seriesRailHeight + 12,
+                       child: _buildActionButtons(metadata, hideMoreDetails: true),
+                     ),
+                     if (series) Positioned(
+                       bottom: 0, left: 0, right: 0, height: seriesRailHeight,
+                       child: _buildVisionSeriesEpisodes(metadata),
+                     ),
+                     if (!series) Positioned(
                        bottom: 0,
                        left: 0,
                        right: 0,
@@ -4673,6 +4707,58 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
           ),
         );
       },
+    );
+  }
+
+  Widget _buildVisionSeriesEpisodes(MediaItem metadata) {
+    final hubs = _tvDetailHubs(metadata).where((hub) =>
+        hub.id == _tvDetailSeasonsErrorHubId || hub.id == _tvDetailInitialHubId(metadata)).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Divider(height: 8),
+        if (_seasons.length > 1)
+          DropdownButton<int>(
+            value: _selectedSeasonIndex,
+            items: [
+              for (var i = 0; i < _seasons.length; i++)
+                DropdownMenuItem(value: i, child: Text(_seasons[i].displayTitle)),
+            ],
+            onChanged: (index) {
+              if (index == null || index == _selectedSeasonIndex) return;
+              _clearTvDetailFocusedEpisode();
+              final id = '$_tvDetailSeasonHubIdPrefix$index';
+              final hub = _tvDetailHubs(metadata).firstWhere((hub) => hub.id == id);
+              _handleTvDetailHubChanged(hub, index);
+            },
+          ),
+        Expanded(
+          child: hubs.isEmpty
+              ? Center(child: _isLoadingSeasons || _isLoadingEpisodes ? const CircularProgressIndicator() : const SizedBox.shrink())
+              : ClipRect(child: Align(
+                alignment: Alignment.topLeft,
+                child: TvBrowseRail(
+                  key: _tvDetailRailKey,
+                  hubs: hubs,
+                  focusMemory: _hubFocusMemory,
+                  iconForHub: _getTvDetailHubIcon,
+                  onFocusedHubItemChanged: _handleTvDetailFocusedRailItemChanged,
+                  onRefresh: (source) => unawaited(_refreshItemInPlace(source)),
+                  onActivateItem: _handleTvDetailRailItemActivated,
+                  trailingForHub: _tvDetailTrailingState,
+                  leadingItemForHub: _tvDetailLeadingItemForHub,
+                  onRetryHub: _retryTvDetailHub,
+                  onNavigateUp: _focusTvDetailActionRow,
+                  onBack: _popMediaDetailIfBackNotSuppressed,
+                  widePosterScaleForHub: (_) => 0.56,
+                  initialHubId: _tvDetailInitialHubId(metadata),
+                  initialItemId: _tvDetailInitialItemId(metadata),
+                  episodePosterModeForHub: _tvDetailEpisodePosterModeForHub,
+                  showTitleImpliedForHub: _isTvDetailEpisodeHub,
+                ),
+              )),
+        ),
+      ],
     );
   }
 
@@ -5628,7 +5714,14 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
   /// The episode a show's Play button plays. On TV the hero follows the rail's
   /// focused episode, so Play must agree with what the hero describes (#2217);
   /// with nothing focused (and everywhere off TV) it is the on-deck episode.
-  MediaItem? _showPlayEpisode() => _tvDetailFocusedEpisode.value ?? _onDeckEpisode;
+  MediaItem? _showPlayEpisode() {
+    if (_tvDetailFocusedEpisode.value != null) return _tvDetailFocusedEpisode.value;
+    if (PlatformDetector.isTV() && _metadata.isShow && _seasons.length > 1 && _episodes.isNotEmpty) {
+      if (_onDeckEpisode?.parentId == _seasons[_selectedSeasonIndex].id) return _onDeckEpisode;
+      return _episodes.first;
+    }
+    return _onDeckEpisode;
+  }
 
   String _getPlayButtonLabel(MediaItem metadata) {
     // For TV shows - use compact S1E1 format

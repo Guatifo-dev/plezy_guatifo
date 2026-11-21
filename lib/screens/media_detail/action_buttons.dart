@@ -405,7 +405,7 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
           )
         : null;
 
-    final castAction = threeRowLayout && metadata.isMovie
+    final castAction = (threeRowLayout && metadata.isMovie) || (isTv && metadata.isShow)
         ? FocusableAction(
             debugLabel: 'detail_movie_cast',
             onPressed: () => _openTvMovieCastPanel(metadata),
@@ -427,6 +427,7 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
       watchedAction,
       ?watchlistAction,
       if (!hideMoreDetails) ?movieDetailsAction,
+      ?castAction,
       ?moreActionsAction,
     ];
 
@@ -478,7 +479,7 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
         vertical: vertical,
         onFocusChange: isTv && !vertical ? _setTvDetailActionRowFocus : null,
         onNavigateUp: _focusAboveActionRow,
-        onNavigateDown: _focusBelowActionRow,
+        onNavigateDown: metadata.isShow && isTv ? null : _focusBelowActionRow,
       );
     }
 
