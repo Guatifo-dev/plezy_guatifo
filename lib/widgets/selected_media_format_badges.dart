@@ -16,7 +16,8 @@ import '../utils/provider_extensions.dart';
 /// Read-only format badges for the selected movie or individual episode.
 /// Never fetches metadata for every poster in a grid.
 class SelectedMediaFormatBadges extends StatefulWidget {
-  const SelectedMediaFormatBadges({super.key, required this.item});
+  const SelectedMediaFormatBadges({super.key, required this.item, this.retainWhileLoading = false});
+  final bool retainWhileLoading;
   final MediaItem? item;
 
   @override
@@ -43,15 +44,18 @@ class _SelectedMediaFormatBadgesState extends State<SelectedMediaFormatBadges> {
   void _load() {
     final item = widget.item;
     final generation = ++_generation;
-    _details = null;
-    _source = null;
+    if (!widget.retainWhileLoading || item == null) {
+      _details = null;
+      _source = null;
+    }
     if (item == null || (item.kind != MediaKind.movie && item.kind != MediaKind.episode)) return;
     Future<void>(() async {
       try {
         final client = context.tryGetMediaClientWithFallback(serverIdOrNull(item.serverId));
         if (client == null) return;
         final fetched = await client.fetchItem(item.id);
-        if (!mounted || generation != _generation || fetched == null) return;
+        if (!mounted || generation != _generation) return;
+        if (fetched == null) { setState(() { _details = null; _source = null; }); return; }
         final detailed = fetched.copyWith(
           serverId: item.serverId ?? fetched.serverId,
           serverName: item.serverName ?? fetched.serverName,
@@ -61,6 +65,7 @@ class _SelectedMediaFormatBadgesState extends State<SelectedMediaFormatBadges> {
         setState(() { _details = detailed; _source = source; });
       } catch (_) {
         // Missing metadata must never interrupt browsing.
+        if (mounted && generation == _generation) setState(() { _details = null; _source = null; });
       }
     });
   }
@@ -124,7 +129,7 @@ class _SelectedMediaFormatBadgesState extends State<SelectedMediaFormatBadges> {
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         for (var i = 0; i < logos.length; i++) ...[
           if (i > 0) const SizedBox(width: 8),
-          Image.asset('assets/hero_badges/${logos[i]}', height: 20, fit: BoxFit.contain,
+          Image.asset('assets/hero_badges/${logos[i]}', key: ValueKey(logos[i]), height: 20, fit: BoxFit.contain,
             filterQuality: FilterQuality.medium),
         ],
       ]),

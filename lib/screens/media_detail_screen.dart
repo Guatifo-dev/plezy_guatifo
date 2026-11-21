@@ -4486,9 +4486,9 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
         final logo = _buildDetailLogoOrTitle(
           sheetContext,
           metadata,
-          width: size.width * 0.42,
+          width: size.width * (series ? 0.35 : 0.42),
           height: size.height * 0.13,
-          availableWidth: size.width * 0.75,
+          availableWidth: size.width * (series ? 0.35 : 0.75),
           alignment: Alignment.centerLeft,
           titleBuilder: (context, title) => Align(
              alignment: Alignment.centerLeft,
@@ -4506,7 +4506,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
           ),
           clipBehavior: Clip.antiAlias,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 26, 20),
+            padding: EdgeInsets.fromLTRB(16, 16, series ? 16 : 26, 20),
             child: LayoutBuilder(
               builder: (context, bounds) {
                 final posterWidth = series ? math.min(size.width * 0.19, bounds.maxHeight * (_seasons.length > 1 ? 0.34 : 0.39)) : size.width * 0.19;
@@ -4520,7 +4520,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                         top: 0,
                         right: 0,
                         width: size.width * 0.43,
-                        height: size.height * (series ? 0.37 : 0.48),
+                        height: size.height * (series ? 0.32 : 0.48),
                         child: IgnorePointer(
                           child: ShaderMask(
                             blendMode: BlendMode.dstIn,
@@ -4601,21 +4601,28 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                       ),
                     ),
                     Positioned(
-                      top: size.height * 0.145 + 20,
+                      top: size.height * 0.145 + (series ? 4 : 20),
                       left: posterWidth + 28,
                       right: 0,
-                      bottom: series ? seriesRailHeight + 72 : 0,
+                      bottom: series ? seriesRailHeight + 56 : 0,
                       child: series ? Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           _buildTvDetailMetadataLine(context, metadata, TvLayoutConstants.scaleOf(context)),
-                          if (item.isEpisode) ...[
-                            if (item.title != null && item.title!.isNotEmpty && item.title != metadata.title)
-                              Text(item.title!, maxLines: 1, overflow: TextOverflow.ellipsis),
-                            SelectedMediaFormatBadges(key: ValueKey(item.globalKey), item: item),
-                          ],
-                          const SizedBox(height: 8),
-                          Expanded(child: Text(description ?? '', overflow: TextOverflow.fade, style: theme.textTheme.bodyLarge)),
+                          SizedBox(
+                            height: 24 * TvLayoutConstants.scaleOf(context),
+                            child: Text(item.isEpisode ? (item.title ?? '') : '', maxLines: 1, overflow: TextOverflow.ellipsis),
+                          ),
+                          SizedBox(
+                            height: 24 * TvLayoutConstants.scaleOf(context),
+                            child: Align(alignment: Alignment.centerLeft, child: SelectedMediaFormatBadges(
+                              key: const ValueKey('vision-series-badges'),
+                              item: item.isEpisode ? item : null,
+                              retainWhileLoading: true,
+                            )),
+                          ),
+                          const SizedBox(height: 4),
+                          Expanded(child: Align(alignment: Alignment.bottomLeft, child: Text(description ?? '', overflow: TextOverflow.fade, style: theme.textTheme.bodyMedium))),
                         ],
                       ) : MediaDetailsSheet(
                         item: item,
@@ -4627,7 +4634,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                       ),
                     ),
                     Positioned(
-                      top: 20,
+                      top: series ? 4 : 20,
                       left: posterWidth + 28,
                       right: 0,
                       height: size.height * 0.135,
@@ -4794,7 +4801,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                               alignment: Alignment.center,
                               padding: const EdgeInsets.symmetric(horizontal: 16),
                               decoration: BoxDecoration(
-                                color: focused ? Colors.white : Colors.white.withValues(alpha: selected ? 0.20 : 0.07),
+                                color: focused ? Colors.white : selected ? const Color(0xFF2563EB) : Colors.white.withValues(alpha: 0.07),
                                 border: Border.all(color: selected ? const Color(0xFF6DADFF) : Colors.white24),
                                 borderRadius: BorderRadius.circular(8),
                               ),
@@ -4824,12 +4831,13 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                     fullCardLayout: svc.read(SettingsService.tvFullCardLayout),
                     gridSpacing: svc.read(SettingsService.gridSpacing),
                     widePosterScale: factor,
+                    compactDetailRail: true,
                     hasLeading: _tvDetailLeadingItemForHub(hubs.first) != null,
                   );
                   return metrics.height + TvBrowseRailLayout.railTopPaddingForScale(scale) +
                       TvBrowseRailLayout.railBottomPaddingForScale(scale);
                 }
-                var factor = 0.76;
+                var factor = 0.86;
                 while (factor > 0.30 && heightFor(factor) > railBounds.maxHeight) {
                   factor -= 0.01;
                 }
@@ -4909,7 +4917,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     if (lineMetadata.contentRating != null) {
       parts.add(MetadataLineText(formatContentRating(lineMetadata.contentRating!), dropPriority: 2));
     }
-    if (lineMetadata.durationMs != null) {
+    if (lineMetadata.durationMs != null && !(PlatformDetector.isTV() && metadata.isShow)) {
       parts.add(MetadataLineText(formatDurationTextual(lineMetadata.durationMs!), dropPriority: 1));
     }
     final episodeRatings = focusedEpisode == null
@@ -4917,7 +4925,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
         : mediaRatingsFor(_withProbedRatings(focusedEpisode));
     // An episode without scores of its own shows the title's.
     final ratings = episodeRatings.isNotEmpty ? episodeRatings : _titleRatings(metadata);
-    if (ratings.isNotEmpty) parts.add(MetadataLineRatings(ratings, dropPriority: 4));
+    if (ratings.isNotEmpty) parts.add(MetadataLineRatings(PlatformDetector.isTV() && metadata.isShow ? ratings.take(1).toList() : ratings, dropPriority: 4));
 
     return parts;
   }

@@ -171,9 +171,10 @@ class TvBrowseRailLayout {
     double tallPosterScale = 1.0,
     double widePosterScale = 1.0,
     bool hasLeading = false,
+    bool compactDetailRail = false,
   }) {
     final focusExtra = FocusTheme.focusBorderWidth * 2 * scale;
-    final railEdgePadding = focusExtra + (12 * scale);
+    final railEdgePadding = focusExtra + (compactDetailRail ? 0 : 12 * scale);
     // Full-card rails keep their own scale-derived gutter, like full-bleed
     // grids; every other rail follows the user's grid-spacing setting, scaled
     // with the rest of the rail metrics (#2226).
@@ -207,7 +208,7 @@ class TvBrowseRailLayout {
         : (useWideLayout ? posterWidth * 9 / 16 : posterWidth * 1.5);
     final labelHeight = fullCardLayout ? 0.0 : ((isPersonHub ? 52 : 36) * scale);
     final containerHeight = (posterHeight + labelHeight).ceilToDouble();
-    final height = containerHeight + focusExtra + (22 * scale);
+    final height = containerHeight + focusExtra + ((compactDetailRail ? 10 : 22) * scale);
 
     return TvBrowseRailLayoutMetrics(
       isPersonHub: isPersonHub,
@@ -1307,6 +1308,7 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
                 gridSpacing: gridSpacing,
                 tallPosterScale: widget.tallPosterScale,
                 widePosterScale: wideScales[i],
+                compactDetailRail: widget.compactDetailRail,
                 hasLeading: _hasLeadingFor(widget.hubs[i]),
               ),
           ];
@@ -1351,7 +1353,7 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
-                    _RailBleedPositioned(
+                    if (!widget.compactDetailRail) _RailBleedPositioned(
                       width: width,
                       targetBleedLeft: widget.backgroundBleedLeft,
                       child: RasterizedGradient(
@@ -1737,7 +1739,7 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
         slivers: [
           if (leadingCount > 0)
             SliverPadding(
-              padding: .fromLTRB(metrics.railEdgePadding, 2 * scale, 0, 18 * scale),
+              padding: .fromLTRB(metrics.railEdgePadding, 2 * scale, 0, (widget.compactDetailRail ? 6 : 18) * scale),
               sliver: SliverToBoxAdapter(
                 child: Align(
                   alignment: .topLeft,
@@ -1752,7 +1754,7 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
             ),
           SliverPadding(
             key: centerSliverKey,
-            padding: .fromLTRB(metrics.railEdgePadding, 2 * scale, metrics.railEdgePadding, 18 * scale),
+            padding: .fromLTRB(metrics.railEdgePadding, 2 * scale, metrics.railEdgePadding, (widget.compactDetailRail ? 6 : 18) * scale),
             sliver: SliverFixedExtentList(
               // A fixed extent keeps all sliver offset and child-index math O(1).
               itemExtent: TvBrowseRailLayout.itemExtentForIndex(index: 0, metrics: metrics),
