@@ -621,7 +621,9 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
           hasFirstFrame: widget.hasFirstFrame,
           placeholder: const Expanded(child: SizedBox.shrink()),
           builder: (context) => Expanded(
-            child: Column(
+            child: Stack(
+              children: [
+                Column(
               children: [
                 const Spacer(),
                 // When content strip is visible, hide the normal controls (like mobile)
@@ -634,6 +636,48 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            _buildBottomControlsContent(context, hasFrame: true),
+                          ],
+                        ),
+                        // Down arrow hint when strip content is available
+                        if (widget.useDpadNavigation && _hasStripContent)
+                          const ContentStripHint(Symbols.keyboard_arrow_down_rounded),
+                      ],
+                    ),
+                  ),
+                // Content strip (TV/dpad only) — replaces normal controls
+                if (_contentStripVisible && widget.useDpadNavigation)
+                  _absorbMissedClicks(
+                    ContentStripPanel(
+                      padding: EdgeInsets.only(left: _visionVod ? 175 : 8, right: 8, bottom: 8, top: 32),
+                      chevron: Symbols.keyboard_arrow_up_rounded,
+                      child: ContentStrip(
+                        key: _contentStripKey,
+                        player: widget.player,
+                        chapters: widget.chapters,
+                        serverId: widget.serverId,
+                        canControl: _canControl,
+                        showQueueTab: widget.showQueueTab,
+                        onQueueItemSelected: widget.onQueueItemSelected,
+                        onSeekRequested: widget.onSeekRequested,
+                        onSeekCompleted: widget.onSeekCompleted,
+                        useFocusNavigation: true,
+                        onNavigateUp: _onContentStripNavigateUp,
+                        onFocusActivity: widget.onFocusActivity,
+                      ),
+                    ),
+                  ),
+              ],
+                ),
+                if (_visionVod)
+                  Positioned(
+                    left: 0,
+                    bottom: 130,
+                    child: IgnorePointer(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                             if (_visionVod) _visionFormatBadges(),
                             if (_visionVod && widget.metadata.posterThumb() != null)
                               Padding(
@@ -658,34 +702,7 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
                                   ),
                                 ),
                               ),
-                            _buildBottomControlsContent(context, hasFrame: true),
-                          ],
-                        ),
-                        // Down arrow hint when strip content is available
-                        if (widget.useDpadNavigation && _hasStripContent)
-                          const ContentStripHint(Symbols.keyboard_arrow_down_rounded),
-                      ],
-                    ),
-                  ),
-                // Content strip (TV/dpad only) — replaces normal controls
-                if (_contentStripVisible && widget.useDpadNavigation)
-                  _absorbMissedClicks(
-                    ContentStripPanel(
-                      padding: const EdgeInsets.only(left: 8, right: 8, bottom: 8, top: 32),
-                      chevron: Symbols.keyboard_arrow_up_rounded,
-                      child: ContentStrip(
-                        key: _contentStripKey,
-                        player: widget.player,
-                        chapters: widget.chapters,
-                        serverId: widget.serverId,
-                        canControl: _canControl,
-                        showQueueTab: widget.showQueueTab,
-                        onQueueItemSelected: widget.onQueueItemSelected,
-                        onSeekRequested: widget.onSeekRequested,
-                        onSeekCompleted: widget.onSeekCompleted,
-                        useFocusNavigation: true,
-                        onNavigateUp: _onContentStripNavigateUp,
-                        onFocusActivity: widget.onFocusActivity,
+                        ],
                       ),
                     ),
                   ),
