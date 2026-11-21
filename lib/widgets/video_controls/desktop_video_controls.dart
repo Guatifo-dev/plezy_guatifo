@@ -872,7 +872,10 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
     final canInteract = _canControl && hasFrame;
     return Container(
       margin: _visionVod ? const EdgeInsets.fromLTRB(16, 0, 16, 10) : EdgeInsets.zero,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      height: _visionVod ? 120 : null,
+      padding: _visionVod
+          ? const EdgeInsets.fromLTRB(24, 4, 24, 4)
+          : const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       decoration: _visionVod ? BoxDecoration(
         color: const Color(0xD90A122B),
         borderRadius: BorderRadius.circular(22),
@@ -882,9 +885,10 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
         children: [
           if (_visionVod)
             Padding(
-              padding: const EdgeInsets.only(bottom: 8),
+              padding: EdgeInsets.zero,
               child: SizedBox(
                 width: double.infinity,
+                height: 22,
                 child: Text(
                   widget.metadata.grandparentId != null
                       ? 'S${widget.metadata.parentIndex ?? 0}E${widget.metadata.index ?? 0} · ${widget.metadata.title ?? t.common.unknown}'
@@ -910,7 +914,9 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
               enabled: canInteract,
             ),
           ] else if (!_isLive) ...[
-            VideoTimelineBar(
+            SizedBox(
+              height: _visionVod ? 24 : null,
+              child: VideoTimelineBar(
               player: widget.player,
               chapters: widget.chapters,
               chaptersLoaded: widget.chaptersLoaded,
@@ -927,9 +933,12 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
               thumbnailDataBuilder: widget.thumbnailDataBuilder,
               showKeyRepeatThumbnail: _showKeyRepeatThumbnail,
               previewPosition: _timelineSeek.pendingPosition,
+              ),
             ),
           ],
-          Focus(
+          SizedBox(
+            height: _visionVod ? 44 : null,
+            child: Focus(
             onFocusChange: _onButtonRowFocusChange,
             skipTraversal: true,
             child: Row(
@@ -1123,8 +1132,10 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
               ],
             ),
           ),
+          ),
           if (_visionVod) ...[
-            const Divider(height: 12, color: Colors.white24),
+            const Divider(height: 4, color: Colors.white24),
+            SizedBox(height: 16, child:
             FinishTimeBuilder(
               player: widget.player,
               builder: (context, finishTime) => finishTime == null
@@ -1132,7 +1143,7 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
                 : Text(t.videoControls.endsAt(time: formatClockTime(finishTime,
                     is24Hour: MediaQuery.alwaysUse24HourFormatOf(context))),
                     style: const TextStyle(color: Colors.white70, fontSize: 13)),
-            ),
+            )),
           ],
         ],
       ),
