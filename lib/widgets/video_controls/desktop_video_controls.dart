@@ -763,8 +763,9 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
         ClearLogoImage(
           client: client,
           logoPath: client == null ? null : item.clearLogoPath,
-          width: 160, height: 52, fallbackWidth: 160,
-          fallbackBuilder: (_) => Align(alignment: Alignment.centerLeft, child: Text(
+          width: 200, height: 65, fallbackWidth: 200,
+          alignment: Alignment.center,
+          fallbackBuilder: (_) => Align(alignment: Alignment.center, child: Text(
             item.grandparentTitle ?? item.title ?? t.common.unknown,
             maxLines: 2, overflow: TextOverflow.ellipsis,
             style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
@@ -782,12 +783,12 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
             )),
           )),
       ]),
-      if (item.durationMs != null || item.grandparentTitle != null)
-        Text([
-          if (item.grandparentTitle != null) 'S${item.parentIndex ?? 0}E${item.index ?? 0} · ${item.title ?? ""}',
-          if (item.durationMs != null) formatDurationTextual(item.durationMs!),
-        ].join(' · '), maxLines: 1, overflow: TextOverflow.ellipsis,
-          style: const TextStyle(color: Colors.white70, fontSize: 14)),
+      if (item.grandparentTitle != null)
+        Text(
+          'S${item.parentIndex ?? 0}E${item.index ?? 0} · ${item.title ?? ""}',
+          maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: Colors.white70, fontSize: 14),
+        ),
     ]);
   }
 
