@@ -47,6 +47,19 @@ class PlayerFocusDisc extends StatelessWidget {
   Widget build(BuildContext context) {
     final showFocus = CardFocusScope.maybeOf(context) ?? false;
     final visionFocus = showFocus && PlatformDetector.isTV();
+    if (PlatformDetector.isTV() && borderRadius == null) {
+      return Stack(
+        alignment: Alignment.center,
+        children: [
+          if (showFocus)
+            const Positioned(
+              left: 2, right: 2, top: 2, bottom: 2,
+              child: DecoratedBox(decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle)),
+            ),
+          builder(context, showFocus ? Colors.black : iconColor),
+        ],
+      );
+    }
     return AnimatedContainer(
       duration: FocusTheme.getAnimationDuration(context),
       curve: Curves.easeOutCubic,

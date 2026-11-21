@@ -1014,13 +1014,14 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
           ),
           if (_visionVod) ...[
             const Divider(height: 4, color: Colors.white24),
-            SizedBox(height: 16, child:
+            SizedBox(height: 16, width: double.infinity, child:
             FinishTimeBuilder(
               player: widget.player,
               builder: (context, finishTime) => finishTime == null
                 ? const SizedBox.shrink()
                 : Text(t.videoControls.endsAt(time: formatClockTime(finishTime,
                     is24Hour: MediaQuery.alwaysUse24HourFormatOf(context))),
+                    textAlign: TextAlign.left,
                     style: const TextStyle(color: Colors.white70, fontSize: 13)),
             )),
           ],

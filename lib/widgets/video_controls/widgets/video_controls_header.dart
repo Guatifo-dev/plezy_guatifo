@@ -85,10 +85,13 @@ class VideoControlsHeader extends StatelessWidget {
           },
         ),
         if (showClock)
-          const Padding(
-            padding: EdgeInsets.only(right: 8),
-            child: SystemClock(
-              style: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: .w500),
+          Transform.translate(
+            offset: Offset(0, alignTop ? -16.0 : 0.0),
+            child: const Padding(
+              padding: EdgeInsets.only(right: 8),
+              child: SystemClock(
+                style: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: .w500),
+              ),
             ),
           ),
         ?trailing,
