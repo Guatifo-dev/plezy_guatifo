@@ -4498,9 +4498,9 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
             padding: const EdgeInsets.fromLTRB(16, 16, 26, 20),
             child: LayoutBuilder(
               builder: (context, bounds) {
-                final posterWidth = series ? math.min(size.width * 0.19, bounds.maxHeight * 0.39) : size.width * 0.19;
+                final posterWidth = series ? math.min(size.width * 0.19, bounds.maxHeight * (_seasons.length > 1 ? 0.34 : 0.39)) : size.width * 0.19;
                 final posterHeight = posterWidth * 1.5;
-                final seriesRailHeight = bounds.maxHeight * 0.32;
+                final seriesRailHeight = bounds.maxHeight * 0.32 + (series && _seasons.length > 1 ? 38 * TvLayoutConstants.scaleOf(context) : 0);
                 return Stack(
                   children: [
                     // Artwork starts at the same top inset as the poster.
@@ -4710,6 +4710,32 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     );
   }
 
+  Future<void> _chooseVisionSeason(MediaItem metadata) async {
+    _clearTvDetailFocusedEpisode();
+    final index = await showDialog<int>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: Text(t.libraries.groupings.seasons),
+        children: [
+          for (var i = 0; i < _seasons.length; i++)
+            FocusableWrapper(
+              autofocus: i == _selectedSeasonIndex,
+              disableScale: true,
+              onSelect: () => Navigator.of(dialogContext).pop(i),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                child: Text(_seasons[i].displayTitle),
+              ),
+            ),
+        ],
+      ),
+    );
+    if (!_canUseDetail || index == null || index == _selectedSeasonIndex || index >= _seasons.length) return;
+    final id = '$_tvDetailSeasonHubIdPrefix$index';
+    final hub = _tvDetailHubs(metadata).firstWhere((hub) => hub.id == id);
+    _handleTvDetailHubChanged(hub, index);
+  }
+
   Widget _buildVisionSeriesEpisodes(MediaItem metadata) {
     final hubs = _tvDetailHubs(metadata).where((hub) =>
         hub.id == _tvDetailSeasonsErrorHubId || hub.id == _tvDetailInitialHubId(metadata)).toList();
@@ -4718,19 +4744,28 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
       children: [
         const Divider(height: 8),
         if (_seasons.length > 1)
-          DropdownButton<int>(
-            value: _selectedSeasonIndex,
-            items: [
-              for (var i = 0; i < _seasons.length; i++)
-                DropdownMenuItem(value: i, child: Text(_seasons[i].displayTitle)),
-            ],
-            onChanged: (index) {
-              if (index == null || index == _selectedSeasonIndex) return;
-              _clearTvDetailFocusedEpisode();
-              final id = '$_tvDetailSeasonHubIdPrefix$index';
-              final hub = _tvDetailHubs(metadata).firstWhere((hub) => hub.id == id);
-              _handleTvDetailHubChanged(hub, index);
-            },
+          SizedBox(
+            height: 34 * TvLayoutConstants.scaleOf(context),
+            child: FocusableWrapper(
+              disableScale: true,
+              autoScroll: false,
+              onNavigateUp: _focusTvDetailActionRow,
+              onNavigateDown: () {
+                _tvDetailActionRowHasFocus = false;
+                _tvDetailRailKey.currentState?.requestFocus();
+              },
+              onSelect: () => unawaited(_chooseVisionSeason(metadata)),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(width: 12),
+                  Text(_seasons[_selectedSeasonIndex].displayTitle),
+                  const SizedBox(width: 12),
+                  const Icon(Icons.keyboard_arrow_down),
+                  const SizedBox(width: 12),
+                ],
+              ),
+            ),
           ),
         Expanded(
           child: hubs.isEmpty
