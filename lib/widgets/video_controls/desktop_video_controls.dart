@@ -630,7 +630,30 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
                     Stack(
                       clipBehavior: Clip.none,
                       children: [
-                        _buildBottomControlsContent(context, hasFrame: true),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (_visionVod && widget.metadata.posterThumb() != null)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 24, bottom: 12),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(14),
+                                  child: OptimizedMediaImage(
+                                    client: context.tryGetMediaClientWithFallback(
+                                      serverIdOrNull(widget.metadata.serverId),
+                                    ),
+                                    imagePath: widget.metadata.posterThumb(),
+                                    width: 92,
+                                    height: 138,
+                                    fit: BoxFit.cover,
+                                    imageType: ImageType.poster,
+                                  ),
+                                ),
+                              ),
+                            _buildBottomControlsContent(context, hasFrame: true),
+                          ],
+                        ),
                         // Down arrow hint when strip content is available
                         if (widget.useDpadNavigation && _hasStripContent)
                           const ContentStripHint(Symbols.keyboard_arrow_down_rounded),
