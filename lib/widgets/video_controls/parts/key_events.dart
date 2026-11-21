@@ -41,6 +41,19 @@ extension _PlexVideoControlsKeyEventMethods on _PlexVideoControlsState {
     return null;
   }
 
+  // A TV remote pause raises the same chrome as Select, without invoking
+  // Select's skip-marker shortcut or changing directed transport semantics.
+  void _activateTransportKey(KeyEvent event, TransportCommand command) {
+    final hardware = classifyTransportKey(event.logicalKey);
+    final pauses = command == TransportCommand.pause ||
+        (command == TransportCommand.toggle && widget.player.state.playing);
+    if (PlatformDetector.isTV() && !widget.isLive && hardware != null && pauses &&
+        !widget.playbackPromptOpen && !_sheetIsOpen()) {
+      _showControlsWithFocus();
+    }
+    unawaited(_playOrPause(command: command));
+  }
+
   TransportCommand? _playPauseActivation(KeyEvent event) {
     return event is KeyDownEvent ? _transportCommandFor(event) : null;
   }
@@ -204,7 +217,7 @@ extension _PlexVideoControlsKeyEventMethods on _PlexVideoControlsState {
     // stays down and subtitles stay readable (#1676).
     final globalCommand = _playPauseActivation(event);
     if (globalCommand != null) {
-      unawaited(_playOrPause(command: globalCommand));
+      _activateTransportKey(event, globalCommand);
       return true; // Event handled, stop propagation
     }
 
@@ -302,7 +315,7 @@ extension _PlexVideoControlsKeyEventMethods on _PlexVideoControlsState {
     // command with a centred transient disc instead (#1676).
     if (transportCommand != null) {
       if ((videoPlayerNavigationPreference() || isMobile) && event is KeyDownEvent) {
-        unawaited(_playOrPause(command: transportCommand));
+        _activateTransportKey(event, transportCommand);
       }
       return KeyEventResult.handled;
     }
