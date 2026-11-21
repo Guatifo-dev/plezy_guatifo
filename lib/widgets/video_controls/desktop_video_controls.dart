@@ -886,7 +886,7 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
               child: SizedBox(
                 width: double.infinity,
                 child: Text(
-                  widget.metadata.kind == MediaKind.episode
+                  widget.metadata.grandparentId != null
                       ? 'S${widget.metadata.parentIndex ?? 0}E${widget.metadata.index ?? 0} · ${widget.metadata.title ?? t.common.unknown}'
                       : widget.metadata.title ?? t.common.unknown,
                   textAlign: TextAlign.center,
