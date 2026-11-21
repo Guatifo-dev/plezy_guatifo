@@ -4505,7 +4505,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
               builder: (context, bounds) {
                 final posterWidth = series ? math.min(size.width * 0.19, bounds.maxHeight * (_seasons.length > 1 ? 0.34 : 0.39)) : size.width * 0.19;
                 final posterHeight = posterWidth * 1.5;
-                final seriesRailHeight = bounds.maxHeight * 0.32 + (series && _seasons.length > 1 ? 42 * TvLayoutConstants.scaleOf(context) : 0);
+                final seriesRailHeight = bounds.maxHeight * 0.32 + (series && _seasons.length > 1 ? 46 * TvLayoutConstants.scaleOf(context) : 0);
                 return Stack(
                   children: [
                     // Artwork starts at the same top inset as the poster.
@@ -4715,30 +4715,16 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     );
   }
 
-  Future<void> _chooseVisionSeason(MediaItem metadata) async {
+  void _selectVisionSeason(MediaItem metadata, int index) {
+    if (!_canUseDetail || index == _selectedSeasonIndex || index < 0 || index >= _seasons.length) return;
     _clearTvDetailFocusedEpisode();
-    final index = await showDialog<int>(
-      context: context,
-      builder: (dialogContext) => SimpleDialog(
-        title: Text(t.libraries.groupings.seasons),
-        children: [
-          for (var i = 0; i < _seasons.length; i++)
-            FocusableWrapper(
-              autofocus: i == _selectedSeasonIndex,
-              disableScale: true,
-              onSelect: () => Navigator.of(dialogContext).pop(i),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                child: Text(_seasons[i].displayTitle),
-              ),
-            ),
-        ],
-      ),
-    );
-    if (!_canUseDetail || index == null || index == _selectedSeasonIndex || index >= _seasons.length) return;
     final id = '$_tvDetailSeasonHubIdPrefix$index';
-    final hub = _tvDetailHubs(metadata).firstWhere((hub) => hub.id == id);
-    _handleTvDetailHubChanged(hub, index);
+    for (final hub in _tvDetailHubs(metadata)) {
+      if (hub.id == id) {
+        _handleTvDetailHubChanged(hub, index);
+        break;
+      }
+    }
   }
 
   Widget _buildVisionSeriesEpisodes(MediaItem metadata) {
@@ -4750,25 +4736,67 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
         const Divider(height: 8),
         if (_seasons.length > 1)
           SizedBox(
-            height: 34 * TvLayoutConstants.scaleOf(context),
-            child: FocusableWrapper(
-              focusNode: _seasonTabFocusNodes.length > _selectedSeasonIndex ? _seasonTabFocusNodes[_selectedSeasonIndex] : null,
-              disableScale: true,
-              autoScroll: false,
-              onNavigateUp: _focusTvDetailActionRow,
-              onNavigateDown: () {
-                _tvDetailActionRowHasFocus = false;
-                _tvDetailRailKey.currentState?.requestFocus();
-              },
-              onSelect: () => unawaited(_chooseVisionSeason(metadata)),
+            height: 30 * TvLayoutConstants.scaleOf(context),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
               child: Row(
-                mainAxisSize: MainAxisSize.min,
                 children: [
-                  const SizedBox(width: 12),
-                  Text(_seasons[_selectedSeasonIndex].displayTitle),
-                  const SizedBox(width: 12),
-                  const Icon(Icons.keyboard_arrow_down),
-                  const SizedBox(width: 12),
+                  for (var i = 0; i < _seasons.length; i++)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: FocusableWrapper(
+                        key: ValueKey(_seasons[i].id),
+                        focusNode: _seasonTabFocusNodes.length > i ? _seasonTabFocusNodes[i] : null,
+                        disableScale: true,
+                        autoScroll: false,
+                        delegateFocusBorder: true,
+                        onFocusChange: (focused) {
+                          if (!focused) return;
+                          final target = _seasonTabFocusNodes.length > i ? _seasonTabFocusNodes[i].context : null;
+                          if (target != null) Scrollable.ensureVisible(target, alignment: 0.5, duration: const Duration(milliseconds: 150));
+                          _selectVisionSeason(metadata, i);
+                        },
+                        onKeyEvent: (node, event) {
+                          if (event is! KeyDownEvent && event is! KeyRepeatEvent) return KeyEventResult.ignored;
+                          final key = event.logicalKey;
+                          if (key == LogicalKeyboardKey.arrowLeft || key == LogicalKeyboardKey.arrowRight) {
+                            final next = i + (key == LogicalKeyboardKey.arrowLeft ? -1 : 1);
+                            if (next >= 0 && next < _seasonTabFocusNodes.length) _seasonTabFocusNodes[next].requestFocus();
+                            return KeyEventResult.handled;
+                          }
+                          if (key == LogicalKeyboardKey.arrowUp) {
+                            _focusTvDetailActionRow();
+                            return KeyEventResult.handled;
+                          }
+                          if (key == LogicalKeyboardKey.arrowDown) {
+                            _tvDetailActionRowHasFocus = false;
+                            _tvDetailRailKey.currentState?.requestFocus();
+                            return KeyEventResult.handled;
+                          }
+                          return KeyEventResult.ignored;
+                        },
+                        onSelect: () => _selectVisionSeason(metadata, i),
+                        child: ListenableBuilder(
+                          listenable: _seasonTabFocusNodes[i],
+                          builder: (context, _) {
+                            final focused = _seasonTabFocusNodes[i].hasFocus;
+                            final selected = i == _selectedSeasonIndex;
+                            final number = _seasons[i].index ?? i + 1;
+                            final label = number == 0 ? 'Especiales' : 'Temporada $number';
+                            return Container(
+                              alignment: Alignment.center,
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              decoration: BoxDecoration(
+                                color: focused ? Colors.white : Colors.white.withValues(alpha: selected ? 0.20 : 0.07),
+                                border: Border.all(color: selected ? const Color(0xFF6DADFF) : Colors.white24),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(label, style: TextStyle(color: focused ? Colors.black : Colors.white, fontWeight: FontWeight.w600)),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -4800,7 +4828,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                     }
                   },
                   onBack: _popMediaDetailIfBackNotSuppressed,
-                  widePosterScaleForHub: (_) => 0.56,
+                  widePosterScaleForHub: (_) => _seasons.length > 1 ? 0.60 : 0.56,
                   initialHubId: _tvDetailInitialHubId(metadata),
                   initialItemId: _tvDetailInitialItemId(metadata),
                   episodePosterModeForHub: _tvDetailEpisodePosterModeForHub,
