@@ -17,6 +17,7 @@ import '../providers/watch_state_store.dart';
 import '../watch_together/providers/watch_together_provider.dart';
 import '../watch_together/models/watch_copy.dart';
 import '../screens/video_player_screen.dart';
+import '../widgets/plex_trailer_preview.dart';
 import '../services/external_player_service.dart';
 import '../services/local_playback_history.dart';
 import '../services/offline_watch_sync_service.dart';
@@ -489,6 +490,11 @@ Future<bool?> navigateToVideoPlayer(
       launchObserver.mark('blocked', blocker: 'playbackActive');
       return null;
     }
+
+    // Retire the shared spotlight trailer before handing audio to VOD.
+    // This also covers episodes launched from a series detail route.
+    await PlexTrailerPreview.stop();
+    if (!launchCurrent() || !navigator.mounted || (sourceRoute != null && !sourceRoute.isActive)) return null;
 
     final route = VideoPlayerRoute(
       joinsWatchTogether: true,
