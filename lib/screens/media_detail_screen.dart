@@ -3765,13 +3765,19 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
       );
     }
     if (isTv && metadata.isShow) {
-      if (!_movieInitialFocusScheduled) {
-        _movieInitialFocusScheduled = true;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (_canUseDetail && widget.initialEpisodeId == null) _playButtonFocusNode.requestFocus();
-        });
+      if (widget.initialEpisodeId != null && !_initialEpisodePagingDone && _episodes.isNotEmpty) _maybeLoadMoreForInitialEpisode();
+      if (!_movieInitialFocusScheduled && _episodes.isNotEmpty &&
+          (widget.initialEpisodeId == null || _episodesContainInitialTarget || _initialEpisodePagingDone)) {
+        final target = widget.initialEpisodeId ?? _onDeckEpisode?.id;
+        if (target == null || _episodes.any((episode) => episode.id == target) || _initialEpisodePagingDone) {
+          _movieInitialFocusScheduled = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!_canUseDetail) return;
+            _tvDetailActionRowHasFocus = false;
+            _tvDetailRailKey.currentState?.requestInitialFocus();
+          });
+        }
       }
-      if (widget.initialEpisodeId != null && !_initialEpisodePagingDone) _maybeLoadMoreForInitialEpisode();
       return PopScope(
         canPop: !InputModeTracker.shouldBlockSystemBack(context),
         onPopInvokedWithResult: (didPop, result) {
@@ -4505,7 +4511,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
               builder: (context, bounds) {
                 final posterWidth = series ? math.min(size.width * 0.19, bounds.maxHeight * (_seasons.length > 1 ? 0.34 : 0.39)) : size.width * 0.19;
                 final posterHeight = posterWidth * 1.5;
-                final seriesRailHeight = bounds.maxHeight * 0.32 + (series && _seasons.length > 1 ? 46 * TvLayoutConstants.scaleOf(context) : 0);
+                final seriesRailHeight = bounds.maxHeight * 0.34 + (series && _seasons.length > 1 ? 46 * TvLayoutConstants.scaleOf(context) : 0);
                 return Stack(
                   children: [
                     // Artwork starts at the same top inset as the poster.
@@ -4604,7 +4610,8 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                         children: [
                           _buildTvDetailMetadataLine(context, metadata, TvLayoutConstants.scaleOf(context)),
                           if (item.isEpisode) ...[
-                            Text(item.displayTitle, maxLines: 1, overflow: TextOverflow.ellipsis),
+                            if (item.title != null && item.title!.isNotEmpty && item.title != metadata.title)
+                              Text(item.title!, maxLines: 1, overflow: TextOverflow.ellipsis),
                             SelectedMediaFormatBadges(key: ValueKey(item.globalKey), item: item),
                           ],
                           const SizedBox(height: 8),
@@ -4804,11 +4811,34 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
         Expanded(
           child: hubs.isEmpty
               ? Center(child: _isLoadingSeasons || _isLoadingEpisodes ? const CircularProgressIndicator() : const SizedBox.shrink())
-              : ClipRect(child: FittedBox(
+              : LayoutBuilder(builder: (context, railBounds) {
+                final scale = TvLayoutConstants.scaleOf(context);
+                final svc = SettingsService.instance;
+                double heightFor(double factor) {
+                  final metrics = TvBrowseRailLayout.metricsForHub(
+                    hub: hubs.first,
+                    availableWidth: railBounds.maxWidth,
+                    density: svc.read(SettingsService.libraryDensity),
+                    episodePosterMode: _tvDetailEpisodePosterModeForHub(hubs.first),
+                    scale: scale,
+                    fullCardLayout: svc.read(SettingsService.tvFullCardLayout),
+                    gridSpacing: svc.read(SettingsService.gridSpacing),
+                    widePosterScale: factor,
+                    hasLeading: _tvDetailLeadingItemForHub(hubs.first) != null,
+                  );
+                  return metrics.height + TvBrowseRailLayout.railTopPaddingForScale(scale) +
+                      TvBrowseRailLayout.railBottomPaddingForScale(scale);
+                }
+                var factor = 0.76;
+                while (factor > 0.30 && heightFor(factor) > railBounds.maxHeight) {
+                  factor -= 0.01;
+                }
+                final fittedScale = factor;
+                return ClipRect(child: FittedBox(
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.topLeft,
                 child: SizedBox(
-                  width: MediaQuery.sizeOf(context).width * 0.98 - 46,
+                  width: railBounds.maxWidth,
                   child: TvBrowseRail(
                   key: _tvDetailRailKey,
                   hubs: hubs,
@@ -4828,14 +4858,16 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                     }
                   },
                   onBack: _popMediaDetailIfBackNotSuppressed,
-                  widePosterScaleForHub: (_) => _seasons.length > 1 ? 0.60 : 0.56,
+                  widePosterScaleForHub: (_) => fittedScale,
+                  compactDetailRail: true,
                   initialHubId: _tvDetailInitialHubId(metadata),
                   initialItemId: _tvDetailInitialItemId(metadata),
                   episodePosterModeForHub: _tvDetailEpisodePosterModeForHub,
                   showTitleImpliedForHub: _isTvDetailEpisodeHub,
                 ),
                 ),
-              )),
+              ));
+              }),
         ),
       ],
     );
@@ -5210,7 +5242,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
   String? _tvDetailInitialItemId(MediaItem metadata) {
     if (widget.initialEpisodeId != null) return widget.initialEpisodeId;
     if (!metadata.isShow) return null;
-    return _onDeckEpisode?.id;
+    return _onDeckEpisode?.id ?? firstUnwatchedEpisode(_episodes)?.id ?? (_episodes.isNotEmpty ? _episodes.first.id : null);
   }
 
   // Cached per metadata object: the TV rail memoizes cards by item identity,

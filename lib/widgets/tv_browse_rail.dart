@@ -392,6 +392,7 @@ class TvBrowseRail extends StatefulWidget {
   final String? initialHubId;
   final String? initialItemId;
   final bool autofocus;
+  final bool compactDetailRail;
   final EpisodePosterMode Function(MediaHub hub)? episodePosterModeForHub;
   final double Function(MediaHub hub)? widePosterScaleForHub;
 
@@ -433,6 +434,7 @@ class TvBrowseRail extends StatefulWidget {
     this.initialHubId,
     this.initialItemId,
     this.autofocus = false,
+    this.compactDetailRail = false,
     this.episodePosterModeForHub,
     this.widePosterScaleForHub,
     this.showTitleImpliedForHub,
@@ -1278,7 +1280,7 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
           final svc = SettingsService.instance;
           final theme = Theme.of(context);
           final scale = _scale(context);
-          final horizontalInset = _horizontalInset(context);
+          final horizontalInset = widget.compactDetailRail ? 0.0 : _horizontalInset(context);
           final interactionExpansion = TvBrowseRailLayout.railInteractionExpansionForScale(
             scale,
           ).clamp(0.0, horizontalInset).toDouble();
@@ -1310,7 +1312,7 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
           ];
           final sectionHeights = [
             for (final metrics in metricsByHub)
-              TvBrowseRailLayout.hubSectionHeightFor(scale: scale, activeRailHeight: metrics.height),
+              widget.compactDetailRail ? metrics.height : TvBrowseRailLayout.hubSectionHeightFor(scale: scale, activeRailHeight: metrics.height),
           ];
           final offsets = <double>[];
           var nextOffset = 0.0;
@@ -1459,7 +1461,7 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
             child: Column(
               crossAxisAlignment: .stretch,
               children: [
-                ListenableSelector<(bool, int)>(
+                if (!widget.compactDetailRail) ListenableSelector<(bool, int)>(
                   listenable: _focusModel,
                   selector: headerSelection,
                   builder: (context, selection, _) => _buildHubHeader(

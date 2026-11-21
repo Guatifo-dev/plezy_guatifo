@@ -299,7 +299,7 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
             ),
           );
 
-    final shuffleAction = (metadata.isShow || metadata.isSeason)
+    final shuffleAction = (metadata.isShow || metadata.isSeason) && !(isTv && metadata.isShow)
         ? FocusableAction(
             debugLabel: 'detail_shuffle',
             onPressed: () async {
