@@ -2079,6 +2079,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
         shouldShowEpisodesDirectly = seasonsWithServerId.length <= 1;
       }
 
+      if (PlatformDetector.isTV()) shouldShowEpisodesDirectly = seasonsWithServerId.length <= 1;
       _updateSeasonTabFocusNodes(seasonsWithServerId.length);
 
       // Auto-select the on-deck season
@@ -4010,6 +4011,9 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     KeyEventResult Function(FocusNode, KeyEvent) handleBack,
   ) {
     final size = MediaQuery.sizeOf(context);
+    final selectedSeason = metadata.isShow && _selectedSeasonIndex >= 0 && _selectedSeasonIndex < _seasons.length
+        ? _seasons[_selectedSeasonIndex] : null;
+    final seriesPosterPath = selectedSeason?.thumbPath ?? metadata.thumbPath;
     final detailHubs = metadata.isMovie ? const <MediaHub>[] : _tvDetailHubs(metadata);
     if (widget.initialEpisodeId != null && !_initialEpisodePagingDone) {
       _maybeLoadMoreForInitialEpisode();
@@ -4052,6 +4056,24 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                 )
               : const SizedBox.shrink(),
         ),
+        if (metadata.isShow && seriesPosterPath != null)
+          Positioned(
+            right: spotlightLeft,
+            top: spotlightTop,
+            bottom: foregroundBottom,
+            width: size.width * 0.30,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: AspectRatio(
+                aspectRatio: 2 / 3,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12 * detailScale),
+                  child: _buildOfflineArtworkIfAvailable(context, artworkPaths: [seriesPosterPath], fit: BoxFit.cover, imageType: ImageType.poster) ??
+                      OptimizedMediaImage(client: _getMediaClientForMetadata(context), imagePath: seriesPosterPath, fit: BoxFit.cover, imageType: ImageType.poster),
+                ),
+              ),
+            ),
+          ),
         if (!metadata.isMovie)
           Positioned(
             top: 0,
@@ -4834,7 +4856,13 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
 
   String? _tvDetailDescription(MediaItem metadata, {required bool hideSpoilers}) {
     final focusedEpisode = _tvDetailFocusedEpisode.value;
-    if (focusedEpisode == null) return _tvDetailItemDescription(metadata, hideSpoilers: hideSpoilers);
+    if (focusedEpisode == null) {
+      if (PlatformDetector.isTV() && metadata.isShow && _selectedSeasonIndex >= 0 && _selectedSeasonIndex < _seasons.length) {
+        final summary = _tvDetailItemDescription(_seasons[_selectedSeasonIndex], hideSpoilers: hideSpoilers);
+        if (summary != null) return summary;
+      }
+      return _tvDetailItemDescription(metadata, hideSpoilers: hideSpoilers);
+    }
 
     final episodeDescription = _tvDetailItemDescription(focusedEpisode, hideSpoilers: hideSpoilers);
     if (episodeDescription != null) return episodeDescription;
