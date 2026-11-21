@@ -647,7 +647,6 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
                                     width: 92,
                                     height: 138,
                                     fit: BoxFit.cover,
-                                    imageType: ImageType.poster,
                                   ),
                                 ),
                               ),
