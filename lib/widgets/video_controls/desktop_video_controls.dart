@@ -832,12 +832,6 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
         )
       else
         logo(item.clearLogoPath),
-      if (item.grandparentTitle != null)
-        Text(
-          'S${item.parentIndex ?? 0}E${item.index ?? 0} · ${item.title ?? ""}',
-          maxLines: 1, overflow: TextOverflow.ellipsis,
-          style: const TextStyle(color: Colors.white70, fontSize: 14),
-        ),
     ]);
   }
 
@@ -886,6 +880,22 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
       ) : null,
       child: Column(
         children: [
+          if (_visionVod)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: SizedBox(
+                width: double.infinity,
+                child: Text(
+                  widget.metadata.kind == MediaKind.episode
+                      ? 'S${widget.metadata.parentIndex ?? 0}E${widget.metadata.index ?? 0} · ${widget.metadata.title ?? t.common.unknown}'
+                      : widget.metadata.title ?? t.common.unknown,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                ),
+              ),
+            ),
           if (_isLive && widget.captureBuffer != null) ...[
             LiveTimelineBar(
               player: widget.player,
