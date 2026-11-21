@@ -634,6 +634,7 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            if (_visionVod) _visionFormatBadges(),
                             if (_visionVod && widget.metadata.posterThumb() != null)
                               Padding(
                                 padding: const EdgeInsets.only(left: 24, bottom: 12),
@@ -725,9 +726,8 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
 
   bool get _visionVod => PlatformDetector.isTV() && !_isLive;
 
-  Widget _visionHeaderArtwork(BuildContext context) {
-    final item = widget.metadata;
-    final client = context.tryGetMediaClientWithFallback(serverIdOrNull(item.serverId));
+  Widget _visionFormatBadges() {
+    if (!SettingsService.instance.read(SettingsService.showHeroFormatBadges)) return const SizedBox.shrink();
     final state = _trackControlsState;
     final versions = state.availableVersions;
     final index = state.selectedMediaIndex;
@@ -786,32 +786,52 @@ class DesktopVideoControlsState extends State<DesktopVideoControls> {
       final lang = [sub.languageCode, sub.language].whereType<String>().join(' ').toLowerCase();
       if (RegExp(r'(^|[^a-z])(es|es-es|spa|spanish|español|castellano)([^a-z]|$)').hasMatch(lang)) logos.add('forzado_es.png');
     }
+    if (logos.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(left: 24, bottom: 12),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [for (final logo in logos) Padding(
+          padding: const EdgeInsets.only(right: 9),
+          child: Image.asset('assets/hero_badges/$logo', height: 20, fit: BoxFit.contain),
+        )],
+      ),
+    );
+  }
+
+  String? _visionSeriesLogoKey;
+  Future<String?>? _visionSeriesLogoFuture;
+
+  Widget _visionHeaderArtwork(BuildContext context) {
+    final item = widget.metadata;
+    final client = context.tryGetMediaClientWithFallback(serverIdOrNull(item.serverId));
+    final seriesId = item.grandparentId;
+    final key = seriesId == null ? null : '${item.serverId}:$seriesId';
+    if (_visionSeriesLogoKey != key || (_visionSeriesLogoFuture == null && key != null && client != null)) {
+      _visionSeriesLogoKey = key;
+      _visionSeriesLogoFuture = seriesId == null || client == null ? null : client.fetchItem(seriesId).then((show) => show?.clearLogoPath);
+    }
+    Widget logo(String? path) => ClearLogoImage(
+      client: client,
+      logoPath: client == null ? null : path,
+      width: 200, height: 65, fallbackWidth: 200,
+      alignment: Alignment.center,
+      fallbackBuilder: (_) => Align(alignment: Alignment.center, child: Text(
+        item.grandparentTitle ?? item.title ?? t.common.unknown,
+        maxLines: 2, overflow: TextOverflow.ellipsis,
+        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+      )),
+    );
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       const SizedBox(height: 32),
-      Row(children: [
-        ClearLogoImage(
-          client: client,
-          logoPath: client == null ? null : item.clearLogoPath,
-          width: 200, height: 65, fallbackWidth: 200,
-          alignment: Alignment.center,
-          fallbackBuilder: (_) => Align(alignment: Alignment.center, child: Text(
-            item.grandparentTitle ?? item.title ?? t.common.unknown,
-            maxLines: 2, overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-          )),
-        ),
-        if (SettingsService.instance.read(SettingsService.showHeroFormatBadges) && logos.isNotEmpty)
-          Flexible(child: Padding(
-            padding: const EdgeInsets.only(left: 14),
-            child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [for (final logo in logos) Padding(
-                padding: const EdgeInsets.only(right: 9),
-                child: Image.asset('assets/hero_badges/$logo', height: 20, fit: BoxFit.contain),
-              )],
-            )),
-          )),
-      ]),
+      if (_visionSeriesLogoFuture != null)
+        FutureBuilder<String?>(
+          key: ValueKey(key),
+          future: _visionSeriesLogoFuture,
+          builder: (context, snapshot) => logo(snapshot.data ?? item.clearLogoPath),
+        )
+      else
+        logo(item.clearLogoPath),
       if (item.grandparentTitle != null)
         Text(
           'S${item.parentIndex ?? 0}E${item.index ?? 0} · ${item.title ?? ""}',
