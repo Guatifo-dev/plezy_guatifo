@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../focus/card_focus_scope.dart';
 import '../../../focus/focus_theme.dart';
+import '../../../utils/platform_detector.dart';
 
 /// Focus chrome for a round player control sitting on video.
 ///
@@ -45,16 +46,18 @@ class PlayerFocusDisc extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final showFocus = CardFocusScope.maybeOf(context) ?? false;
+    final visionFocus = showFocus && PlatformDetector.isTV() && !isActive;
     return AnimatedContainer(
       duration: FocusTheme.getAnimationDuration(context),
       curve: Curves.easeOutCubic,
       decoration: BoxDecoration(
         shape: borderRadius == null ? BoxShape.circle : BoxShape.rectangle,
         borderRadius: borderRadius,
-        color: showFocus ? (isActive ? _activeFill : _fill) : Colors.transparent,
-        boxShadow: showFocus ? const [playerFocusShadow] : const [],
+        color: visionFocus ? const Color(0xCC102B43) : showFocus ? (isActive ? _activeFill : _fill) : Colors.transparent,
+        border: visionFocus ? Border.all(color: const Color(0xFF43E4FF), width: 2) : null,
+        boxShadow: visionFocus ? const [BoxShadow(color: Color(0x8843E4FF), blurRadius: 10)] : showFocus ? const [playerFocusShadow] : const [],
       ),
-      child: builder(context, showFocus ? Colors.black.withValues(alpha: iconColor.a) : iconColor),
+      child: builder(context, showFocus && !visionFocus ? Colors.black.withValues(alpha: iconColor.a) : iconColor),
     );
   }
 }
