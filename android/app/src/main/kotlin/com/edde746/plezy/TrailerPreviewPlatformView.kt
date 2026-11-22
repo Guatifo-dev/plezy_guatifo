@@ -32,6 +32,19 @@ internal object TrailerPreviewPlayerManager {
   private var activeViewId: Int? = null
   private var eventChannel: MethodChannel? = null
   private var awaitingFirstFrame = false
+  private var currentVideoSize: VideoSize? = null
+  private val sizeCallbacks = LinkedHashMap<Int, (VideoSize?) -> Unit>()
+
+  @Synchronized
+  fun registerSizeCallback(viewId: Int, callback: (VideoSize?) -> Unit) {
+    sizeCallbacks[viewId] = callback
+    callback(currentVideoSize)
+  }
+
+  @Synchronized
+  fun unregisterSizeCallback(viewId: Int) {
+    sizeCallbacks.remove(viewId)
+  }
 
   @Synchronized
   fun setEventChannel(channel: MethodChannel) {
@@ -76,6 +89,7 @@ internal object TrailerPreviewPlayerManager {
   @Synchronized
   fun detach(viewId: Int) {
     surfaces.remove(viewId)
+    unregisterSizeCallback(viewId)
     if (activeViewId != viewId) return
     val fallback = surfaces.entries.lastOrNull()
     if (fallback != null && currentUrl != null && completedUrl != currentUrl) {
@@ -131,6 +145,11 @@ internal object TrailerPreviewPlayerManager {
         }
       }
       override fun onVideoSizeChanged(videoSize: VideoSize) {
+        synchronized(this@TrailerPreviewPlayerManager) {
+          if (player !== created) return
+          currentVideoSize = videoSize
+          sizeCallbacks.values.forEach { it(videoSize) }
+        }
         Log.i(TAG, "Video size=" + videoSize.width + "x" + videoSize.height)
       }
       override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
@@ -177,6 +196,8 @@ internal object TrailerPreviewPlayerManager {
     old.stop()
     old.release()
     player = null
+    currentVideoSize = null
+    sizeCallbacks.values.forEach { it(null) }
   }
 }
 
@@ -186,7 +207,8 @@ internal class TrailerPreviewPlatformViewFactory :
     val params = args as? Map<*, *>
     val url = params?.get("url") as? String
     val audioEnabled = params?.get("audioEnabled") as? Boolean ?: true
-    return TrailerPreviewPlatformView(context, viewId, url, audioEnabled)
+    val preserveAspectRatio = params?.get("preserveAspectRatio") as? Boolean ?: false
+    return TrailerPreviewPlatformView(context, viewId, url, audioEnabled, preserveAspectRatio)
   }
 }
 
@@ -194,7 +216,8 @@ private class TrailerPreviewPlatformView(
   context: Context,
   private val viewId: Int,
   url: String?,
-  audioEnabled: Boolean
+  audioEnabled: Boolean,
+  private val preserveAspectRatio: Boolean
 ) : PlatformView {
   private val surfaceView = SurfaceView(context)
   private val container = FrameLayout(context).apply {
@@ -206,7 +229,37 @@ private class TrailerPreviewPlatformView(
     ))
     importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
   }
+  private var videoSize: VideoSize? = null
+  private fun fitSurface() {
+    if (!preserveAspectRatio) return
+    val video = videoSize
+    val width = container.width
+    val height = container.height
+    if (width <= 0 || height <= 0 || video == null || video.width <= 0 || video.height <= 0) return
+    val ratio = video.width.toDouble() * video.pixelWidthHeightRatio / video.height
+    if (!ratio.isFinite() || ratio <= 0.0) return
+    val fittedWidth: Int
+    val fittedHeight: Int
+    if (width.toDouble() / height > ratio) {
+      fittedHeight = height
+      fittedWidth = (height * ratio).toInt().coerceAtLeast(1)
+    } else {
+      fittedWidth = width
+      fittedHeight = (width / ratio).toInt().coerceAtLeast(1)
+    }
+    val params = surfaceView.layoutParams as FrameLayout.LayoutParams
+    if (params.width != fittedWidth || params.height != fittedHeight) {
+      surfaceView.layoutParams = FrameLayout.LayoutParams(fittedWidth, fittedHeight, Gravity.CENTER)
+    }
+  }
   init {
+    if (preserveAspectRatio) {
+      container.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> fitSurface() }
+      TrailerPreviewPlayerManager.registerSizeCallback(viewId) { size ->
+        videoSize = size
+        container.post { fitSurface() }
+      }
+    }
     Log.i("TrailerPreview", "Native preview surface created; view=" + viewId + ", URL present=" + !url.isNullOrBlank())
     TrailerPreviewPlayerManager.attach(viewId, context, surfaceView, url, audioEnabled)
   }

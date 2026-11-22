@@ -4564,6 +4564,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                                           key: ValueKey(metadata.globalKey),
                                           item: metadata,
                                           client: trailerClient,
+                                          preserveAspectRatio: series,
                                         );
                                       },
                                     ),

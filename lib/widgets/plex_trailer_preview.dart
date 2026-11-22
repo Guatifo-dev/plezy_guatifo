@@ -18,10 +18,11 @@ import 'settings_builder.dart';
 /// Multiple corner surfaces may attach to it, but extras lookup, the 3-second
 /// settle delay and URL resolution happen only once for each selected title.
 class PlexTrailerPreview extends StatefulWidget {
-  const PlexTrailerPreview({super.key, required this.item, required this.client});
+  const PlexTrailerPreview({super.key, required this.item, required this.client, this.preserveAspectRatio = false});
 
   final MediaItem item;
   final MediaServerClient client;
+  final bool preserveAspectRatio;
 
   /// Stops and releases the shared preview before normal playback takes over.
   static Future<void> stop() async {
@@ -112,6 +113,7 @@ class _PlexTrailerPreviewState extends State<PlexTrailerPreview> with WidgetsBin
             creationParams: <String, Object>{
               'url': trailerUrl,
               'audioEnabled': audioEnabled,
+              'preserveAspectRatio': widget.preserveAspectRatio,
             },
             creationParamsCodec: const StandardMessageCodec(),
             hitTestBehavior: PlatformViewHitTestBehavior.transparent,
