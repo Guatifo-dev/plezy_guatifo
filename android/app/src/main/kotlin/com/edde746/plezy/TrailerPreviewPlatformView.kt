@@ -252,16 +252,16 @@ private class TrailerPreviewPlatformView(
     if (width <= 0 || height <= 0 || video == null || video.width <= 0 || video.height <= 0) return
     val ratio = video.width.toDouble() * video.pixelWidthHeightRatio / video.height
     if (!ratio.isFinite() || ratio <= 0.0) return
-    // Center-crop, like BoxFit.cover on the fanart: fill the entire panel
-    // without stretching the image or revealing fanart side strips.
+    // Fit the entire trailer without cropping, with its upper edge aligned
+    // to the top of the panel. Keep the native view's dimensions unchanged.
     val texture = surfaceView as? TextureView ?: return
     val videoWidth = video.width.toDouble() * video.pixelWidthHeightRatio
     val videoHeight = video.height.toDouble()
-    val scale = maxOf(width / videoWidth, height / videoHeight)
+    val scale = minOf(width / videoWidth, height / videoHeight)
     val contentWidth = videoWidth * scale
     val contentHeight = videoHeight * scale
     val transform = Matrix()
-    transform.setScale((contentWidth / width).toFloat(), (contentHeight / height).toFloat(), width / 2f, height / 2f)
+    transform.setScale((contentWidth / width).toFloat(), (contentHeight / height).toFloat(), width / 2f, 0f)
     texture.setTransform(transform)
   }
   init {
