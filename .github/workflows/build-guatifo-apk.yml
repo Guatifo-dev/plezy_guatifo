@@ -18,6 +18,7 @@ on:
       - feature/movie-detail-slide-return-focus-7f59d4c
       - feature/movie-navigation-all-rails-3161dd1
       - feature/detail-navigation-polish-464b398
+      - fix/vision-series-full-fanart-trailer-insets-24d6fc9
 
 permissions:
   contents: write
