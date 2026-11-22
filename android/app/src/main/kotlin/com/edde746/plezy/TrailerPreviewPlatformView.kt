@@ -2,6 +2,7 @@ package com.edde746.plezy
 
 import android.content.Context
 import android.graphics.Color
+import android.graphics.Matrix
 import android.util.Log
 import android.view.Gravity
 import android.view.SurfaceView
@@ -251,19 +252,17 @@ private class TrailerPreviewPlatformView(
     if (width <= 0 || height <= 0 || video == null || video.width <= 0 || video.height <= 0) return
     val ratio = video.width.toDouble() * video.pixelWidthHeightRatio / video.height
     if (!ratio.isFinite() || ratio <= 0.0) return
-    val fittedWidth: Int
-    val fittedHeight: Int
-    if (width.toDouble() / height > ratio) {
-      fittedHeight = height
-      fittedWidth = (height * ratio).toInt().coerceAtLeast(1)
-    } else {
-      fittedWidth = width
-      fittedHeight = (width / ratio).toInt().coerceAtLeast(1)
-    }
-    val params = surfaceView.layoutParams as FrameLayout.LayoutParams
-    if (params.width != fittedWidth || params.height != fittedHeight) {
-      surfaceView.layoutParams = FrameLayout.LayoutParams(fittedWidth, fittedHeight, Gravity.CENTER)
-    }
+    // Center-crop, like BoxFit.cover on the fanart: fill the entire panel
+    // without stretching the image or revealing fanart side strips.
+    val texture = surfaceView as? TextureView ?: return
+    val videoWidth = video.width.toDouble() * video.pixelWidthHeightRatio
+    val videoHeight = video.height.toDouble()
+    val scale = maxOf(width / videoWidth, height / videoHeight)
+    val contentWidth = videoWidth * scale
+    val contentHeight = videoHeight * scale
+    val transform = Matrix()
+    transform.setScale((contentWidth / width).toFloat(), (contentHeight / height).toFloat(), width / 2f, height / 2f)
+    texture.setTransform(transform)
   }
   init {
     if (preserveAspectRatio) {
