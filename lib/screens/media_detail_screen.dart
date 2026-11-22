@@ -4629,7 +4629,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                       top: size.height * (series ? 0.12 : 0.145) + (series ? 4 : 20),
                       left: posterWidth + 28,
                       right: 0,
-                      bottom: series ? seriesRailHeight + 2 : 0,
+                      bottom: series ? seriesRailHeight + 56 : 0,
                       child: series ? Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -4666,7 +4666,15 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                             final lineHeight = painter.preferredLineHeight;
                             painter.dispose();
                             final lines = (constraints.maxHeight / lineHeight).floor();
-                            return lines < 1 ? const SizedBox.shrink() : Text(description ?? '', maxLines: math.min(lines, 5), overflow: TextOverflow.ellipsis, style: style);
+                            // Keep the metadata, badges and heading at their original positions.
+                            // Paint the five-line synopsis into the free space below the
+                            // information column, without resizing or shifting that column.
+                            return OverflowBox(
+                              alignment: Alignment.topLeft,
+                              minHeight: lineHeight * 5,
+                              maxHeight: lineHeight * 5,
+                              child: Text(description ?? '', maxLines: 5, overflow: TextOverflow.ellipsis, style: style),
+                            );
                           })),
                         ],
                       ) : MediaDetailsSheet(
@@ -4951,7 +4959,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                   return metrics.height + TvBrowseRailLayout.railTopPaddingForScale(scale) +
                       TvBrowseRailLayout.railBottomPaddingForScale(scale);
                 }
-                var factor = 0.86;
+                var factor = 0.94;
                 while (factor > 0.30 && heightFor(factor) > railBounds.maxHeight) {
                   factor -= 0.01;
                 }
