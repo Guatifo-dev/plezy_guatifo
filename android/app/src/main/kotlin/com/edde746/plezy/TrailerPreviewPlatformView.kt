@@ -1,10 +1,17 @@
 package com.edde746.plezy
 
 import android.content.Context
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.LinearGradient
+import android.graphics.Paint
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
+import android.graphics.Shader
 import android.util.Log
 import android.view.Gravity
 import android.view.SurfaceView
+import android.view.TextureView
 import android.view.View
 import android.widget.FrameLayout
 import androidx.media3.common.MediaItem
@@ -25,7 +32,7 @@ import io.flutter.plugin.platform.PlatformViewFactory
 @OptIn(UnstableApi::class)
 internal object TrailerPreviewPlayerManager {
   private const val TAG = "TrailerPreview"
-  private val surfaces = LinkedHashMap<Int, SurfaceView>()
+  private val surfaces = LinkedHashMap<Int, View>()
   private var player: ExoPlayer? = null
   private var currentUrl: String? = null
   private var completedUrl: String? = null
@@ -62,7 +69,7 @@ internal object TrailerPreviewPlayerManager {
   }
 
   @Synchronized
-  fun attach(viewId: Int, context: Context, surface: SurfaceView, url: String?, audioEnabled: Boolean) {
+  fun attach(viewId: Int, context: Context, surface: View, url: String?, audioEnabled: Boolean) {
     surfaces[viewId] = surface
     if (url.isNullOrBlank()) return
     if (completedUrl == url) {
@@ -81,9 +88,16 @@ internal object TrailerPreviewPlayerManager {
     surface.visibility = View.VISIBLE
     activeViewId = viewId
     notifySurfaceWaiting()
-    player?.setVideoSurfaceView(surface)
+    setVideoOutput(surface)
     player?.playWhenReady = true
     Log.i(TAG, "Attached view=" + viewId + " to shared trailer session")
+  }
+
+  private fun setVideoOutput(surface: View) {
+    when (surface) {
+      is TextureView -> player?.setVideoTextureView(surface)
+      is SurfaceView -> player?.setVideoSurfaceView(surface)
+    }
   }
 
   @Synchronized
@@ -97,7 +111,7 @@ internal object TrailerPreviewPlayerManager {
       fallback.value.visibility = View.VISIBLE
       activeViewId = fallback.key
       notifySurfaceWaiting()
-      player?.setVideoSurfaceView(fallback.value)
+      setVideoOutput(fallback.value)
       player?.playWhenReady = true
       Log.i(TAG, "Transferred shared trailer surface to view=" + fallback.key)
     } else {
@@ -219,8 +233,48 @@ private class TrailerPreviewPlatformView(
   audioEnabled: Boolean,
   private val preserveAspectRatio: Boolean
 ) : PlatformView {
-  private val surfaceView = SurfaceView(context)
-  private val container = FrameLayout(context).apply {
+  // TextureView is composited into the view hierarchy, so the trailer can
+  // receive the same soft alpha edges as the Flutter fanart underneath.
+  // Keep SurfaceView on Discover and movie details to preserve their behavior.
+  private val surfaceView: View = if (preserveAspectRatio) TextureView(context).apply {
+    isOpaque = false
+  } else SurfaceView(context)
+  private val fadePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
+  }
+  private val container = object : FrameLayout(context) {
+    override fun dispatchDraw(canvas: Canvas) {
+      if (!preserveAspectRatio || width <= 0 || height <= 0) {
+        super.dispatchDraw(canvas)
+        return
+      }
+      val w = width.toFloat()
+      val h = height.toFloat()
+      val layer = canvas.saveLayer(0f, 0f, w, h, null)
+      super.dispatchDraw(canvas)
+      // Match the three alpha gradients applied to the series fanart.
+      fadePaint.shader = LinearGradient(
+        0f, 0f, w, 0f,
+        intArrayOf(0x00000000, 0xDDFFFFFF.toInt(), 0xFFFFFFFF.toInt()),
+        floatArrayOf(0f, 0.48f, 1f), Shader.TileMode.CLAMP
+      )
+      canvas.drawRect(0f, 0f, w, h, fadePaint)
+      fadePaint.shader = LinearGradient(
+        0f, 0f, 0f, h,
+        intArrayOf(0x00000000, 0xFFFFFFFF.toInt(), 0xCCFFFFFF.toInt(), 0x00000000),
+        floatArrayOf(0f, 0.14f, 0.54f, 1f), Shader.TileMode.CLAMP
+      )
+      canvas.drawRect(0f, 0f, w, h, fadePaint)
+      fadePaint.shader = LinearGradient(
+        0f, 0f, w, 0f,
+        intArrayOf(0xFFFFFFFF.toInt(), 0xFFFFFFFF.toInt(), 0xAAFFFFFF.toInt(), 0x00000000),
+        floatArrayOf(0f, 0.62f, 0.80f, 1f), Shader.TileMode.CLAMP
+      )
+      canvas.drawRect(0f, 0f, w, h, fadePaint)
+      fadePaint.shader = null
+      canvas.restoreToCount(layer)
+    }
+  }.apply {
     setBackgroundColor(Color.TRANSPARENT)
     addView(surfaceView, FrameLayout.LayoutParams(
       FrameLayout.LayoutParams.MATCH_PARENT,
