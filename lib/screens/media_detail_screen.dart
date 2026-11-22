@@ -4512,19 +4512,16 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
           width: series ? size.width * 0.98 : null,
           decoration: BoxDecoration(
             color: theme.colorScheme.surface.withValues(alpha: 0.96),
+            borderRadius: BorderRadius.circular(22),
+          ),
+          // Keep the rounded panel outline above the full-bleed fanart.
+          foregroundDecoration: BoxDecoration(
             border: Border.all(color: Colors.white, width: 2),
             borderRadius: BorderRadius.circular(22),
           ),
           clipBehavior: Clip.antiAlias,
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(16, 16, series ? 16 : 26, series ? 4 : 20),
-            child: LayoutBuilder(
-              builder: (context, bounds) {
-                final posterWidth = series ? math.min(size.width * 0.19, (bounds.maxHeight - 16) * (_seasons.length > 1 ? 0.34 : 0.39)) : size.width * 0.19;
-                final posterHeight = posterWidth * 1.5;
-                final seriesRailHeight = (bounds.maxHeight - 16) * (series ? 0.29 : 0.34) + (series ? 42 * TvLayoutConstants.scaleOf(context) : 0) + (series && _seasons.length > 1 ? 46 * TvLayoutConstants.scaleOf(context) : 0);
-                return Stack(
-                  children: [
+          child: Stack(
+            children: [
                     // Series-only full-panel fanart: decoration behind all fixed
                     // information and controls. The trailer remains in its
                     // original upper-right viewport as a separate layer.
@@ -4534,14 +4531,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
-                              FittedBox(
-                                fit: BoxFit.cover,
-                                child: SizedBox(
-                                  width: bounds.maxWidth,
-                                  height: bounds.maxHeight,
-                                  child: fanart,
-                                ),
-                              ),
+                              fanart,
                               DecoratedBox(
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
@@ -4574,12 +4564,24 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                           ),
                         ),
                       ),
+              Padding(
+            padding: EdgeInsets.fromLTRB(16, 16, series ? 16 : 26, series ? 4 : 20),
+            child: LayoutBuilder(
+              builder: (context, bounds) {
+                final posterWidth = series ? math.min(size.width * 0.19, (bounds.maxHeight - 16) * (_seasons.length > 1 ? 0.34 : 0.39)) : size.width * 0.19;
+                final posterHeight = posterWidth * 1.5;
+                final seriesRailHeight = (bounds.maxHeight - 16) * (series ? 0.29 : 0.34) + (series ? 42 * TvLayoutConstants.scaleOf(context) : 0) + (series && _seasons.length > 1 ? 46 * TvLayoutConstants.scaleOf(context) : 0);
+                return Stack(
+                  children: [
                     if (series)
                       Positioned(
                         top: 0,
                         right: 0,
+                        // Match the trailer viewport to 16:9 so the contained
+                        // picture reaches the right edge without cropping.
+                        // Top/right margins both come from the 16px panel padding.
                         width: size.width * 0.43,
-                        height: size.height * 0.32,
+                        height: size.width * 0.43 * 9 / 16,
                         child: IgnorePointer(
                           child: SettingValueBuilder<bool>(
                             pref: SettingsService.plexTrailerPreview,
@@ -4858,6 +4860,8 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                 );
               },
             ),
+              ),
+            ],
           ),
         );
       },
