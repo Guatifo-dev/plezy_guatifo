@@ -4506,12 +4506,12 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
           ),
           clipBehavior: Clip.antiAlias,
           child: Padding(
-            padding: EdgeInsets.fromLTRB(16, 16, series ? 16 : 26, 20),
+            padding: EdgeInsets.fromLTRB(16, 16, series ? 16 : 26, series ? 4 : 20),
             child: LayoutBuilder(
               builder: (context, bounds) {
-                final posterWidth = series ? math.min(size.width * 0.19, bounds.maxHeight * (_seasons.length > 1 ? 0.34 : 0.39)) : size.width * 0.19;
+                final posterWidth = series ? math.min(size.width * 0.19, (bounds.maxHeight - 16) * (_seasons.length > 1 ? 0.34 : 0.39)) : size.width * 0.19;
                 final posterHeight = posterWidth * 1.5;
-                final seriesRailHeight = bounds.maxHeight * 0.34 + (series && _seasons.length > 1 ? 46 * TvLayoutConstants.scaleOf(context) : 0);
+                final seriesRailHeight = (bounds.maxHeight - 16) * 0.34 + (series && _seasons.length > 1 ? 46 * TvLayoutConstants.scaleOf(context) : 0);
                 return Stack(
                   children: [
                     // Artwork starts at the same top inset as the poster.
@@ -4524,10 +4524,10 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                         child: IgnorePointer(
                           child: ShaderMask(
                             blendMode: BlendMode.dstIn,
-                            shaderCallback: (rect) => const LinearGradient(
+                            shaderCallback: (rect) => LinearGradient(
                               begin: Alignment.centerLeft,
                               end: Alignment.centerRight,
-                              colors: [Colors.transparent, Color(0x99FFFFFF), Colors.white],
+                              colors: [Colors.transparent, series ? const Color(0xDDFFFFFF) : const Color(0x99FFFFFF), Colors.white],
                               stops: [0.0, 0.48, 1.0],
                             ).createShader(rect),
                             child: ShaderMask(
@@ -4608,11 +4608,11 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                       child: series ? Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildTvDetailMetadataLine(context, metadata, TvLayoutConstants.scaleOf(context)),
                           SizedBox(
-                            height: 24 * TvLayoutConstants.scaleOf(context),
-                            child: Text(item.isEpisode ? (item.title ?? '') : '', maxLines: 1, overflow: TextOverflow.ellipsis),
+                            height: 25 * TvLayoutConstants.scaleOf(context),
+                            child: Align(alignment: Alignment.centerLeft, child: _buildTvDetailMetadataLine(context, metadata, TvLayoutConstants.scaleOf(context))),
                           ),
+                          SizedBox(height: 23 * TvLayoutConstants.scaleOf(context)),
                           SizedBox(
                             height: 24 * TvLayoutConstants.scaleOf(context),
                             child: Align(alignment: Alignment.centerLeft, child: SelectedMediaFormatBadges(
@@ -4621,8 +4621,20 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                               retainWhileLoading: true,
                             )),
                           ),
-                          const SizedBox(height: 4),
-                          Expanded(child: Align(alignment: Alignment.bottomLeft, child: Text(description ?? '', overflow: TextOverflow.fade, style: theme.textTheme.bodyMedium))),
+                          SizedBox(height: 8 * TvLayoutConstants.scaleOf(context)),
+                          SizedBox(
+                            height: 24 * TvLayoutConstants.scaleOf(context),
+                            child: Text(item.isEpisode ? (item.title ?? '') : '', maxLines: 1, overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodyMedium?.copyWith(fontSize: (theme.textTheme.bodyMedium?.fontSize ?? 14) + 1, fontWeight: FontWeight.w600)),
+                          ),
+                          Expanded(child: LayoutBuilder(builder: (context, constraints) {
+                            final style = theme.textTheme.bodyMedium ?? const TextStyle(fontSize: 14);
+                            final painter = TextPainter(text: TextSpan(text: 'Ag', style: style), textDirection: Directionality.of(context), textScaler: MediaQuery.textScalerOf(context))..layout();
+                            final lineHeight = painter.preferredLineHeight;
+                            painter.dispose();
+                            final lines = (constraints.maxHeight / lineHeight).floor();
+                            return lines < 1 ? const SizedBox.shrink() : Text(description ?? '', maxLines: lines, overflow: TextOverflow.ellipsis, style: style);
+                          })),
                         ],
                       ) : MediaDetailsSheet(
                         item: item,
@@ -4766,6 +4778,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                         delegateFocusBorder: true,
                         onFocusChange: (focused) {
                           if (!focused) return;
+                          _clearTvDetailFocusedEpisode();
                           final target = _seasonTabFocusNodes.length > i ? _seasonTabFocusNodes[i].context : null;
                           if (target != null) Scrollable.ensureVisible(target, alignment: 0.5, duration: const Duration(milliseconds: 150));
                           _selectVisionSeason(metadata, i);
