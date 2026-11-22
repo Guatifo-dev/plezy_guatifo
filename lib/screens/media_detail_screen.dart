@@ -4522,45 +4522,30 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
           clipBehavior: Clip.antiAlias,
           child: Stack(
             children: [
-                    // Series-only full-panel fanart: decoration behind all fixed
-                    // information and controls. The trailer remains in its
-                    // original upper-right viewport as a separate layer.
-                    if (series && fanart != null)
+                    // Reuse Discover's exact TV spotlight artwork, corner
+                    // treatment, scrims and native trailer surface. The
+                    // fullscreen-sized layer is centered behind the existing
+                    // panel content so its geometry does not change on entry.
+                    if (series)
                       Positioned.fill(
                         child: IgnorePointer(
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              fanart,
-                              DecoratedBox(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.centerLeft,
-                                    end: Alignment.centerRight,
-                                    colors: [
-                                      Colors.black.withValues(alpha: 0.82),
-                                      Colors.black.withValues(alpha: 0.66),
-                                      Colors.black.withValues(alpha: 0.28),
-                                    ],
-                                    stops: const [0.0, 0.52, 1.0],
-                                  ),
-                                ),
+                          child: OverflowBox(
+                            alignment: Alignment.center,
+                            minWidth: size.width,
+                            maxWidth: size.width,
+                            minHeight: size.height,
+                            maxHeight: size.height,
+                            child: SizedBox(
+                              width: size.width,
+                              height: size.height,
+                              child: TvSpotlightBackground(
+                                item: metadata,
+                                client: _getMediaClientForMetadata(sheetContext),
+                                showInfo: false,
+                                allowNetwork: !widget.isOffline,
+                                allowTrailerPreview: !widget.isOffline,
                               ),
-                              DecoratedBox(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
-                                    colors: [
-                                      Colors.black.withValues(alpha: 0.12),
-                                      Colors.transparent,
-                                      Colors.black.withValues(alpha: 0.83),
-                                    ],
-                                    stops: const [0.0, 0.46, 1.0],
-                                  ),
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
                         ),
                       ),
@@ -4573,34 +4558,6 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                 final seriesRailHeight = (bounds.maxHeight - 16) * (series ? 0.29 : 0.34) + (series ? 42 * TvLayoutConstants.scaleOf(context) : 0) + (series && _seasons.length > 1 ? 46 * TvLayoutConstants.scaleOf(context) : 0);
                 return Stack(
                   children: [
-                    if (series)
-                      Positioned(
-                        top: 0,
-                        right: 0,
-                        // Match the trailer viewport to 16:9 so the contained
-                        // picture reaches the right edge without cropping.
-                        // Top/right margins both come from the 16px panel padding.
-                        width: size.width * 0.43,
-                        height: size.width * 0.43 * 9 / 16,
-                        child: IgnorePointer(
-                          child: SettingValueBuilder<bool>(
-                            pref: SettingsService.plexTrailerPreview,
-                            builder: (context, enabled, _) {
-                              if (!enabled || widget.isOffline || !Platform.isAndroid) {
-                                return const SizedBox.shrink();
-                              }
-                              final trailerClient = _getMediaClientForMetadata(context);
-                              if (trailerClient == null) return const SizedBox.shrink();
-                              return PlexTrailerPreview(
-                                key: ValueKey(metadata.globalKey),
-                                item: metadata,
-                                client: trailerClient,
-                                preserveAspectRatio: true,
-                              );
-                            },
-                          ),
-                        ),
-                      ),
                     // Artwork starts at the same top inset as the poster.
                     if (!series && fanart != null)
                       Positioned(
