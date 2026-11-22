@@ -443,6 +443,10 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
   bool _hasLoadedExtras = false;
   bool _hasLoadedRelatedHubs = false;
   final _tvDetailRailKey = GlobalKey<TvBrowseRailState>();
+  int? _pendingSeasonEdgeIndex;
+  bool _pendingSeasonEdgeLast = false;
+  final Map<int, DpadSelectLongPressController> _visionSeasonSelectControllers = {};
+
   final _movieDetailsRailKey = GlobalKey<TvBrowseRailState>();
   final _movieDetailsInfoFocusNode = FocusNode(debugLabel: 'movie_more_details_info');
   // Stable focus bindings across watch-state or metadata rebuilds.
@@ -1262,6 +1266,8 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     _movieDetailsInfoFocusNode.dispose();
     _infoRowsFocusNode.dispose();
     _extrasSelectLongPress.dispose();
+    for (final controller in _visionSeasonSelectControllers.values) { controller.dispose(); }
+
     for (final node in _seasonTabFocusNodes) {
       node.dispose();
     }
@@ -2207,6 +2213,8 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
       }
       _seasonTabFocusNodes = List.generate(count, (i) => FocusNode(debugLabel: 'season_tab_$i'));
       _seasonContextMenuKeys.clear();
+      for (final controller in _visionSeasonSelectControllers.values) { controller.dispose(); }
+      _visionSeasonSelectControllers.clear();
     }
   }
 
@@ -4750,6 +4758,37 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     );
   }
 
+  bool _handleVisionEpisodeBoundary(MediaItem metadata, MediaHub hub, bool forward) {
+    if (!hub.id.startsWith(_tvDetailSeasonHubIdPrefix) || _seasons.length < 2) return false;
+    final index = int.tryParse(hub.id.substring(_tvDetailSeasonHubIdPrefix.length));
+    if (index == null || index != _selectedSeasonIndex) return false;
+    final current = _seasonEpisodePager.stateFor(_seasons[index].id);
+    if (forward && (current.isLoadingMore || current.pageLoadFailed ||
+        _episodes.length < current.totalCount)) return false;
+    final next = index + (forward ? 1 : -1);
+    if (next < 0 || next >= _seasons.length) return false;
+    _pendingSeasonEdgeIndex = next;
+    _pendingSeasonEdgeLast = !forward;
+    _selectVisionSeason(metadata, next);
+    return true;
+  }
+
+  void _finishPendingVisionSeasonEdge() {
+    final index = _pendingSeasonEdgeIndex;
+    if (index == null || index != _selectedSeasonIndex || _episodes.isEmpty) return;
+    final season = _seasons[index];
+    final state = _seasonEpisodePager.stateFor(season.id);
+    if (_pendingSeasonEdgeLast && _episodes.length < state.totalCount) {
+      if (!state.isLoadingMore && !state.pageLoadFailed) unawaited(_loadMoreSeasonEpisodes());
+      return;
+    }
+    final last = _pendingSeasonEdgeLast;
+    _pendingSeasonEdgeIndex = null;
+    _tvDetailRailKey.currentState?.focusHubEdgeEpisode(
+      '$_tvDetailSeasonHubIdPrefix$index', last: last,
+    );
+  }
+
   void _selectVisionSeason(MediaItem metadata, int index) {
     if (!_canUseDetail || index == _selectedSeasonIndex || index < 0 || index >= _seasons.length) return;
     _clearTvDetailFocusedEpisode();
@@ -4765,6 +4804,11 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
   Widget _buildVisionSeriesEpisodes(MediaItem metadata) {
     final hubs = _tvDetailHubs(metadata).where((hub) =>
         hub.id == _tvDetailSeasonsErrorHubId || hub.id == _tvDetailInitialHubId(metadata)).toList();
+    if (_pendingSeasonEdgeIndex != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _finishPendingVisionSeasonEdge();
+      });
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -4779,7 +4823,18 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                   for (var i = 0; i < _seasons.length; i++)
                     Padding(
                       padding: const EdgeInsets.only(right: 8),
-                      child: FocusableWrapper(
+                      child: MediaContextMenu(
+                        key: _seasonContextMenuKeys.putIfAbsent(i, () => GlobalKey<MediaContextMenuState>()),
+                        item: _seasons[i],
+                        onRefresh: (source) {
+                          _watchStateChanged = true;
+                          unawaited(_refreshItemInPlace(source));
+                        },
+                        onListRefresh: () {
+                          if (widget.isOffline) { _loadSeasonsFromDownloads(); }
+                          else { _loadSeasons(); }
+                        },
+                        child: FocusableWrapper(
                         key: ValueKey(_seasons[i].id),
                         focusNode: _seasonTabFocusNodes.length > i ? _seasonTabFocusNodes[i] : null,
                         disableScale: true,
@@ -4793,6 +4848,15 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                           _selectVisionSeason(metadata, i);
                         },
                         onKeyEvent: (node, event) {
+                          final selectResult = _visionSeasonSelectControllers
+                              .putIfAbsent(i, DpadSelectLongPressController.new)
+                              .handleKeyEvent(
+                                event,
+                                isOwnerActive: () => mounted && node.hasFocus,
+                                onShortPress: () => _selectVisionSeason(metadata, i),
+                                onLongPress: () => _showSeasonTabContextMenu(i),
+                              );
+                          if (selectResult != KeyEventResult.ignored) return selectResult;
                           if (event is! KeyDownEvent && event is! KeyRepeatEvent) return KeyEventResult.ignored;
                           final key = event.logicalKey;
                           if (key == LogicalKeyboardKey.arrowLeft || key == LogicalKeyboardKey.arrowRight) {
@@ -4831,6 +4895,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                             );
                           },
                         ),
+                        ),
                       ),
                     ),
                 ],
@@ -4854,7 +4919,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                     gridSpacing: svc.read(SettingsService.gridSpacing),
                     widePosterScale: factor,
                     compactDetailRail: true,
-                    hasLeading: _tvDetailLeadingItemForHub(hubs.first) != null,
+                    hasLeading: false,
                   );
                   return metrics.height + TvBrowseRailLayout.railTopPaddingForScale(scale) +
                       TvBrowseRailLayout.railBottomPaddingForScale(scale);
@@ -4875,10 +4940,10 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                   focusMemory: _hubFocusMemory,
                   iconForHub: _getTvDetailHubIcon,
                   onFocusedHubItemChanged: _handleTvDetailFocusedRailItemChanged,
+                  onEpisodeBoundary: (hub, forward) => _handleVisionEpisodeBoundary(metadata, hub, forward),
                   onRefresh: (source) => unawaited(_refreshItemInPlace(source)),
                   onActivateItem: _handleTvDetailRailItemActivated,
                   trailingForHub: _tvDetailTrailingState,
-                  leadingItemForHub: _tvDetailLeadingItemForHub,
                   onRetryHub: _retryTvDetailHub,
                   onNavigateUp: () {
                     if (_seasons.length > 1 && _seasonTabFocusNodes.length > _selectedSeasonIndex) {
