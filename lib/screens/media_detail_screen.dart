@@ -3790,7 +3790,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
               child: ListenableBuilder(
                 listenable: _tvDetailForegroundListenable,
                 builder: (context, _) => _buildTvMovieMoreDetailsSheet(
-                  _tvDetailFocusedEpisode.value ?? metadata.copyWith(ratings: _titleRatings(metadata)),
+                  _visionSeasonTabHasFocus ? metadata : (_tvDetailFocusedEpisode.value ?? metadata.copyWith(ratings: _titleRatings(metadata))),
                   _tvDetailDescription(metadata, hideSpoilers: SettingsService.instance.read(SettingsService.hideSpoilers)),
                   metadata.genres ?? const <String>[], metadata,
                 ),
@@ -4621,7 +4621,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                               retainWhileLoading: true,
                             )),
                           ),
-                          SizedBox(height: 8 * TvLayoutConstants.scaleOf(context)),
+                          SizedBox(height: 14 * TvLayoutConstants.scaleOf(context)),
                           SizedBox(
                             height: 24 * TvLayoutConstants.scaleOf(context),
                             child: Text(item.isEpisode ? (item.title ?? '') : '', maxLines: 1, overflow: TextOverflow.ellipsis,
@@ -4653,8 +4653,8 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                       child: Align(alignment: Alignment.centerLeft, child: logo),
                     ),
                      if (series) Positioned(
-                       left: posterWidth + 28, right: 0, bottom: seriesRailHeight + 12,
-                       child: _buildActionButtons(metadata, hideMoreDetails: true),
+                       left: 0, width: posterWidth, bottom: seriesRailHeight + 12,
+                       child: Center(child: _buildActionButtons(metadata, hideMoreDetails: true)),
                      ),
                      if (series) Positioned(
                        bottom: 0, left: 0, right: 0, height: seriesRailHeight,
@@ -4916,19 +4916,23 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
   /// labels stay off the hero line: they describe the file, not the title,
   /// and remain on the rail cards and in the details sheet (#2217).
   List<MetadataLinePart> _tvDetailMetadataParts(MediaItem metadata) {
-    final focusedEpisode = _tvDetailFocusedEpisode.value;
-    final lineMetadata = focusedEpisode ?? metadata;
+    final focusedEpisode = _visionSeasonTabHasFocus ? null : _tvDetailFocusedEpisode.value;
+    final seasonMetadata = PlatformDetector.isTV() && metadata.isShow &&
+            _selectedSeasonIndex >= 0 && _selectedSeasonIndex < _seasons.length
+        ? _seasons[_selectedSeasonIndex]
+        : null;
+    final lineMetadata = focusedEpisode ?? seasonMetadata ?? metadata;
     final parts = <MetadataLinePart>[];
 
     final episodeLabel = formatSeasonEpisodeLabel(lineMetadata.parentIndex, lineMetadata.index);
     if (lineMetadata.isEpisode && episodeLabel != null) parts.add(MetadataLineText(episodeLabel, dropPriority: 0));
     if (lineMetadata.isEpisode && lineMetadata.originallyAvailableAt != null) {
       parts.add(MetadataLineText(formatAbbreviatedDate(lineMetadata.originallyAvailableAt!), dropPriority: 0));
-    } else if (lineMetadata.year != null) {
-      parts.add(MetadataLineText(lineMetadata.year.toString(), dropPriority: 0));
+    } else if ((lineMetadata.year ?? metadata.year) != null) {
+      parts.add(MetadataLineText((lineMetadata.year ?? metadata.year).toString(), dropPriority: 0));
     }
-    if (lineMetadata.contentRating != null) {
-      parts.add(MetadataLineText(formatContentRating(lineMetadata.contentRating!), dropPriority: 2));
+    if ((lineMetadata.contentRating ?? metadata.contentRating) != null) {
+      parts.add(MetadataLineText(formatContentRating((lineMetadata.contentRating ?? metadata.contentRating)!), dropPriority: 2));
     }
     if (lineMetadata.durationMs != null && !(PlatformDetector.isTV() && metadata.isShow)) {
       parts.add(MetadataLineText(formatDurationTextual(lineMetadata.durationMs!), dropPriority: 1));
@@ -4937,7 +4941,8 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
         ? const <MediaRatingSource>[]
         : mediaRatingsFor(_withProbedRatings(focusedEpisode));
     // An episode without scores of its own shows the title's.
-    final ratings = episodeRatings.isNotEmpty ? episodeRatings : _titleRatings(metadata);
+    final seasonRatings = seasonMetadata == null ? const <MediaRatingSource>[] : mediaRatingsFor(seasonMetadata);
+    final ratings = episodeRatings.isNotEmpty ? episodeRatings : seasonRatings.isNotEmpty ? seasonRatings : _titleRatings(metadata);
     if (ratings.isNotEmpty) parts.add(MetadataLineRatings(PlatformDetector.isTV() && metadata.isShow ? ratings.take(1).toList() : ratings, dropPriority: 4));
 
     return parts;
@@ -5073,7 +5078,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
   }
 
   String? _tvDetailDescription(MediaItem metadata, {required bool hideSpoilers}) {
-    final focusedEpisode = _tvDetailFocusedEpisode.value;
+    final focusedEpisode = _visionSeasonTabHasFocus ? null : _tvDetailFocusedEpisode.value;
     if (focusedEpisode == null) {
       if (PlatformDetector.isTV() && metadata.isShow && _selectedSeasonIndex >= 0 && _selectedSeasonIndex < _seasons.length) {
         final summary = _tvDetailItemDescription(_seasons[_selectedSeasonIndex], hideSpoilers: hideSpoilers);
@@ -5321,6 +5326,8 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     return true;
   }
 
+  bool get _visionSeasonTabHasFocus => _seasonTabFocusNodes.any((node) => node.hasFocus);
+
   void _clearTvDetailFocusedEpisode() {
     _tvDetailFocusedEpisode.value = null;
   }
@@ -5337,7 +5344,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
   }
 
   void _handleTvDetailFocusedRailItemChanged(MediaHub hub, MediaItem item) {
-    if (_tvDetailActionRowHasFocus) {
+    if (_tvDetailActionRowHasFocus || _visionSeasonTabHasFocus) {
       _clearTvDetailFocusedEpisode();
       return;
     }

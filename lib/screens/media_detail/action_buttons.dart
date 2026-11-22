@@ -290,6 +290,7 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
         ? null
         : FocusableAction(
             debugLabel: 'detail_trailer',
+            focusNode: isTv && metadata.isShow ? _playButtonFocusNode : null,
             onPressed: onPlayTrailer,
             builder: (context, state) => iconActionButton(
               state,
@@ -551,7 +552,7 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
             ],
           );
         }
-        if (isTv && metadata.isShow && hideMoreDetails) return actionBar([playAction, ?trailerAction, ?castAction]);
+        if (isTv && metadata.isShow && hideMoreDetails) return actionBar([?trailerAction, ?castAction]);
         if (vertical) return actionBar(allActions);
         // TV screens are wide and D-pad focus should see every direct action.
         // On smaller online screens, hidden actions remain available from ⋮.
