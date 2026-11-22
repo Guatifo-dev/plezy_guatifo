@@ -4522,10 +4522,9 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                         width: size.width * 0.43,
                         height: size.height * (series ? 0.32 : 0.48),
                         child: IgnorePointer(
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              ShaderMask(
+                          // Same artwork/trailer composition and gradient geometry
+                          // as the movie sheet. Series retain their own panel size.
+                          child: ShaderMask(
                             blendMode: BlendMode.dstIn,
                             shaderCallback: (rect) => LinearGradient(
                               begin: Alignment.centerLeft,
@@ -4553,8 +4552,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                                   fit: StackFit.expand,
                                   children: [
                                     fanart,
-                                    // Movie trailers retain the existing Flutter fade.
-                                    if (!series) SettingValueBuilder<bool>(
+                                    SettingValueBuilder<bool>(
                                       pref: SettingsService.plexTrailerPreview,
                                       builder: (context, enabled, _) {
                                         if (!enabled || widget.isOffline || !Platform.isAndroid) {
@@ -4574,24 +4572,6 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                                 ),
                               ),
                             ),
-                            ),
-                            // Series trailer sits above the fanart's Flutter shader
-                            // masks: native texture applies its own edge fade once.
-                            if (series) SettingValueBuilder<bool>(
-                              pref: SettingsService.plexTrailerPreview,
-                              builder: (context, enabled, _) {
-                                if (!enabled || widget.isOffline || !Platform.isAndroid) return const SizedBox.shrink();
-                                final trailerClient = _getMediaClientForMetadata(context);
-                                if (trailerClient == null) return const SizedBox.shrink();
-                                return PlexTrailerPreview(
-                                  key: ValueKey(metadata.globalKey),
-                                  item: metadata,
-                                  client: trailerClient,
-                                  preserveAspectRatio: true,
-                                );
-                              },
-                            ),
-                          ],
                           ),
                         ),
                       ),

@@ -1,13 +1,7 @@
 package com.edde746.plezy
 
 import android.content.Context
-import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.LinearGradient
-import android.graphics.Paint
-import android.graphics.PorterDuff
-import android.graphics.PorterDuffXfermode
-import android.graphics.Shader
 import android.util.Log
 import android.view.Gravity
 import android.view.SurfaceView
@@ -239,42 +233,7 @@ private class TrailerPreviewPlatformView(
   private val surfaceView: View = if (preserveAspectRatio) TextureView(context).apply {
     isOpaque = true
   } else SurfaceView(context)
-  private val fadePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-    xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
-  }
-  private val container = object : FrameLayout(context) {
-    override fun dispatchDraw(canvas: Canvas) {
-      if (!preserveAspectRatio || width <= 0 || height <= 0) {
-        super.dispatchDraw(canvas)
-        return
-      }
-      val w = width.toFloat()
-      val h = height.toFloat()
-      val layer = canvas.saveLayer(0f, 0f, w, h, null)
-      super.dispatchDraw(canvas)
-      // Match the three alpha gradients applied to the series fanart.
-      fadePaint.shader = LinearGradient(
-        0f, 0f, w, 0f,
-        intArrayOf(0x00000000, 0xFFFFFFFF.toInt(), 0xFFFFFFFF.toInt()),
-        floatArrayOf(0f, 0.26f, 1f), Shader.TileMode.CLAMP
-      )
-      canvas.drawRect(0f, 0f, w, h, fadePaint)
-      fadePaint.shader = LinearGradient(
-        0f, 0f, 0f, h,
-        intArrayOf(0x00000000, 0xFFFFFFFF.toInt(), 0xFFFFFFFF.toInt(), 0x00000000),
-        floatArrayOf(0f, 0.14f, 0.86f, 1f), Shader.TileMode.CLAMP
-      )
-      canvas.drawRect(0f, 0f, w, h, fadePaint)
-      fadePaint.shader = LinearGradient(
-        0f, 0f, w, 0f,
-        intArrayOf(0xFFFFFFFF.toInt(), 0xFFFFFFFF.toInt(), 0xFFFFFFFF.toInt(), 0x00000000),
-        floatArrayOf(0f, 0.62f, 0.80f, 1f), Shader.TileMode.CLAMP
-      )
-      canvas.drawRect(0f, 0f, w, h, fadePaint)
-      fadePaint.shader = null
-      canvas.restoreToCount(layer)
-    }
-  }.apply {
+  private val container = FrameLayout(context).apply {
     setBackgroundColor(Color.TRANSPARENT)
     addView(surfaceView, FrameLayout.LayoutParams(
       FrameLayout.LayoutParams.MATCH_PARENT,
