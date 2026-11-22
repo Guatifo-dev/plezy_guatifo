@@ -208,7 +208,7 @@ class TvBrowseRailLayout {
         : (useWideLayout ? posterWidth * 9 / 16 : posterWidth * 1.5);
     final labelHeight = fullCardLayout ? 0.0 : ((isPersonHub ? 52 : 36) * scale);
     final containerHeight = (posterHeight + labelHeight).ceilToDouble();
-    final height = containerHeight + focusExtra + ((compactDetailRail ? 10 : 22) * scale);
+    final height = containerHeight + focusExtra + ((compactDetailRail ? 2 : 22) * scale);
 
     return TvBrowseRailLayoutMetrics(
       isPersonHub: isPersonHub,

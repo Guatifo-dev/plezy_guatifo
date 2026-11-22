@@ -2784,6 +2784,9 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
   double _getResponsiveCardWidth() => CastMemberStrip.responsiveCardWidth(context);
 
   void _showSeasonTabContextMenu(int index, {Offset? position}) {
+    // The menu takes focus before SELECT-up can reach the tab.
+    // Reset the pressed state so another long press works immediately.
+    _visionSeasonSelectControllers[index]?.reset();
     final key = _seasonContextMenuKeys.putIfAbsent(index, () => GlobalKey<MediaContextMenuState>());
     key.currentState?.showContextMenu(context, position: position);
   }
@@ -4596,7 +4599,20 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                             height: posterHeight,
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(12),
-                              child: poster ?? const PlaceholderContainer(),
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  poster ?? const PlaceholderContainer(),
+                                  IgnorePointer(
+                                    child: DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: Colors.white.withValues(alpha: 0.75), width: 2),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                           if (!series) const SizedBox(height: 10),
@@ -4613,7 +4629,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                       top: size.height * (series ? 0.12 : 0.145) + (series ? 4 : 20),
                       left: posterWidth + 28,
                       right: 0,
-                      bottom: series ? seriesRailHeight + 56 : 0,
+                      bottom: series ? seriesRailHeight + 2 : 0,
                       child: series ? Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -4633,7 +4649,15 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                           SizedBox(height: 14 * TvLayoutConstants.scaleOf(context)),
                           SizedBox(
                             height: 24 * TvLayoutConstants.scaleOf(context),
-                            child: Text(item.isEpisode ? (item.title ?? '') : '', maxLines: 1, overflow: TextOverflow.ellipsis,
+                            child: Text(
+                              item.isEpisode
+                                  ? (item.title ?? '')
+                                  : series && season != null
+                                      ? ((season.index ?? _selectedSeasonIndex + 1) == 0
+                                          ? 'Especiales'
+                                          : 'Temporada ${season.index ?? _selectedSeasonIndex + 1}')
+                                      : '',
+                              maxLines: 1, overflow: TextOverflow.ellipsis,
                               style: theme.textTheme.bodyMedium?.copyWith(fontSize: (theme.textTheme.bodyMedium?.fontSize ?? 14) + 1, fontWeight: FontWeight.w600)),
                           ),
                           Expanded(child: LayoutBuilder(builder: (context, constraints) {
@@ -4841,7 +4865,10 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                         autoScroll: false,
                         delegateFocusBorder: true,
                         onFocusChange: (focused) {
-                          if (!focused) return;
+                          if (!focused) {
+                            _visionSeasonSelectControllers[i]?.reset();
+                            return;
+                          }
                           _clearTvDetailFocusedEpisode();
                           final target = _seasonTabFocusNodes.length > i ? _seasonTabFocusNodes[i].context : null;
                           if (target != null) Scrollable.ensureVisible(target, alignment: 0.5, duration: const Duration(milliseconds: 150));
