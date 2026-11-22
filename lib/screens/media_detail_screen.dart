@@ -4574,6 +4574,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                                 ),
                               ),
                             ),
+                            ),
                             // Series trailer sits above the fanart's Flutter shader
                             // masks: native texture applies its own edge fade once.
                             if (series) SettingValueBuilder<bool>(
