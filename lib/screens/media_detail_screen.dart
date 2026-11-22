@@ -443,8 +443,6 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
   bool _hasLoadedExtras = false;
   bool _hasLoadedRelatedHubs = false;
   final _tvDetailRailKey = GlobalKey<TvBrowseRailState>();
-  int? _pendingSeasonEdgeIndex;
-  bool _pendingSeasonEdgeLast = false;
   final _movieDetailsRailKey = GlobalKey<TvBrowseRailState>();
   final _movieDetailsInfoFocusNode = FocusNode(debugLabel: 'movie_more_details_info');
   // Stable focus bindings across watch-state or metadata rebuilds.
@@ -4752,39 +4750,6 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     );
   }
 
-  bool _handleVisionEpisodeBoundary(MediaItem metadata, MediaHub hub, bool forward) {
-    if (!hub.id.startsWith(_tvDetailSeasonHubIdPrefix) || _seasons.length < 2) return false;
-    final index = int.tryParse(hub.id.substring(_tvDetailSeasonHubIdPrefix.length));
-    if (index == null || index != _selectedSeasonIndex) return false;
-    // Do not jump while the current season has additional pages to load.
-    final current = _seasonEpisodePager.stateFor(_seasons[index].id);
-    if (forward && (current.isLoadingMore || current.pageLoadFailed ||
-        _episodes.length < current.totalCount)) return false;
-    final next = index + (forward ? 1 : -1);
-    if (next < 0 || next >= _seasons.length) return false;
-    _pendingSeasonEdgeIndex = next;
-    _pendingSeasonEdgeLast = !forward;
-    _selectVisionSeason(metadata, next);
-    return true;
-  }
-
-  void _finishPendingVisionSeasonEdge() {
-    final index = _pendingSeasonEdgeIndex;
-    if (index == null || index != _selectedSeasonIndex || _episodes.isEmpty) return;
-    final season = _seasons[index];
-    final state = _seasonEpisodePager.stateFor(season.id);
-    if (_pendingSeasonEdgeLast && _episodes.length < state.totalCount) {
-      if (!state.isLoadingMore && !state.pageLoadFailed) unawaited(_loadMoreSeasonEpisodes());
-      return;
-    }
-    final last = _pendingSeasonEdgeLast;
-    _pendingSeasonEdgeIndex = null;
-    _tvDetailRailKey.currentState?.focusHubEdgeEpisode(
-      '$_tvDetailSeasonHubIdPrefix$index',
-      last: last,
-    );
-  }
-
   void _selectVisionSeason(MediaItem metadata, int index) {
     if (!_canUseDetail || index == _selectedSeasonIndex || index < 0 || index >= _seasons.length) return;
     _clearTvDetailFocusedEpisode();
@@ -4800,11 +4765,6 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
   Widget _buildVisionSeriesEpisodes(MediaItem metadata) {
     final hubs = _tvDetailHubs(metadata).where((hub) =>
         hub.id == _tvDetailSeasonsErrorHubId || hub.id == _tvDetailInitialHubId(metadata)).toList();
-    if (_pendingSeasonEdgeIndex != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _finishPendingVisionSeasonEdge();
-      });
-    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -4915,7 +4875,6 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                   focusMemory: _hubFocusMemory,
                   iconForHub: _getTvDetailHubIcon,
                   onFocusedHubItemChanged: _handleTvDetailFocusedRailItemChanged,
-                  onEpisodeBoundary: (hub, forward) => _handleVisionEpisodeBoundary(metadata, hub, forward),
                   onRefresh: (source) => unawaited(_refreshItemInPlace(source)),
                   onActivateItem: _handleTvDetailRailItemActivated,
                   trailingForHub: _tvDetailTrailingState,
