@@ -4653,7 +4653,10 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                       child: Align(alignment: Alignment.centerLeft, child: logo),
                     ),
                      if (series) Positioned(
-                       left: 0, width: posterWidth, bottom: seriesRailHeight + 12,
+                       left: 0,
+                       width: posterWidth,
+                       top: posterHeight,
+                       bottom: seriesRailHeight,
                        child: Center(
                          child: SizedBox(
                            width: math.min(posterWidth, (2 * _tvDetailActionSize + 14) * TvLayoutConstants.scaleOf(context)),
