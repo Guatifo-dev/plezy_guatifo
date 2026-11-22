@@ -4519,7 +4519,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
               builder: (context, bounds) {
                 final posterWidth = series ? math.min(size.width * 0.19, (bounds.maxHeight - 16) * (_seasons.length > 1 ? 0.34 : 0.39)) : size.width * 0.19;
                 final posterHeight = posterWidth * 1.5;
-                final seriesRailHeight = (bounds.maxHeight - 16) * 0.34 + (series && _seasons.length > 1 ? 46 * TvLayoutConstants.scaleOf(context) : 0);
+                final seriesRailHeight = (bounds.maxHeight - 16) * (series ? 0.29 : 0.34) + (series && _seasons.length > 1 ? 46 * TvLayoutConstants.scaleOf(context) : 0);
                 return Stack(
                   children: [
                     // Artwork starts at the same top inset as the poster.
@@ -4610,7 +4610,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                       ),
                     ),
                     Positioned(
-                      top: size.height * 0.145 + (series ? 4 : 20),
+                      top: size.height * (series ? 0.12 : 0.145) + (series ? 4 : 20),
                       left: posterWidth + 28,
                       right: 0,
                       bottom: series ? seriesRailHeight + 56 : 0,
@@ -4642,7 +4642,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                             final lineHeight = painter.preferredLineHeight;
                             painter.dispose();
                             final lines = (constraints.maxHeight / lineHeight).floor();
-                            return lines < 1 ? const SizedBox.shrink() : Text(description ?? '', maxLines: lines, overflow: TextOverflow.ellipsis, style: style);
+                            return lines < 1 ? const SizedBox.shrink() : Text(description ?? '', maxLines: math.min(lines, 5), overflow: TextOverflow.ellipsis, style: style);
                           })),
                         ],
                       ) : MediaDetailsSheet(
