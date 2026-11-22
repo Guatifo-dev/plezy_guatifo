@@ -201,16 +201,18 @@ class TvBrowseRailLayout {
       horizontalPadding: railEdgePadding * 2,
       itemGap: itemGap,
     );
-    final cardWidth = baseCardWidth * (useWideLayout ? widePosterScale : tallPosterScale);
+    final cardWidth = baseCardWidth * (useWideLayout ? widePosterScale : tallPosterScale) +
+        (compactDetailRail && useWideLayout ? 8.0 : 0.0);
     final posterWidth = fullCardLayout ? cardWidth : cardWidth - (6 * scale);
     final posterHeight = (isPersonHub || isSquareHub)
         ? posterWidth
-        : (useWideLayout ? posterWidth * 9 / 16 : posterWidth * 1.5);
+        : (useWideLayout ? posterWidth * 9 / 16 : posterWidth * 1.5) +
+            (compactDetailRail && useWideLayout ? 3.5 : 0.0);
     // In the compact episode rail, reserve less unused space below
     // the caption so the artwork can grow within the same rail height.
     final labelHeight = fullCardLayout ? 0.0 : ((isPersonHub ? 52 : 36) * scale);
     final containerHeight = (posterHeight + labelHeight).ceilToDouble();
-    final height = containerHeight + focusExtra + ((compactDetailRail ? 10 : 22) * scale);
+    final height = containerHeight + focusExtra + ((compactDetailRail ? 2 : 22) * scale);
 
     return TvBrowseRailLayoutMetrics(
       isPersonHub: isPersonHub,

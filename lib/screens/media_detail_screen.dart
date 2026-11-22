@@ -4637,7 +4637,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                             height: 25 * TvLayoutConstants.scaleOf(context),
                             child: Align(alignment: Alignment.centerLeft, child: _buildTvDetailMetadataLine(context, metadata, TvLayoutConstants.scaleOf(context))),
                           ),
-                          SizedBox(height: 23 * TvLayoutConstants.scaleOf(context)),
+                          SizedBox(height: 11.5 * TvLayoutConstants.scaleOf(context)),
                           SizedBox(
                             height: 24 * TvLayoutConstants.scaleOf(context),
                             child: Align(alignment: Alignment.centerLeft, child: SelectedMediaFormatBadges(
@@ -4696,8 +4696,8 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                      if (series) Positioned(
                        left: 0,
                        width: posterWidth,
-                       top: posterHeight,
-                       bottom: seriesRailHeight,
+                       top: posterHeight + 2,
+                       bottom: seriesRailHeight - 2,
                        child: Center(
                          child: SizedBox(
                            width: math.min(posterWidth, (2 * _tvDetailActionSize + 14) * TvLayoutConstants.scaleOf(context)),
@@ -4844,9 +4844,14 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Divider(height: 8),
+        Transform.translate(
+          offset: const Offset(0, 2),
+          child: const Divider(height: 8),
+        ),
         if (_seasons.length > 1)
-          SizedBox(
+          Transform.translate(
+            offset: const Offset(0, 2),
+            child: SizedBox(
             height: 30 * TvLayoutConstants.scaleOf(context),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
@@ -4936,6 +4941,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                 ],
               ),
             ),
+          ),
           ),
         Expanded(
           child: hubs.isEmpty
