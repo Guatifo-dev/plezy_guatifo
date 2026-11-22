@@ -385,6 +385,8 @@ class TvBrowseRail extends StatefulWidget {
   final void Function(MediaHub hub)? onRetryHub;
   final void Function(MediaHub hub, int index)? onActiveHubChanged;
   final VoidCallback? onNavigateUp;
+  /// Optional episode-row boundary navigation; true consumes the D-pad press.
+  final bool Function(MediaHub hub, bool forward)? onEpisodeBoundary;
   final VoidCallback? onNavigateToSidebar;
   final VoidCallback? onBack;
   final FutureOr<bool> Function(MediaHub hub, MediaItem item)? onActivateItem;
@@ -427,6 +429,7 @@ class TvBrowseRail extends StatefulWidget {
     this.onRetryHub,
     this.onActiveHubChanged,
     this.onNavigateUp,
+    this.onEpisodeBoundary,
     this.onNavigateToSidebar,
     this.onBack,
     this.onActivateItem,
@@ -506,6 +509,16 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
   }
 
   /// Restore the exact poster selected in a movie details carousel.
+  /// Move to a specified item in a season row while keeping rail focus.
+  void focusHubEdgeEpisode(String hubId, {required bool last}) {
+    final index = widget.hubs.indexWhere((hub) => hub.id == hubId);
+    if (index < 0 || widget.hubs[index].items.isEmpty) return;
+    final hub = widget.hubs[index];
+    final slot = _leadingCountFor(hub) + (last ? hub.items.length - 1 : 0);
+    _selectHubItem(hub, index, slot);
+    requestFocus();
+  }
+
   void restoreMovieFocus(MediaHub sourceHub, MediaItem movie) {
     final hubIndex = widget.hubs.indexWhere((hub) => _hubKey(hub) == _hubKey(sourceHub));
     if (hubIndex < 0) return;
@@ -855,6 +868,11 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
     if (key.isDpadDirection || key.isContextMenuKey) _hasUserInteracted = true;
 
     if (key.isLeftKey) {
+      if (widget.onEpisodeBoundary != null && hub.items.isNotEmpty &&
+          _itemIndex == _leadingCountFor(hub) &&
+          widget.onEpisodeBoundary!(hub, false)) {
+        return KeyEventResult.handled;
+      }
       if (_itemIndex > 0) {
         _moveItem(-1);
       } else {
@@ -864,6 +882,11 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
     }
 
     if (key.isRightKey) {
+      if (widget.onEpisodeBoundary != null && hub.items.isNotEmpty &&
+          _itemIndex == _leadingCountFor(hub) + hub.items.length - 1 &&
+          widget.onEpisodeBoundary!(hub, true)) {
+        return KeyEventResult.handled;
+      }
       if (_itemIndex < _totalItemCount(hub) - 1) {
         _moveItem(1);
       }
