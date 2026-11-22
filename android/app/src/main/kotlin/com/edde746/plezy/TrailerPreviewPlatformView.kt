@@ -237,7 +237,7 @@ private class TrailerPreviewPlatformView(
   // receive the same soft alpha edges as the Flutter fanart underneath.
   // Keep SurfaceView on Discover and movie details to preserve their behavior.
   private val surfaceView: View = if (preserveAspectRatio) TextureView(context).apply {
-    isOpaque = false
+    isOpaque = true
   } else SurfaceView(context)
   private val fadePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
     xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
@@ -255,19 +255,19 @@ private class TrailerPreviewPlatformView(
       // Match the three alpha gradients applied to the series fanart.
       fadePaint.shader = LinearGradient(
         0f, 0f, w, 0f,
-        intArrayOf(0x00000000, 0xDDFFFFFF.toInt(), 0xFFFFFFFF.toInt()),
-        floatArrayOf(0f, 0.48f, 1f), Shader.TileMode.CLAMP
+        intArrayOf(0x00000000, 0xFFFFFFFF.toInt(), 0xFFFFFFFF.toInt()),
+        floatArrayOf(0f, 0.26f, 1f), Shader.TileMode.CLAMP
       )
       canvas.drawRect(0f, 0f, w, h, fadePaint)
       fadePaint.shader = LinearGradient(
         0f, 0f, 0f, h,
-        intArrayOf(0x00000000, 0xFFFFFFFF.toInt(), 0xCCFFFFFF.toInt(), 0x00000000),
-        floatArrayOf(0f, 0.14f, 0.54f, 1f), Shader.TileMode.CLAMP
+        intArrayOf(0x00000000, 0xFFFFFFFF.toInt(), 0xFFFFFFFF.toInt(), 0x00000000),
+        floatArrayOf(0f, 0.14f, 0.86f, 1f), Shader.TileMode.CLAMP
       )
       canvas.drawRect(0f, 0f, w, h, fadePaint)
       fadePaint.shader = LinearGradient(
         0f, 0f, w, 0f,
-        intArrayOf(0xFFFFFFFF.toInt(), 0xFFFFFFFF.toInt(), 0xAAFFFFFF.toInt(), 0x00000000),
+        intArrayOf(0xFFFFFFFF.toInt(), 0xFFFFFFFF.toInt(), 0xFFFFFFFF.toInt(), 0x00000000),
         floatArrayOf(0f, 0.62f, 0.80f, 1f), Shader.TileMode.CLAMP
       )
       canvas.drawRect(0f, 0f, w, h, fadePaint)

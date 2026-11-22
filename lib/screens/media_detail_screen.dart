@@ -4522,7 +4522,10 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                         width: size.width * 0.43,
                         height: size.height * (series ? 0.32 : 0.48),
                         child: IgnorePointer(
-                          child: ShaderMask(
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              ShaderMask(
                             blendMode: BlendMode.dstIn,
                             shaderCallback: (rect) => LinearGradient(
                               begin: Alignment.centerLeft,
@@ -4550,9 +4553,8 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                                   fit: StackFit.expand,
                                   children: [
                                     fanart,
-                                    // Reuse the existing shared Plex trailer session.
-                                    // The entire stack keeps the approved fanart gradients.
-                                    SettingValueBuilder<bool>(
+                                    // Movie trailers retain the existing Flutter fade.
+                                    if (!series) SettingValueBuilder<bool>(
                                       pref: SettingsService.plexTrailerPreview,
                                       builder: (context, enabled, _) {
                                         if (!enabled || widget.isOffline || !Platform.isAndroid) {
@@ -4572,6 +4574,23 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                                 ),
                               ),
                             ),
+                            // Series trailer sits above the fanart's Flutter shader
+                            // masks: native texture applies its own edge fade once.
+                            if (series) SettingValueBuilder<bool>(
+                              pref: SettingsService.plexTrailerPreview,
+                              builder: (context, enabled, _) {
+                                if (!enabled || widget.isOffline || !Platform.isAndroid) return const SizedBox.shrink();
+                                final trailerClient = _getMediaClientForMetadata(context);
+                                if (trailerClient == null) return const SizedBox.shrink();
+                                return PlexTrailerPreview(
+                                  key: ValueKey(metadata.globalKey),
+                                  item: metadata,
+                                  client: trailerClient,
+                                  preserveAspectRatio: true,
+                                );
+                              },
+                            ),
+                          ],
                           ),
                         ),
                       ),
@@ -5089,7 +5108,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
   String? _tvDetailDescription(MediaItem metadata, {required bool hideSpoilers}) {
     final focusedEpisode = _visionSeasonTabHasFocus ? null : _tvDetailFocusedEpisode.value;
     if (focusedEpisode == null) {
-      if (PlatformDetector.isTV() && metadata.isShow && _selectedSeasonIndex >= 0 && _selectedSeasonIndex < _seasons.length) {
+      if (PlatformDetector.isTV() && metadata.isShow && _seasons.length > 1 && _selectedSeasonIndex >= 0 && _selectedSeasonIndex < _seasons.length) {
         final summary = _tvDetailItemDescription(_seasons[_selectedSeasonIndex], hideSpoilers: hideSpoilers);
         if (summary != null) return summary;
       }
