@@ -128,7 +128,25 @@ class TvSpotlightBackground extends StatelessWidget {
                   return Stack(
                     fit: StackFit.expand,
                     children: [
+                      // During a route handoff, the shared native player is
+                      // still running but its replacement SurfaceView has not
+                      // rendered yet. Mask the artwork in the trailer viewport
+                      // until the first frame arrives, just as corner mode does.
                       blurArtwork(backdrop),
+                      if (showTrailer)
+                        ValueListenableBuilder<bool>(
+                          valueListenable: PlexTrailerPreview.surfaceReady,
+                          builder: (context, ready, _) => ready
+                              ? const SizedBox.shrink()
+                              : Align(
+                                  alignment: Alignment.topRight,
+                                  child: SizedBox(
+                                    width: backdropSize.width,
+                                    height: backdropSize.height,
+                                    child: const ColoredBox(color: Colors.black),
+                                  ),
+                                ),
+                        ),
                       if (showTrailer)
                         Align(
                           alignment: Alignment.topRight,
