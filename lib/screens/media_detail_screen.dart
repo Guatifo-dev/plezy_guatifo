@@ -4522,7 +4522,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
               builder: (context, bounds) {
                 final posterWidth = series ? math.min(size.width * 0.19, (bounds.maxHeight - 16) * (_seasons.length > 1 ? 0.34 : 0.39)) : size.width * 0.19;
                 final posterHeight = posterWidth * 1.5;
-                final seriesRailHeight = (bounds.maxHeight - 16) * (series ? 0.29 : 0.34) + (series && _seasons.length > 1 ? 46 * TvLayoutConstants.scaleOf(context) : 0);
+                final seriesRailHeight = (bounds.maxHeight - 16) * (series ? 0.29 : 0.34) + (series ? 42 * TvLayoutConstants.scaleOf(context) : 0) + (series && _seasons.length > 1 ? 46 * TvLayoutConstants.scaleOf(context) : 0);
                 return Stack(
                   children: [
                     // Artwork starts at the same top inset as the poster.
@@ -4626,7 +4626,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                       ),
                     ),
                     Positioned(
-                      top: size.height * (series ? 0.12 : 0.145) + (series ? 4 : 20),
+                      top: size.height * (series ? 0.12 : 0.145) + (series ? 27 : 20),
                       left: posterWidth + 28,
                       right: 0,
                       bottom: series ? seriesRailHeight + 56 : 0,
@@ -4959,7 +4959,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                   return metrics.height + TvBrowseRailLayout.railTopPaddingForScale(scale) +
                       TvBrowseRailLayout.railBottomPaddingForScale(scale);
                 }
-                var factor = 0.94;
+                var factor = 1.0;
                 while (factor > 0.30 && heightFor(factor) > railBounds.maxHeight) {
                   factor -= 0.01;
                 }

@@ -208,7 +208,7 @@ class TvBrowseRailLayout {
         : (useWideLayout ? posterWidth * 9 / 16 : posterWidth * 1.5);
     // In the compact episode rail, reserve less unused space below
     // the caption so the artwork can grow within the same rail height.
-    final labelHeight = fullCardLayout ? 0.0 : ((isPersonHub ? 52 : (compactDetailRail ? 28 : 36)) * scale);
+    final labelHeight = fullCardLayout ? 0.0 : ((isPersonHub ? 52 : 36) * scale);
     final containerHeight = (posterHeight + labelHeight).ceilToDouble();
     final height = containerHeight + focusExtra + ((compactDetailRail ? 10 : 22) * scale);
 
