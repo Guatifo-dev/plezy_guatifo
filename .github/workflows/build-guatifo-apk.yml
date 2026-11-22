@@ -19,6 +19,7 @@ on:
       - feature/movie-navigation-all-rails-3161dd1
       - feature/detail-navigation-polish-464b398
       - fix/vision-series-full-fanart-trailer-insets-24d6fc9
+      - feature/series-discover-identical-backdrop-138c490
 
 permissions:
   contents: write
