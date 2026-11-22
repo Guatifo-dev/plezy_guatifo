@@ -4654,7 +4654,12 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                     ),
                      if (series) Positioned(
                        left: 0, width: posterWidth, bottom: seriesRailHeight + 12,
-                       child: Center(child: _buildActionButtons(metadata, hideMoreDetails: true)),
+                       child: Center(
+                         child: SizedBox(
+                           width: math.min(posterWidth, (2 * _tvDetailActionSize + 14) * TvLayoutConstants.scaleOf(context)),
+                           child: _buildActionButtons(metadata, hideMoreDetails: true),
+                         ),
+                       ),
                      ),
                      if (series) Positioned(
                        bottom: 0, left: 0, right: 0, height: seriesRailHeight,
