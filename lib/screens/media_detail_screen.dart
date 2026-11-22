@@ -4225,7 +4225,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
         var summaryMaxLines = 0;
         var logoHeight = 0.0;
 
-        for (var lines = hasDescription ? (movieHero ? 6 : 3) : 0; lines >= 0; lines--) {
+        for (var lines = hasDescription ? (movieHero ? 6 : 5) : 0; lines >= 0; lines--) {
           final descriptionHeight = lines > 0 ? summaryGap + (summaryLineHeight * lines) : 0.0;
           final reservedHeight =
               logoMetadataGap +
