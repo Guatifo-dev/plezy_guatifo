@@ -67,6 +67,7 @@ class OverlaySheetController {
     BoxConstraints? constraints,
     Color? backgroundColor,
     bool barrierDismissible = true,
+    double barrierOpacity = 0.5,
     FocusNode? initialFocusNode,
     Alignment alignment = Alignment.bottomCenter,
     bool showDragHandle = false,
@@ -76,6 +77,7 @@ class OverlaySheetController {
       constraints: constraints,
       backgroundColor: backgroundColor,
       barrierDismissible: barrierDismissible,
+      barrierOpacity: barrierOpacity,
       initialFocusNode: initialFocusNode,
       alignment: alignment,
       showDragHandle: showDragHandle,
@@ -303,6 +305,7 @@ class _OverlaySheetHostState extends State<OverlaySheetHost> with SingleTickerPr
   bool _isOpen = false;
   bool _isClosing = false;
   bool _barrierDismissible = true;
+  double _barrierOpacity = 0.5;
   bool _showDragHandle = false;
   BoxConstraints? _constraints;
   Color? _explicitBackgroundColor;
@@ -339,7 +342,7 @@ class _OverlaySheetHostState extends State<OverlaySheetHost> with SingleTickerPr
 
     _barrierAnimation = Tween<double>(
       begin: 0,
-      end: 0.5,
+      end: 1.0,
     ).animate(CurvedAnimation(parent: _animationController, curve: Curves.easeOutCubic));
   }
 
@@ -364,6 +367,7 @@ class _OverlaySheetHostState extends State<OverlaySheetHost> with SingleTickerPr
     BoxConstraints? constraints,
     Color? backgroundColor,
     bool barrierDismissible = true,
+    double barrierOpacity = 0.5,
     FocusNode? initialFocusNode,
     Alignment alignment = Alignment.bottomCenter,
     bool showDragHandle = false,
@@ -391,6 +395,7 @@ class _OverlaySheetHostState extends State<OverlaySheetHost> with SingleTickerPr
       _isOpen = true;
       _isClosing = false;
       _barrierDismissible = barrierDismissible;
+      _barrierOpacity = barrierOpacity.clamp(0.0, 1.0);
       _showDragHandle = showDragHandle;
       _constraints = constraints;
       _explicitBackgroundColor = backgroundColor;
@@ -584,7 +589,7 @@ class _OverlaySheetHostState extends State<OverlaySheetHost> with SingleTickerPr
                   builder: (context, child) {
                     return GestureDetector(
                       onTap: _barrierDismissible ? () => _close() : null,
-                      child: ColoredBox(color: Colors.black.withValues(alpha: _barrierAnimation.value)),
+                      child: ColoredBox(color: Colors.black.withValues(alpha: _barrierAnimation.value * _barrierOpacity)),
                     );
                   },
                 ),
