@@ -20,6 +20,7 @@ on:
       - feature/detail-navigation-polish-464b398
       - fix/vision-series-full-fanart-trailer-insets-24d6fc9
       - feature/series-discover-identical-backdrop-138c490
+      - feature/movie-discover-shared-spotlight-ffa4d8f
 
 permissions:
   contents: write
