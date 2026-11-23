@@ -38,8 +38,9 @@ class MediaDetailsSheet extends StatefulWidget {
   final FocusNode? informationFocusNode;
   final bool showTitleHeader;
   final bool emphasizeSynopsis;
+  final int? synopsisMaxLines;
 
-  const MediaDetailsSheet({super.key, required this.item, this.description, this.genres = const [], this.onNavigateDown, this.informationFocusNode, this.showTitleHeader = true, this.emphasizeSynopsis = false});
+  const MediaDetailsSheet({super.key, required this.item, this.description, this.genres = const [], this.onNavigateDown, this.informationFocusNode, this.showTitleHeader = true, this.emphasizeSynopsis = false, this.synopsisMaxLines});
 
   @override
   State<MediaDetailsSheet> createState() => _MediaDetailsSheetState();
@@ -157,6 +158,8 @@ class _MediaDetailsSheetState extends State<MediaDetailsSheet> {
                     Text(
                       description ?? '',
                       textAlign: TextAlign.justify,
+                      maxLines: widget.synopsisMaxLines,
+                      overflow: widget.synopsisMaxLines == null ? null : TextOverflow.ellipsis,
                       style: theme.textTheme.bodyLarge?.copyWith(height: 1.35, fontSize: 16),
                     ),
                   ],
