@@ -21,6 +21,7 @@ on:
       - fix/vision-series-full-fanart-trailer-insets-24d6fc9
       - feature/series-discover-identical-backdrop-138c490
       - feature/movie-discover-shared-spotlight-ffa4d8f
+      - feature/series-last-episode-added-56fcdf0
 
 permissions:
   contents: write
