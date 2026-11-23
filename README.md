@@ -6,7 +6,7 @@
 
 Cliente de Plex basado en [Plezy](https://github.com/edde746/plezy), adaptado y ampliado para la navegación con mando a distancia, las fichas visuales de películas y series y la reproducción de tráileres.
 
-**Probado en Amazon Fire TV Stick 4K (ARM32 / armeabi-v7a).**
+**Probado en Amazon Fire TV Stick 4K y Fire TV Stick 4K Max (APK ARM32 / armeabi-v7a).**
 
 [**Descargar la última versión**](https://github.com/Guatifo-dev/plezy_guatifo/releases/latest) · [Ver todas las versiones](https://github.com/Guatifo-dev/plezy_guatifo/releases) · [Código fuente](https://github.com/Guatifo-dev/plezy_guatifo)
 
@@ -18,7 +18,7 @@ Cliente de Plex basado en [Plezy](https://github.com/edde746/plezy), adaptado y 
 
 Plezy Vision es una personalización de Plezy enfocada en **Plex y la experiencia de televisión**. Incorpora una interfaz adaptada al uso con mando, un diseño renovado de las fichas y opciones adicionales de presentación y reproducción.
 
-> **Compatibilidad probada:** Amazon Fire TV Stick 4K, arquitectura **ARM32**. No se ha verificado el funcionamiento de esta versión personalizada en todos los modelos de Fire TV, Android TV ni en otras plataformas. Se necesita acceso a un servidor Plex.
+> **Compatibilidad probada:** Amazon Fire TV Stick 4K y **Fire TV Stick 4K Max**, utilizando la APK **ARM32 / armeabi-v7a**. No se ha verificado el funcionamiento de esta versión personalizada en todos los modelos de Fire TV, Android TV ni en otras plataformas. Se necesita acceso a un servidor Plex.
 
 ## Novedades destacadas
 
