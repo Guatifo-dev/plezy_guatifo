@@ -63,6 +63,61 @@ class TvSpotlightBackground extends StatelessWidget {
 
   double _scale(BuildContext context) => TvLayoutConstants.scaleOf(context);
 
+  // These two gradients pre-multiply the alpha of the original pairs of
+  // linear masks. They are created once, not recalculated for each title.
+  // Sampling at 1/100 of the artwork width/height closely tracks the
+  // original piecewise-linear product without extra compositing passes.
+  static final LinearGradient _movieFanartHorizontalMask = _combinedFanartMask(
+    const [0.0, 0.16, 0.27, 0.43, 0.59],
+    const [0.0, 0.0, 0.2, 0.7, 1.0],
+    const [0.0, 0.42, 0.60, 0.82],
+    const [1.0, 0.8, 0.3333333333, 0.0],
+    horizontal: true,
+  );
+
+  static final LinearGradient _movieFanartVerticalMask = _combinedFanartMask(
+    const [0.0, 0.14, 0.30, 0.44],
+    const [0.0, 166 / 255, 240 / 255, 1.0],
+    const [0.0, 0.55, 0.75, 0.96],
+    const [1.0, 192 / 255, 77 / 255, 0.0],
+    horizontal: false,
+  );
+
+  static LinearGradient _combinedFanartMask(
+    List<double> firstStops,
+    List<double> firstAlpha,
+    List<double> secondStops,
+    List<double> secondAlpha, {
+    required bool horizontal,
+  }) {
+    double sample(List<double> stops, List<double> alphas, double position) {
+      if (position <= stops.first) return alphas.first;
+      for (var i = 1; i < stops.length; i++) {
+        if (position <= stops[i]) {
+          final t = (position - stops[i - 1]) / (stops[i] - stops[i - 1]);
+          return alphas[i - 1] + (alphas[i] - alphas[i - 1]) * t;
+        }
+      }
+      return alphas.last;
+    }
+
+    final stops = List<double>.generate(101, (i) => i / 100);
+    final colors = [
+      for (final position in stops)
+        Colors.white.withValues(
+          alpha: sample(firstStops, firstAlpha, position) *
+              sample(secondStops, secondAlpha, position),
+        ),
+    ];
+    return LinearGradient(
+      begin: horizontal ? Alignment.centerLeft : Alignment.topCenter,
+      end: horizontal ? Alignment.centerRight : Alignment.bottomCenter,
+      colors: colors,
+      stops: stops,
+    );
+  }
+
+
   @override
   Widget build(BuildContext context) => AmbientSpotlightTint(
     item: item,
@@ -227,70 +282,31 @@ class TvSpotlightBackground extends StatelessWidget {
                           // The contained artwork does not fill this wide box.
                           // Start the left fade inside the actual image area,
                           // rather than wasting it in the empty box margin.
+                          // Precombine the horizontal and vertical alpha ramps.
+                          // Four linear masks become two; radial feathers stay
+                          // unchanged to preserve the original silhouette.
                           child: ShaderMask(
                             blendMode: BlendMode.dstIn,
-                            shaderCallback: (rect) => const LinearGradient(
-                              begin: Alignment.centerLeft,
-                              end: Alignment.centerRight,
-                              colors: [
-                                Colors.transparent,
-                                Colors.transparent,
-                                Color(0x33FFFFFF),
-                                Color(0xB3FFFFFF),
-                                Colors.white,
-                              ],
-                              stops: [0.0, 0.16, 0.27, 0.43, 0.59],
-                            ).createShader(rect),
-                            child: ShaderMask(
-                            blendMode: BlendMode.dstIn,
-                            shaderCallback: (rect) => const LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                Colors.transparent,
-                                Color(0xA6FFFFFF),
-                                Color(0xF0FFFFFF),
-                                Colors.white,
-                              ],
-                              stops: [0.0, 0.14, 0.30, 0.44],
-                            ).createShader(rect),
+                            shaderCallback: _movieFanartHorizontalMask.createShader,
                             child: ShaderMask(
                               blendMode: BlendMode.dstIn,
-                              shaderCallback: (rect) => const LinearGradient(
-                                begin: Alignment.centerLeft,
-                                end: Alignment.centerRight,
-                                // The contained image can end before the right edge of this box.
-                                // Fade sooner so its actual right boundary is not visible.
-                                colors: [Colors.white, Color(0xCCFFFFFF), Color(0x55FFFFFF), Colors.transparent],
-                                stops: [0.0, 0.42, 0.60, 0.82],
-                              ).createShader(rect),
+                              shaderCallback: _movieFanartVerticalMask.createShader,
                               child: ShaderMask(
                                 blendMode: BlendMode.dstIn,
-                                shaderCallback: (rect) => const LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: [Colors.white, Color(0xC0FFFFFF), Color(0x4DFFFFFF), Colors.transparent],
-                                  stops: [0.0, 0.55, 0.75, 0.96],
+                                shaderCallback: (rect) => const RadialGradient(
+                                  center: Alignment(0.40, 0.48),
+                                  radius: 1.20,
+                                  colors: [Colors.white, Colors.white, Color(0xBFFFFFFF), Colors.transparent],
+                                  stops: [0.0, 0.35, 0.68, 1.0],
                                 ).createShader(rect),
                                 child: ShaderMask(
-                            blendMode: BlendMode.dstIn,
-                            shaderCallback: (rect) => const RadialGradient(
-                              // Curved, off-centre feather instead of a straight edge.
-                              center: Alignment(0.40, 0.48),
-                              radius: 1.20,
-                              colors: [Colors.white, Colors.white, Color(0xBFFFFFFF), Colors.transparent],
-                              stops: [0.0, 0.35, 0.68, 1.0],
-                            ).createShader(rect),
-                            child: ShaderMask(
-                              blendMode: BlendMode.dstIn,
-                              shaderCallback: (rect) => const RadialGradient(
-                                // A second displaced ellipse makes the upper
-                                // and left boundary irregular, with soft corners.
-                                center: Alignment(0.02, 0.54),
-                                radius: 1.22,
-                                colors: [Colors.white, Colors.white, Color(0xD9FFFFFF), Colors.transparent],
-                                stops: [0.0, 0.38, 0.68, 1.0],
-                              ).createShader(rect),
+                                  blendMode: BlendMode.dstIn,
+                                  shaderCallback: (rect) => const RadialGradient(
+                                    center: Alignment(0.02, 0.54),
+                                    radius: 1.22,
+                                    colors: [Colors.white, Colors.white, Color(0xD9FFFFFF), Colors.transparent],
+                                    stops: [0.0, 0.38, 0.68, 1.0],
+                                  ).createShader(rect),
                               child: CyclingMediaBackdrop(
                                 mediaKey: media.globalKey,
                                 imagePaths: media.heroRotationPaths(containerAspectRatio: containerAspect),
@@ -305,13 +321,9 @@ class TvSpotlightBackground extends StatelessWidget {
                                 fit: BoxFit.contain,
                                 alignment: Alignment.bottomCenter,
                                 fallbackColor: Colors.transparent,
-                              ),
-                            ),
-                          ),
                                 ),
                               ),
                             ),
-                          ),
                           ),
                         ),
                       ),
