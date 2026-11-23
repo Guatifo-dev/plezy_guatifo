@@ -140,25 +140,29 @@ class TvSpotlightBackground extends StatelessWidget {
                   // Full-artwork mode must also host the shared trailer player.
                   // Keep it in the same top-right spotlight area so enabling
                   // or disabling the corner-artwork layout never disables trailers.
+                  // Build the expensive blurred-artwork widget once per
+                  // spotlight update, not on every trailer state notification.
+                  // The child stays unmounted while the native trailer is
+                  // active, preserving the no-fanart-flash behaviour.
+                  final blurredBackdrop = blurArtwork(backdrop);
                   return Stack(
                     fit: StackFit.expand,
                     children: [
-                      // Do not mount the fanart while a shared trailer is
-                      // active. This avoids a one-frame artwork flash when
-                      // Android moves the video surface between routes.
                       if (showTrailer)
                         ValueListenableBuilder<String?>(
                           valueListenable: PlexTrailerPreview.activeTrailerUrl,
-                          builder: (context, activeUrl, _) => ValueListenableBuilder<bool>(
+                          child: blurredBackdrop,
+                          builder: (context, activeUrl, artwork) => ValueListenableBuilder<bool>(
                             valueListenable: PlexTrailerPreview.trailerFinished,
-                            builder: (context, finished, _) =>
+                            child: artwork,
+                            builder: (context, finished, cachedArtwork) =>
                                 activeUrl != null && !finished
                                     ? const ColoredBox(color: Colors.black)
-                                    : blurArtwork(backdrop),
+                                    : cachedArtwork!,
                           ),
                         )
                       else
-                        blurArtwork(backdrop),
+                        blurredBackdrop,
                       if (showTrailer)
                         Align(
                           alignment: Alignment.topRight,
