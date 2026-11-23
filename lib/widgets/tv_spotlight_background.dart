@@ -90,7 +90,19 @@ class TvSpotlightBackground extends StatelessWidget {
         final backdropSize = cornerBackdrop || detailTrailerArtworkLayout
             ? Size(size.width * 0.68, size.height * 0.72)
             : size;
-        final backdrop = CyclingMediaBackdrop(
+        // Keep artwork entirely out of the widget tree during a shared
+        // trailer session for this same title. In particular, the new detail
+        // route must not paint a fresh fanart frame behind its AndroidView.
+        final backdrop = ValueListenableBuilder<String?>(
+          valueListenable: PlexTrailerPreview.activeTrailerUrl,
+          builder: (context, activeUrl, _) => ValueListenableBuilder<bool>(
+            valueListenable: PlexTrailerPreview.trailerFinished,
+            builder: (context, finished, _) {
+              if (activeUrl != null && !finished &&
+                  PlexTrailerPreview.isActiveFor(media)) {
+                return const SizedBox.expand();
+              }
+                return CyclingMediaBackdrop(
           mediaKey: media?.globalKey,
           imagePaths: media?.heroRotationPaths(containerAspectRatio: containerAspect) ?? const [],
           fallbackImagePaths: fallbackPaths,
@@ -103,6 +115,9 @@ class TvSpotlightBackground extends StatelessWidget {
           width: size.width,
           height: size.height,
           fallbackColor: media == null ? bgColor : Theme.of(context).colorScheme.surfaceContainerHighest,
+                );
+            },
+          ),
         );
         return Stack(
           fit: StackFit.expand,
