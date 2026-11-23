@@ -332,6 +332,8 @@ class TvSpotlightBackground extends StatelessWidget {
                   ),
                 ),
               ),
+              ),
+              ),
             if (media != null && showInfo)
               Positioned(
                 left: contentLeft ?? TvLayoutConstants.horizontalInset,
