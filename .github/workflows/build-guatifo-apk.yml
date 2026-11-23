@@ -25,6 +25,7 @@ on:
       - feature/reduce-trailer-rebuilds-ede1a01
       - feature/optimize-movie-fanart-masks-ede1a01
       - feature/optimize-discover-catalog-ede1a01
+      - feature/movie-detail-layout-and-opaque-backdrop-5c94dfa
       - feature/movie-sheet-match-series-9904f71
 
 permissions:
