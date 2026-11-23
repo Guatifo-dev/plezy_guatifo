@@ -841,7 +841,10 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                 hub,
           ];
           _combinedHubsCache = null;
-          _updateHubKeys();
+          // Page additions only change the items in an existing shelf.
+          // Hub identities and order are unchanged, so rebuilding all
+          // GlobalKey mappings on every 100-item page is unnecessary.
+          // _updateHubKeys() still runs when shelves are initially replaced.
         });
       } catch (error, stackTrace) {
         appLogger.w(
