@@ -24,6 +24,9 @@ Plezy Vision es una personalización de Plezy enfocada en **Plex y la experienci
 
 ### Ficha de películas
 
+<p align="center"><img src="media/WhatsApp Image 2026-11-23 at 23.20.13.jpeg" alt="Ficha de películas de Plezy Vision en Fire TV" width="920"></p>
+
+
 - Panel amplio con esquinas redondeadas, fanart integrado y póster destacado.
 - Logotipo del título, metadatos, puntuación y sinopsis.
 - Insignias visuales de formatos de vídeo y audio cuando están disponibles: **4K UHD, Dolby Vision, HDR10+, Dolby Atmos, Dolby Digital**, entre otras.
@@ -31,6 +34,9 @@ Plezy Vision es una personalización de Plezy enfocada en **Plex y la experienci
 - Controles organizados en tres filas para facilitar la navegación con el mando, sin desplazamiento vertical de botones.
 
 ### Ficha de series y episodios
+
+<p align="center"><img src="media/WhatsApp Image 2026-11-23 at 23.21.05.jpeg" alt="Ficha de series y episodios de Plezy Vision" width="920"></p>
+
 
 - Fanart integrado en el panel de detalles.
 - Póster, logotipo, información técnica y sinopsis.
@@ -40,6 +46,15 @@ Plezy Vision es una personalización de Plezy enfocada en **Plex y la experienci
 
 ### Inicio y exploración
 
+**Pantalla de inicio**
+
+<p align="center"><img src="media/WhatsApp Image 2026-11-23 at 23.17.03.jpeg" alt="Pantalla de inicio de Plezy Vision" width="920"></p>
+
+**Catálogo de películas**
+
+<p align="center"><img src="media/WhatsApp Image 2026-11-23 at 23.18.58.jpeg" alt="Catálogo de películas de Plezy Vision" width="920"></p>
+
+
 - Presentación con fanart de fondo y logotipos de títulos.
 - Secciones configurables **«Todas mis Películas»** y **«Todas mis Series»**.
 - Filas de «Seguir viendo» y contenido añadido recientemente.
@@ -48,15 +63,14 @@ Plezy Vision es una personalización de Plezy enfocada en **Plex y la experienci
 
 ### Tráileres y personalización
 
+<p align="center"><img src="media/WhatsApp Image 2026-11-23 at 23.18.17.jpeg" alt="Ajustes de apariencia de Plezy Vision" width="920"></p>
+
+
 - Reproducción automática de tráileres de Plex tras un tiempo de espera configurable.
 - Opción para activar o silenciar su sonido.
 - Continuidad de la sesión del tráiler al entrar y salir de la ficha del mismo título, cuando corresponde.
 - Insignias audiovisuales configurables.
 - Opciones de imagen destacada, resplandor de selección y personalización de la pantalla de inicio.
-
-## Capturas de pantalla
-
-Las capturas corresponden a Plezy Vision funcionando en Fire TV. Las nuevas imágenes de inicio, catálogo, fichas de películas y series y ajustes se incorporarán a esta sección una vez subidas al repositorio.
 
 ## Instalación en Fire TV
 
