@@ -28,6 +28,7 @@ on:
       - feature/movie-buttons-spacing-synopsis-10-lines-24a00db
       - feature/movie-detail-layout-and-opaque-backdrop-5c94dfa
       - feature/movie-sheet-match-series-9904f71
+      - release/plezyvision-v1.0.3-71e5aa5
 
 permissions:
   contents: write
@@ -193,3 +194,14 @@ jobs:
             --target "$GITHUB_SHA" \
             --title "PlezyVision 1.0.2" \
             --notes-file docs/PLEZYVISION-1.0.2.md
+
+      - name: Publish PlezyVision v1.0.3 release
+        if: ${{ github.ref == 'refs/heads/release/plezyvision-v1.0.3-71e5aa5' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create v1.0.3 build/app/outputs/flutter-apk/app-release.apk#PlezyVision.apk \
+            --target '71e5aa5a1f7fef41d79556a3a033bf829a86ee39' \
+            --title 'PlezyVision 1.0.3 — Rediseño de series y películas' \
+            --notes-file docs/PLEZYVISION-1.0.3.md
