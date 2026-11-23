@@ -38,6 +38,7 @@ class TvSpotlightBackground extends StatelessWidget {
   final bool allowNetwork;
   final bool allowTrailerPreview;
   final bool detailTrailerArtworkLayout;
+  final bool detailTrailerBottomFade;
 
   /// Optional caller-owned fact appended to the existing metadata line.
   final Widget? metadataTrailing;
@@ -57,6 +58,7 @@ class TvSpotlightBackground extends StatelessWidget {
     this.allowNetwork = true,
     this.allowTrailerPreview = true,
     this.detailTrailerArtworkLayout = false,
+    this.detailTrailerBottomFade = false,
     this.metadataTrailing,
     this.metadataBelow,
   });
@@ -231,6 +233,23 @@ class TvSpotlightBackground extends StatelessWidget {
                             ),
                           ),
                         ),
+                      if (detailTrailerBottomFade && showTrailer)
+                        ValueListenableBuilder<String?>(
+                          valueListenable: PlexTrailerPreview.activeTrailerUrl,
+                          builder: (context, activeUrl, _) => ValueListenableBuilder<bool>(
+                            valueListenable: PlexTrailerPreview.trailerFinished,
+                            builder: (context, finished, _) => activeUrl != null && !finished
+                                ? Align(
+                                    alignment: Alignment.topRight,
+                                    child: SizedBox(
+                                      width: backdropSize.width,
+                                      height: backdropSize.height,
+                                      child: _buildDetailTrailerBottomFade(),
+                                    ),
+                                  )
+                                : const SizedBox.shrink(),
+                          ),
+                        ),
                     ],
                   );
                 },
@@ -383,6 +402,28 @@ class TvSpotlightBackground extends StatelessWidget {
   /// Corner spotlight: artwork pinned to the top-right corner, left and
   /// bottom edges feathered into the scaffold background so the info block
   /// sits on a calm surface instead of the image.
+
+  // Paint a gentle bottom-edge veil above the native trailer in detail pages.
+  // Do not mask or resize the Android video surface itself.
+  Widget _buildDetailTrailerBottomFade() => IgnorePointer(
+    child: Align(
+      alignment: Alignment.bottomCenter,
+      child: FractionallySizedBox(
+        heightFactor: 0.20,
+        widthFactor: 1,
+        child: const DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Colors.transparent, Color(0xB3000000)],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+
   Widget _buildCornerBackdrop(Size backdropSize, Widget backdrop, MediaItem? media, MediaServerClient? client, bool trailerPreview) {
     return Align(
       alignment: Alignment.topRight,
@@ -420,6 +461,8 @@ class TvSpotlightBackground extends StatelessWidget {
                       backdrop,
                     if (trailerPreview && media != null && client != null && Platform.isAndroid)
                       PlexTrailerPreview(key: ValueKey(media.globalKey), item: media, client: client),
+                    if (detailTrailerBottomFade && trailerPreview && activeUrl != null && !finished)
+                      _buildDetailTrailerBottomFade(),
                   ],
                 ),
               ),
