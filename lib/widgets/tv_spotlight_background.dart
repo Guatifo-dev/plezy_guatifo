@@ -38,6 +38,7 @@ class TvSpotlightBackground extends StatelessWidget {
   final bool allowNetwork;
   final bool allowTrailerPreview;
   final bool detailTrailerArtworkLayout;
+  final bool diagnosticLightweightDetail;
 
   /// Optional caller-owned fact appended to the existing metadata line.
   final Widget? metadataTrailing;
@@ -57,6 +58,7 @@ class TvSpotlightBackground extends StatelessWidget {
     this.allowNetwork = true,
     this.allowTrailerPreview = true,
     this.detailTrailerArtworkLayout = false,
+    this.diagnosticLightweightDetail = false,
     this.metadataTrailing,
     this.metadataBelow,
   });
@@ -236,8 +238,8 @@ class TvSpotlightBackground extends StatelessWidget {
                 },
               ),
             ),
-            _buildHorizontalScrim(bgColor),
-            RasterizedGradient(
+            if (!diagnosticLightweightDetail) _buildHorizontalScrim(bgColor),
+            if (!diagnosticLightweightDetail) RasterizedGradient(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
@@ -256,7 +258,7 @@ class TvSpotlightBackground extends StatelessWidget {
             // lower-right corner and slightly overlaps the unchanged trailer.
             // It is independent of the native video surface and never changes
             // its bounds or shared playback session.
-            if (detailTrailerArtworkLayout && media != null)
+            if (detailTrailerArtworkLayout && media != null && !diagnosticLightweightDetail)
               ValueListenableBuilder<String?>(
                 valueListenable: PlexTrailerPreview.activeTrailerUrl,
                 builder: (context, activeUrl, _) => ValueListenableBuilder<bool>(
@@ -389,7 +391,9 @@ class TvSpotlightBackground extends StatelessWidget {
       child: SizedBox(
         width: backdropSize.width,
         height: backdropSize.height,
-        child: ShaderMask(
+        child: diagnosticLightweightDetail
+            ? _buildCornerBackdropContent(backdrop, media, client, trailerPreview)
+            : ShaderMask(
           shaderCallback: (rect) =>
               const LinearGradient(colors: [Colors.transparent, Colors.white], stops: [0.0, 0.35]).createShader(rect),
           blendMode: BlendMode.dstIn,
@@ -401,7 +405,16 @@ class TvSpotlightBackground extends StatelessWidget {
               stops: [0.0, 0.55, 1.0],
             ).createShader(rect),
             blendMode: BlendMode.dstIn,
-            child: ValueListenableBuilder<String?>(
+            child: _buildCornerBackdropContent(backdrop, media, client, trailerPreview),
+          ),
+        ),
+      ),
+    );
+  }
+
+
+  Widget _buildCornerBackdropContent(Widget backdrop, MediaItem? media, MediaServerClient? client, bool trailerPreview) {
+    return ValueListenableBuilder<String?>(
               valueListenable: PlexTrailerPreview.activeTrailerUrl,
               builder: (context, activeUrl, _) => ValueListenableBuilder<bool>(
                 valueListenable: PlexTrailerPreview.trailerFinished,
@@ -423,11 +436,7 @@ class TvSpotlightBackground extends StatelessWidget {
                   ],
                 ),
               ),
-            ),
-          ),
-        ),
-      ),
-    );
+            );
   }
 
   Widget _buildHorizontalScrim(Color bgColor) {
