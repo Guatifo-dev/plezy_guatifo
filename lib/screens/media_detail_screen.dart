@@ -4442,6 +4442,8 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
         alignment: metadata.isMovie && PlatformDetector.isTV()
             ? Alignment.center
             : Alignment.bottomCenter,
+        // Hide Discover completely outside the TV movie panel.
+        barrierOpacity: metadata.isMovie && PlatformDetector.isTV() ? 1.0 : 0.5,
       ),
     );
   }
@@ -4568,12 +4570,16 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                               ),
                             ),
                           ),
-                          if (!series) const SizedBox(height: 10),
-                          if (!series) _buildActionButtons(
-                            metadata,
-                            hideMoreDetails: true,
-                            compactVertical: true,
-                            threeRowLayout: true,
+                          if (!series) const SizedBox(height: 14),
+                          if (!series) Transform.scale(
+                            scale: 1.06,
+                            alignment: Alignment.topLeft,
+                            child: _buildActionButtons(
+                              metadata,
+                              hideMoreDetails: true,
+                              compactVertical: true,
+                              threeRowLayout: true,
+                            ),
                           ),
                         ],
                       ),
@@ -4630,13 +4636,17 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                             );
                           })),
                         ],
-                      ) : MediaDetailsSheet(
-                        item: item,
-                        description: description,
-                        genres: genres,
-                        informationFocusNode: _movieDetailsInfoFocusNode,
-                        showTitleHeader: false,
-                        emphasizeSynopsis: true,
+                      ) : Padding(
+                        // Keep the movie synopsis readable across the wide panel.
+                        padding: EdgeInsets.only(right: size.width * 0.055),
+                        child: MediaDetailsSheet(
+                          item: item,
+                          description: description,
+                          genres: genres,
+                          informationFocusNode: _movieDetailsInfoFocusNode,
+                          showTitleHeader: false,
+                          emphasizeSynopsis: true,
+                        ),
                       ),
                     ),
                     Positioned(
