@@ -133,19 +133,22 @@ class TvSpotlightBackground extends StatelessWidget {
                       // rendered yet. Mask the artwork in the trailer viewport
                       // until the first frame arrives, just as corner mode does.
                       blurArtwork(backdrop),
+                      // A route-owned AndroidView can briefly expose its
+                      // Flutter backing layer even after a stale ready event
+                      // from the previous route. Never show fanart behind an
+                      // active trailer; only restore it after playback ends.
                       if (showTrailer)
-                        ValueListenableBuilder<bool>(
-                          valueListenable: PlexTrailerPreview.surfaceReady,
-                          builder: (context, ready, _) => ready
-                              ? const SizedBox.shrink()
-                              : Align(
-                                  alignment: Alignment.topRight,
-                                  child: SizedBox(
-                                    width: backdropSize.width,
-                                    height: backdropSize.height,
-                                    child: const ColoredBox(color: Colors.black),
-                                  ),
-                                ),
+                        ValueListenableBuilder<String?>(
+                          valueListenable: PlexTrailerPreview.activeTrailerUrl,
+                          builder: (context, activeUrl, _) => ValueListenableBuilder<bool>(
+                            valueListenable: PlexTrailerPreview.trailerFinished,
+                            builder: (context, finished, _) =>
+                                activeUrl != null && !finished
+                                    ? const Positioned.fill(
+                                        child: ColoredBox(color: Colors.black),
+                                      )
+                                    : const SizedBox.shrink(),
+                          ),
                         ),
                       if (showTrailer)
                         Align(
@@ -371,23 +374,24 @@ class TvSpotlightBackground extends StatelessWidget {
               stops: [0.0, 0.55, 1.0],
             ).createShader(rect),
             blendMode: BlendMode.dstIn,
-            child: ValueListenableBuilder<bool>(
-              valueListenable: PlexTrailerPreview.surfaceReady,
-              builder: (context, surfaceReady, _) => Stack(
-                fit: StackFit.expand,
-                children: [
-                  // A SurfaceView briefly exposes the Flutter artwork while
-                  // Media3 transfers output between route-owned platform views.
-                  // Keep that artwork covered until the replacement surface
-                  // confirms its first rendered frame.
-                  // A missing trailer surface must not black out the artwork
-                  // when navigation focus disables the trailer preview.
-                  // Only hide the artwork while an active preview is waiting
-                  // for its first rendered frame.
-                  if (surfaceReady || !trailerPreview) backdrop else const ColoredBox(color: Colors.black),
-                  if (trailerPreview && media != null && client != null && Platform.isAndroid)
-                    PlexTrailerPreview(key: ValueKey(media.globalKey), item: media, client: client),
-                ],
+            child: ValueListenableBuilder<String?>(
+              valueListenable: PlexTrailerPreview.activeTrailerUrl,
+              builder: (context, activeUrl, _) => ValueListenableBuilder<bool>(
+                valueListenable: PlexTrailerPreview.trailerFinished,
+                builder: (context, finished, _) => Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // The native SurfaceView may disappear for a frame when
+                    // switching routes. Keep artwork out of its backing layer
+                    // throughout active playback, not only until ready.
+                    if (trailerPreview && activeUrl != null && !finished)
+                      const ColoredBox(color: Colors.black)
+                    else
+                      backdrop,
+                    if (trailerPreview && media != null && client != null && Platform.isAndroid)
+                      PlexTrailerPreview(key: ValueKey(media.globalKey), item: media, client: client),
+                  ],
+                ),
               ),
             ),
           ),
