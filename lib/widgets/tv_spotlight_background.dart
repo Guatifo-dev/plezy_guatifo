@@ -128,15 +128,9 @@ class TvSpotlightBackground extends StatelessWidget {
                   return Stack(
                     fit: StackFit.expand,
                     children: [
-                      // During a route handoff, the shared native player is
-                      // still running but its replacement SurfaceView has not
-                      // rendered yet. Mask the artwork in the trailer viewport
-                      // until the first frame arrives, just as corner mode does.
-                      blurArtwork(backdrop),
-                      // A route-owned AndroidView can briefly expose its
-                      // Flutter backing layer even after a stale ready event
-                      // from the previous route. Never show fanart behind an
-                      // active trailer; only restore it after playback ends.
+                      // Do not mount the fanart while a shared trailer is
+                      // active. This avoids a one-frame artwork flash when
+                      // Android moves the video surface between routes.
                       if (showTrailer)
                         ValueListenableBuilder<String?>(
                           valueListenable: PlexTrailerPreview.activeTrailerUrl,
@@ -144,12 +138,12 @@ class TvSpotlightBackground extends StatelessWidget {
                             valueListenable: PlexTrailerPreview.trailerFinished,
                             builder: (context, finished, _) =>
                                 activeUrl != null && !finished
-                                    ? const Positioned.fill(
-                                        child: ColoredBox(color: Colors.black),
-                                      )
-                                    : const SizedBox.shrink(),
+                                    ? const ColoredBox(color: Colors.black)
+                                    : blurArtwork(backdrop),
                           ),
-                        ),
+                        )
+                      else
+                        blurArtwork(backdrop),
                       if (showTrailer)
                         Align(
                           alignment: Alignment.topRight,
@@ -384,6 +378,9 @@ class TvSpotlightBackground extends StatelessWidget {
                     // The native SurfaceView may disappear for a frame when
                     // switching routes. Keep artwork out of its backing layer
                     // throughout active playback, not only until ready.
+                    // Omit the artwork widget entirely during playback.
+                    // The black backing is deliberate for the brief native
+                    // surface handoff; do not paint the fanart underneath it.
                     if (trailerPreview && activeUrl != null && !finished)
                       const ColoredBox(color: Colors.black)
                     else
