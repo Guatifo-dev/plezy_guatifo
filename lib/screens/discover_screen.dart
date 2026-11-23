@@ -1,5 +1,6 @@
 import 'dart:async';
 import '../media/ids.dart';
+import '../services/series_detail_prefetch.dart';
 import 'dart:io' show Platform;
 import 'dart:math' as math;
 
@@ -411,10 +412,22 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     items: _onDeck,
   );
 
+  Timer? _seriesDetailPrefetchTimer;
+
   void _setSpotlightItem(MediaItem item) {
     _spotlight.select(item);
     _ensureHeroFormatMetadata(item);
     _ensureRecentShowDetails(item);
+    // Only the currently focused show is warmed, after the focus settles.
+    // Avoid a network request for every item while scrolling quickly.
+    _seriesDetailPrefetchTimer?.cancel();
+    if (PlatformDetector.isTV() && item.isShow) {
+      _seriesDetailPrefetchTimer = Timer(const Duration(milliseconds: 350), () {
+        if (!mounted) return;
+        final client = _getMediaClientForItem(item);
+        if (client != null) SeriesDetailPrefetch.warm(item, client);
+      });
+    }
   }
 
   Widget? _buildTvSpotlightFormatMetadata(MediaItem? item) {
