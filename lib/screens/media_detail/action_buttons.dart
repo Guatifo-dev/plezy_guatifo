@@ -180,7 +180,7 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
             await navigateToVideoPlayer(context, metadata: primaryTrailer, isLaunchCurrent: () => _canUseDetail);
           }());
 
-    final gap = compactVertical ? 5.0 * tvScale : (isTv ? (metadata.isShow ? 14.0 : 8.0) * tvScale : 12.0);
+    final gap = compactVertical ? (threeRowLayout ? 8.5 : 5.0) * tvScale : (isTv ? (metadata.isShow ? 14.0 : 8.0) * tvScale : 12.0);
 
     Widget playButton(FocusableActionBuildState state) {
       final prominentStyle = actionButtonStyle(
