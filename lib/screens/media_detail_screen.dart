@@ -4570,7 +4570,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                               ),
                             ),
                           ),
-                          if (!series) const SizedBox(height: 14),
+                          if (!series) const SizedBox(height: 20),
                           if (!series) Transform.scale(
                             scale: 1.06,
                             alignment: Alignment.topLeft,
@@ -4646,6 +4646,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                           informationFocusNode: _movieDetailsInfoFocusNode,
                           showTitleHeader: false,
                           emphasizeSynopsis: true,
+                          synopsisMaxLines: 10,
                         ),
                       ),
                     ),
