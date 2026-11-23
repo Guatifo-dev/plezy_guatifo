@@ -386,15 +386,14 @@ PageRoute<bool> mediaDetailRoute({
             },
           );
         }
-        // Preserve the original bottom-to-top entrance of More Details.
-        return SlideTransition(
-          position: Tween<Offset>(
-            begin: const Offset(0, 1), end: Offset.zero,
-          ).animate(CurvedAnimation(
+        // Keep Discover's fanart and active trailer visually stationary while
+        // opening movie details, matching the TV series detail handoff.
+        return FadeTransition(
+          opacity: CurvedAnimation(
             parent: animation,
             curve: Curves.easeOutCubic,
             reverseCurve: Curves.easeInCubic,
-          )),
+          ),
           child: child,
         );
       }
@@ -4477,23 +4476,6 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                   fit: BoxFit.cover,
                   imageType: ImageType.poster,
                 ));
-        final seasonArt = season?.heroRotationPaths(containerAspectRatio: 16 / 9) ?? const <String>[];
-        final fanartPaths = seasonArt.isNotEmpty ? seasonArt : metadata.heroRotationPaths(containerAspectRatio: 16 / 9);
-        final fanartPath = fanartPaths.isEmpty ? null : fanartPaths.first;
-        final fanart = fanartPath == null
-            ? null
-            : (_buildOfflineArtworkIfAvailable(
-                  sheetContext,
-                  artworkPaths: [fanartPath],
-                  fit: BoxFit.cover,
-                  imageType: ImageType.art,
-                ) ??
-                OptimizedMediaImage(
-                  client: _getMediaClientForMetadata(sheetContext),
-                  imagePath: fanartPath,
-                  fit: BoxFit.cover,
-                  imageType: ImageType.art,
-                ));
         final logo = _buildDetailLogoOrTitle(
           sheetContext,
           metadata,
@@ -4526,8 +4508,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                     // treatment, scrims and native trailer surface. The
                     // fullscreen-sized layer is centered behind the existing
                     // panel content so its geometry does not change on entry.
-                    if (series)
-                      Positioned.fill(
+                    Positioned.fill(
                         child: IgnorePointer(
                           child: OverflowBox(
                             alignment: Alignment.center,
@@ -4558,67 +4539,6 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                 final seriesRailHeight = (bounds.maxHeight - 16) * (series ? 0.29 : 0.34) + (series ? 42 * TvLayoutConstants.scaleOf(context) : 0) + (series && _seasons.length > 1 ? 46 * TvLayoutConstants.scaleOf(context) : 0);
                 return Stack(
                   children: [
-                    // Artwork starts at the same top inset as the poster.
-                    if (!series && fanart != null)
-                      Positioned(
-                        top: 0,
-                        right: 0,
-                        width: size.width * 0.43,
-                        height: size.height * (series ? 0.32 : 0.48),
-                        child: IgnorePointer(
-                          // Same artwork/trailer composition and gradient geometry
-                          // as the movie sheet. Series retain their own panel size.
-                          child: ShaderMask(
-                            blendMode: BlendMode.dstIn,
-                            shaderCallback: (rect) => LinearGradient(
-                              begin: Alignment.centerLeft,
-                              end: Alignment.centerRight,
-                              colors: [Colors.transparent, series ? const Color(0xDDFFFFFF) : const Color(0x99FFFFFF), Colors.white],
-                              stops: [0.0, 0.48, 1.0],
-                            ).createShader(rect),
-                            child: ShaderMask(
-                              blendMode: BlendMode.dstIn,
-                              shaderCallback: (rect) => const LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [Colors.transparent, Colors.white, Color(0xCCFFFFFF), Colors.transparent],
-                                stops: [0.0, 0.14, 0.54, 1.0],
-                              ).createShader(rect),
-                              child: ShaderMask(
-                                blendMode: BlendMode.dstIn,
-                                shaderCallback: (rect) => const LinearGradient(
-                                  begin: Alignment.centerLeft,
-                                  end: Alignment.centerRight,
-                                  colors: [Colors.white, Colors.white, Color(0xAAFFFFFF), Colors.transparent],
-                                  stops: [0.0, 0.62, 0.80, 1.0],
-                                ).createShader(rect),
-                                child: Stack(
-                                  fit: StackFit.expand,
-                                  children: [
-                                    fanart,
-                                    SettingValueBuilder<bool>(
-                                      pref: SettingsService.plexTrailerPreview,
-                                      builder: (context, enabled, _) {
-                                        if (!enabled || widget.isOffline || !Platform.isAndroid) {
-                                          return const SizedBox.shrink();
-                                        }
-                                        final trailerClient = _getMediaClientForMetadata(context);
-                                        if (trailerClient == null) return const SizedBox.shrink();
-                                        return PlexTrailerPreview(
-                                          key: ValueKey(metadata.globalKey),
-                                          item: metadata,
-                                          client: trailerClient,
-                                          preserveAspectRatio: series,
-                                        );
-                                      },
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
                     Positioned(
                       top: 0,
                       left: 0,
