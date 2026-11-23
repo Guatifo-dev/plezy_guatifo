@@ -136,7 +136,12 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       for (final hub in _catalogHubs)
         if ((hub.id != 'discover.all.movie' || SettingsService.instance.read(SettingsService.showAllMyMoviesDiscover)) &&
             (hub.id != 'discover.all.show' || SettingsService.instance.read(SettingsService.showAllMySeriesDiscover)))
-          _sortedCatalogHub(hub, hub.id == 'discover.all.movie' ? movieSort : seriesSort),
+          // Plex already sorts the series catalog by its newest episode.
+          // Keep that server order for date-added; other choices sort locally.
+          (hub.id == 'discover.all.show' &&
+                  (seriesSort == DiscoverCatalogSort.dateAdded || seriesSort == DiscoverCatalogSort.original)
+              ? hub
+              : _sortedCatalogHub(hub, hub.id == 'discover.all.movie' ? movieSort : seriesSort)),
     ];
   }
 
@@ -699,7 +704,12 @@ class _DiscoverScreenState extends State<DiscoverScreen>
         try {
           final page = await client.fetchLibraryPagedContent(
             library.id,
-            query: LibraryQuery(kind: kind, offset: 0, limit: 20),
+            query: LibraryQuery(
+              kind: kind,
+              offset: 0,
+              limit: 20,
+              sort: kind == MediaKind.show ? const LibrarySort(field: 'episode.addedAt') : null,
+            ),
             libraryKind: kind,
           );
           return _DiscoverCatalogSource(
@@ -750,7 +760,12 @@ class _DiscoverScreenState extends State<DiscoverScreen>
             final localLimit = overlapEnd - overlapStart;
             final page = await source.client.fetchLibraryPagedContent(
               source.library.id,
-              query: LibraryQuery(kind: kind, offset: localOffset, limit: localLimit),
+              query: LibraryQuery(
+                kind: kind,
+                offset: localOffset,
+                limit: localLimit,
+                sort: kind == MediaKind.show ? const LibrarySort(field: 'episode.addedAt') : null,
+              ),
               libraryKind: kind,
               abort: abort,
             );
