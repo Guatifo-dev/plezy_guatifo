@@ -22,6 +22,7 @@ on:
       - feature/series-discover-identical-backdrop-138c490
       - feature/movie-discover-shared-spotlight-ffa4d8f
       - feature/series-last-episode-added-56fcdf0
+      - feature/reduce-trailer-rebuilds-ede1a01
 
 permissions:
   contents: write
