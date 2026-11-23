@@ -69,9 +69,9 @@ class TvSpotlightBackground extends StatelessWidget {
   // original piecewise-linear product without extra compositing passes.
   static final LinearGradient _movieFanartHorizontalMask = _combinedFanartMask(
     const [0.0, 0.16, 0.27, 0.43, 0.59],
-    const [0.0, 0.0, 0.2, 0.7, 1.0],
+    const [0.0, 0.0, 51 / 255, 179 / 255, 1.0],
     const [0.0, 0.42, 0.60, 0.82],
-    const [1.0, 0.8, 0.3333333333, 0.0],
+    const [1.0, 204 / 255, 85 / 255, 0.0],
     horizontal: true,
   );
 
