@@ -368,9 +368,9 @@ PageRoute<bool> mediaDetailRoute({
   if (!PlatformDetector.isTV()) return MaterialPageRoute<bool>(builder: (_) => page);
 
   return PageRouteBuilder<bool>(
-    // TV movie details are an overlay: keep the originating Discover/library
-    // screen painted underneath. Non-movie details retain their opaque route.
-    opaque: !metadata.isMovie,
+    // Keep movie and series detail routes opaque so Discover/library content
+    // cannot remain visible behind the TV detail panel.
+    opaque: true,
     pageBuilder: (_, _, _) => page,
     transitionsBuilder: (_, animation, _, child) {
       if (metadata.isMovie) {
@@ -3756,7 +3756,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
           return _handleMediaDetailBackKey(node, event);
         },
         child: Scaffold(
-          backgroundColor: Colors.transparent,
+          backgroundColor: Colors.black,
           body: Center(
             child: _buildTvMovieMoreDetailsSheet(
               movieItem, movieDescription, metadata.genres ?? const <String>[], metadata,
