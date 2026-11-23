@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../media/media_item.dart';
+import '../media/media_item_types.dart';
 import '../media/media_server_client.dart';
 
 /// One-slot, short-lived season prefetch shared by Discover and TV details.
