@@ -4501,7 +4501,10 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
             border: Border.all(color: Colors.white, width: 2),
             borderRadius: BorderRadius.circular(22),
           ),
-          clipBehavior: Clip.antiAlias,
+          // Diagnostic: remove the panel's ancestor clip around Android SurfaceView.
+          // Keep the existing full-screen OverflowBox geometry unchanged so
+          // this test isolates clipping rather than changing video sizing.
+          clipBehavior: Clip.none,
           child: Stack(
             children: [
                     // Reuse Discover's exact TV spotlight artwork, corner
