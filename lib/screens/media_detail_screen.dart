@@ -4525,6 +4525,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
                                 showInfo: false,
                                 allowNetwork: !widget.isOffline,
                                 allowTrailerPreview: !widget.isOffline,
+                                detailTrailerBottomFade: true,
                               ),
                             ),
                           ),
