@@ -4436,8 +4436,8 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
             ? _buildTvMovieMoreDetailsSheet(item, description, genres, metadata)
             : MediaDetailsSheet(item: item, description: description, genres: genres),
         constraints: metadata.isMovie && PlatformDetector.isTV()
-            ? BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.94,
-                maxHeight: MediaQuery.sizeOf(context).height * 0.92)
+            ? BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.98,
+                maxHeight: MediaQuery.sizeOf(context).height * 0.96)
             : null,
         alignment: metadata.isMovie && PlatformDetector.isTV()
             ? Alignment.center
@@ -4490,8 +4490,8 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
           ),
         );
         return Container(
-          height: size.height * (series ? 0.96 : 0.88),
-          width: series ? size.width * 0.98 : null,
+          height: size.height * 0.96,
+          width: size.width * 0.98,
           decoration: BoxDecoration(
             color: theme.colorScheme.surface.withValues(alpha: 0.96),
             borderRadius: BorderRadius.circular(22),
