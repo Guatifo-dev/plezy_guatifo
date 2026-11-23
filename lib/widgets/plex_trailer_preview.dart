@@ -39,6 +39,10 @@ class PlexTrailerPreview extends StatefulWidget {
   /// False after the native player reaches the end of this trailer.
   static ValueListenable<bool> get trailerFinished => _TrailerPreviewSession.finished;
 
+  /// The URL belongs to this title, not to another item selected in Discover.
+  static bool isActiveFor(MediaItem? item) =>
+      item != null && _TrailerPreviewSession.isActiveFor(item);
+
   /// Marks a route handoff before its new Android surface is attached.
   static void prepareForRoute(Object? routeToken) {
     _TrailerPreviewSession.initialize();
@@ -199,6 +203,8 @@ abstract final class _TrailerPreviewSession {
     debugPrint('[TrailerPreview] Restarting pending delay after route change');
     _timer = Timer(_settleDelay, () => _load(item, client, generation));
   }
+
+  static bool isActiveFor(MediaItem item) => _itemKey == item.globalKey;
 
   static String? _itemKey;
   static int _generation = 0;
