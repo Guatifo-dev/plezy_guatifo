@@ -4,6 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
+      - build/plezyvision-*
       - feature/plex-trailer-preview
       - feature/plezy-vision-icon-183
       - test-firetv-home-banner
