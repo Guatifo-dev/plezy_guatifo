@@ -59,6 +59,7 @@ import '../services/download_storage_service.dart';
 import '../utils/download_version_utils.dart';
 import '../utils/download_utils.dart';
 import '../services/settings_service.dart';
+import '../services/series_detail_prefetch.dart';
 import '../services/watch_actions.dart';
 import '../widgets/settings_builder.dart';
 import '../utils/layout_constants.dart';
@@ -2050,7 +2051,10 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
       // Plex as an int but lands in [MediaItem.libraryId] as the string
       // form (or null on Jellyfin items).
       final sectionId = _metadata.libraryId;
-      final seasonsFuture = client.fetchChildren(_metadata.id);
+      // Discover may already have fetched the focused show's seasons.
+      // Reuse that request instead of repeating the same Plex round-trip.
+      final seasonsFuture = SeriesDetailPrefetch.take(_metadata, client) ??
+          client.fetchChildren(_metadata.id);
       // Prefs are a per-library nicety (Plex "flatten seasons"); a failure here
       // must never take down the seasons list, so degrade to defaults.
       final prefsFuture = (client is PlexClient && sectionId != null)
