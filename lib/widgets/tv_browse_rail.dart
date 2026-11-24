@@ -506,6 +506,21 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
 
   MediaHub? get _activeHub => widget.hubs.isEmpty ? null : widget.hubs[_hubIndex.clamp(0, widget.hubs.length - 1)];
 
+  /// Move the real selection without synthesizing a remote-control event.
+  /// Only used by Discover's startup presentation while the rail has focus.
+  bool selectContinueWatchingCycleItem(int index) {
+    if (!_focusNode.hasFocus || widget.hubs.isEmpty || widget.hubs.first.id != 'continue_watching') return false;
+    final hub = widget.hubs.first;
+    if (index < 0 || index >= hub.items.length) return false;
+    _hubIndex = 0;
+    _itemIndex = _leadingCountFor(hub) + index;
+    _focusModel.set(_hubIndex, _itemIndex);
+    _rememberFocus(hub);
+    _notifyFocusedItem();
+    _scrollToItem();
+    return true;
+  }
+
   void requestFocus() {
     _notifyFocusedItem();
     _focusNode.requestFocus();
