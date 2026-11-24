@@ -74,7 +74,7 @@ import 'discover_screen.dart';
 import 'explore_screen.dart';
 import 'libraries/library_quick_picker_sheet.dart';
 import 'libraries/libraries_screen.dart';
-import 'livetv/live_tv_screen.dart';
+import 'livetv/vision_iptv_screen.dart';
 import 'search_screen.dart';
 import 'downloads/downloads_screen.dart';
 import 'settings/settings_screen.dart';
@@ -1234,7 +1234,7 @@ class _MainScreenState extends State<MainScreen>
         onLibraryOrderChanged: _onLibraryOrderChanged,
         onLibrarySelected: _handleLibrariesScreenSelected,
       ),
-      NavigationTabId.liveTv => LiveTvScreen(key: _screenKeys[tab]),
+      NavigationTabId.liveTv => VisionIptvScreen(key: _screenKeys[tab]),
       NavigationTabId.search => SearchScreen(key: _screenKeys[tab]),
       NavigationTabId.downloads => DownloadsScreen(key: _screenKeys[tab]),
       NavigationTabId.settings => SettingsScreen(key: _screenKeys[tab]),
@@ -1935,7 +1935,7 @@ class _MainScreenState extends State<MainScreen>
   /// Whether the Live TV tab is currently visible
   /// Use the synchronized value so screens list and nav bar always agree.
   /// Updated by _handleLiveTvChanged when the provider notifies.
-  bool get _hasLiveTv => _lastHasLiveTv;
+  bool get _hasLiveTv => true;
 
   List<NavigationTab> _getVisibleTabs(bool isOffline) {
     return NavigationTab.getVisibleTabs(isOffline: isOffline, hasLiveTv: _hasLiveTv, hasExplore: _lastHasExplore);
