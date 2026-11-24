@@ -331,7 +331,11 @@ class _DiscoverScreenState extends State<DiscoverScreen>
 
   // Return false so the very same key event reaches its original handler.
   bool _onContinueCycleRemoteKey(KeyEvent event) {
-    if (_continueCycleActive && event is KeyDownEvent) _stopContinueCycle();
+    if (event is KeyDownEvent && _isTabVisible && PlatformDetector.isTV()) {
+      // Even a key pressed during initial loading cancels this launch's tour.
+      if (!_continueCycleUsedThisLaunch) _continueCycleUsedThisLaunch = true;
+      if (_continueCycleActive) _stopContinueCycle();
+    }
     return false;
   }
 
