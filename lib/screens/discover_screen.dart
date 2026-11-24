@@ -1841,6 +1841,39 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       onFocusedItemChanged: _setSpotlightItem,
       onLongPressItem: _openSynopsisPanel,
       onActivateItem: (hub, item) async {
+        // Recently-added Plex seasons are sparse season records, not full shows.
+        // Open the canonical show while retaining the selected season ID.
+        // This also lets the TV detail rail initialize its episode focus.
+        final hubIdentity = '${hub.identifier ?? hub.id} ${hub.title}'.toLowerCase();
+        final isRecentHub = hubIdentity.contains('recent') || hubIdentity.contains('reciente');
+        if (isRecentHub && item.kind == MediaKind.season && item.parentId != null) {
+          final client = _getMediaClientForItem(item);
+          MediaItem? parentShow = _recentShowDetails[item.globalKey];
+          if (parentShow?.kind != MediaKind.show) {
+            try {
+              parentShow = await client?.fetchItem(item.parentId!);
+            } catch (error, stackTrace) {
+              appLogger.w('Unable to resolve recent season parent for detail navigation',
+                  error: error, stackTrace: stackTrace);
+            }
+          }
+          if (!context.mounted) return true;
+          if (parentShow?.kind == MediaKind.show) {
+            await navigateToMediaItemDetails(
+              context,
+              item,
+              metadataOverride: parentShow!.copyWith(
+                serverId: item.serverId ?? parentShow.serverId,
+                serverName: item.serverName ?? parentShow.serverName,
+                libraryId: parentShow.libraryId ?? item.libraryId,
+              ),
+              onRefresh: _refreshDiscoverItem,
+            );
+            return true;
+          }
+          // Preserve existing navigation if Plex cannot resolve the parent.
+          return false;
+        }
         // Keep every non-movie and Continue Watching activation unchanged.
         if (!item.isMovie || hub.isContinueWatchingHub || hub.usesContinueWatchingAction) return false;
         final movies = hub.items.where((candidate) => candidate.isMovie).toList(growable: false);
