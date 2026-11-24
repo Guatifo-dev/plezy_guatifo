@@ -1822,16 +1822,19 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   // geometry) hand Element.updateChild the identical widget instance and the
   // whole rail subtree is skipped. Rebuilt only when its actual inputs change.
   TvBrowseRail? _tvBrowseRailWidget;
-  (List<MediaHub>, bool)? _tvBrowseRailWidgetKey;
+  (List<MediaHub>, bool, bool, int)? _tvBrowseRailWidgetKey;
 
   Widget _cachedTvBrowseRail(List<MediaHub> browseHubs, {required bool showServerName}) {
-    final key = (browseHubs, showServerName);
+    final key = (browseHubs, showServerName, _continueCycleActive, _continueCycleSeconds);
     if (_tvBrowseRailWidget != null && key == _tvBrowseRailWidgetKey) return _tvBrowseRailWidget!;
     _tvBrowseRailWidgetKey = key;
     return _tvBrowseRailWidget = TvBrowseRail(
       key: _tvBrowseRailKey,
       hubs: browseHubs,
       initialHubId: 'continue_watching',
+      discoverFocusEnhancement: true,
+      continueCycleActive: _continueCycleActive,
+      continueCycleInterval: Duration(seconds: _continueCycleSeconds),
       focusMemory: _hubFocusMemory,
       showServerName: showServerName,
       iconForHub: (hub, _) => hubIconFor(hub),
