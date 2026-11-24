@@ -880,7 +880,7 @@ class SideNavigationRailState extends State<SideNavigationRail> with MountedSetS
     final isCollapsed = !_shouldExpand;
     final effectiveCollapsedWidth = collapsedWidthForContext(context);
     final horizontalPadding = horizontalPaddingForContext(context, isCollapsed: isCollapsed);
-    final hasLiveTv = context.watch<MultiServerProvider>().hasLiveTv;
+    final hasLiveTv = !widget.isOfflineMode;
     // Nullable watch: rail tests (and any host without the profile session
     // scope) simply never show the Explore item.
     final hasExploreSource = context.watch<CatalogSourcesProvider?>()?.hasAnySource ?? false;
@@ -1041,7 +1041,7 @@ class SideNavigationRailState extends State<SideNavigationRail> with MountedSetS
                                         isCollapsed: isCollapsed,
                                       ),
                                       const SizedBox(height: _itemGap),
-                                      if (context.watch<MultiServerProvider>().hasLiveTv) ...[
+                                      if (hasLiveTv) ...[
                                         _buildNavItem(
                                           icon: Symbols.live_tv_rounded,
                                           selectedIcon: Symbols.live_tv_rounded,
