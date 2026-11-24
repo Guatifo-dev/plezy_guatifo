@@ -107,6 +107,8 @@ enum EpisodePosterMode { seriesPoster, seasonPoster, episodeThumbnail }
 /// Order for the two complete Discover library shelves.
 enum TrailerPreviewDelay { s1, s2, s3, s4, s5, s7, s10, s15 }
 
+enum ContinueWatchingCycleDelay { s3, s5, s7, s10, s15 }
+
 enum DiscoverCatalogSort { original, dateAdded, releaseDate, title } // 'original' retained to read older saved settings
 
 enum ContinueWatchingAction { play, details }
@@ -1029,6 +1031,8 @@ class SettingsService extends BaseSharedPreferencesService {
   static const automotiveUiScale = _AutomotiveUiScalePref();
   static const tvDynamicAmbientBackground = BoolPref('tv_dynamic_ambient_background', defaultValue: true);
   static const tvCornerSpotlightBackdrop = BoolPref('tv_corner_spotlight_backdrop', defaultValue: true);
+  static const continueWatchingAutoCycle = BoolPref('continue_watching_auto_cycle', defaultValue: true);
+  static const continueWatchingCycleDelay = EnumPref<ContinueWatchingCycleDelay>('continue_watching_cycle_delay', values: ContinueWatchingCycleDelay.values, defaultValue: ContinueWatchingCycleDelay.s5);
   static const plexTrailerPreview = BoolPref('plex_trailer_preview', defaultValue: true);
   static const plexTrailerPreviewAudio = BoolPref('plex_trailer_preview_audio', defaultValue: true);
   static const plexTrailerPreviewDelay = EnumPref<TrailerPreviewDelay>('plex_trailer_preview_delay', values: TrailerPreviewDelay.values, defaultValue: TrailerPreviewDelay.s3);
@@ -1598,6 +1602,8 @@ class SettingsService extends BaseSharedPreferencesService {
     tvCornerSpotlightBackdrop,
     episodePosterMode,
     continueWatchingAction,
+    continueWatchingAutoCycle,
+    continueWatchingCycleDelay,
     episodeAction,
     keyboardHotkeys,
     // Library filters, one pair per tracker service.
