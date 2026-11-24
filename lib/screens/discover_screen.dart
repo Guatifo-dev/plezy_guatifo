@@ -1858,14 +1858,15 @@ class _DiscoverScreenState extends State<DiscoverScreen>
             }
           }
           if (!context.mounted) return true;
-          if (parentShow?.kind == MediaKind.show) {
+          final show = parentShow;
+          if (show != null && show.kind == MediaKind.show) {
             await navigateToMediaItemDetails(
               context,
               item,
-              metadataOverride: parentShow!.copyWith(
-                serverId: item.serverId ?? parentShow.serverId,
-                serverName: item.serverName ?? parentShow.serverName,
-                libraryId: parentShow.libraryId ?? item.libraryId,
+              metadataOverride: show.copyWith(
+                serverId: item.serverId ?? show.serverId,
+                serverName: item.serverName ?? show.serverName,
+                libraryId: show.libraryId ?? item.libraryId,
               ),
               onRefresh: _refreshDiscoverItem,
             );
