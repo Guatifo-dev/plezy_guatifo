@@ -32,6 +32,14 @@ int _trailerDelaySeconds(TrailerPreviewDelay value) => switch (value) {
   TrailerPreviewDelay.s15 => 15,
 };
 
+int _cycleDelaySeconds(ContinueWatchingCycleDelay value) => switch (value) {
+  ContinueWatchingCycleDelay.s3 => 3,
+  ContinueWatchingCycleDelay.s5 => 5,
+  ContinueWatchingCycleDelay.s7 => 7,
+  ContinueWatchingCycleDelay.s10 => 10,
+  ContinueWatchingCycleDelay.s15 => 15,
+};
+
 class AppearanceSettingsScreen extends StatelessWidget {
   const AppearanceSettingsScreen({super.key});
 
@@ -191,6 +199,34 @@ class AppearanceSettingsScreen extends StatelessWidget {
             ),
             _discoverCatalogSortSelector(movies: true),
             _discoverCatalogSortSelector(movies: false),
+            if (PlatformDetector.isTV())
+              SettingSwitchTile(
+                pref: SettingsService.continueWatchingAutoCycle,
+                icon: Symbols.slideshow_rounded,
+                title: 'Recorrido automático de Seguir viendo',
+                subtitle: 'Recorre los títulos al arrancar, hasta pulsar cualquier botón del mando',
+              ),
+            if (PlatformDetector.isTV())
+              SettingValueBuilder<bool>(
+                pref: SettingsService.continueWatchingAutoCycle,
+                builder: (context, enabled, _) => ExcludeFocus(
+                  excluding: !enabled,
+                  child: IgnorePointer(
+                    ignoring: !enabled,
+                    child: Opacity(
+                      opacity: enabled ? 1 : 0.45,
+                      child: SettingSelectionTile<ContinueWatchingCycleDelay>(
+                        pref: SettingsService.continueWatchingCycleDelay,
+                        icon: Symbols.timer_rounded,
+                        title: 'Tiempo entre elementos',
+                        subtitleBuilder: (v) => '${_cycleDelaySeconds(v)} s (también antes de comenzar)',
+                        options: [for (final v in ContinueWatchingCycleDelay.values)
+                          DialogOption(value: v, title: '${_cycleDelaySeconds(v)} s')],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             _continueWatchingActionSelector(),
             _episodeActionSelector(),
             SettingSwitchTile(
