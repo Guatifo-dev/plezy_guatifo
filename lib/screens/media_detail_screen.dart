@@ -3778,7 +3778,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
       if (widget.initialEpisodeId != null && !_initialEpisodePagingDone && _episodes.isNotEmpty) _maybeLoadMoreForInitialEpisode();
       if (!_movieInitialFocusScheduled && _episodes.isNotEmpty &&
           (widget.initialEpisodeId == null || _episodesContainInitialTarget || _initialEpisodePagingDone)) {
-        final target = widget.initialEpisodeId ?? _onDeckEpisode?.id;
+        final target = _tvDetailInitialItemId(metadata);
         if (target == null || _episodes.any((episode) => episode.id == target) || _initialEpisodePagingDone) {
           _movieInitialFocusScheduled = true;
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -5349,7 +5349,16 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
   String? _tvDetailInitialItemId(MediaItem metadata) {
     if (widget.initialEpisodeId != null) return widget.initialEpisodeId;
     if (!metadata.isShow) return null;
-    return _onDeckEpisode?.id ?? firstUnwatchedEpisode(_episodes)?.id ?? (_episodes.isNotEmpty ? _episodes.first.id : null);
+    final onDeckId = _onDeckEpisode?.id;
+    final hasExplicitSeason = widget.initialSeasonId != null || widget.initialSeasonIndex != null;
+    if (hasExplicitSeason) {
+      // The show's on-deck episode can belong to a different season.
+      if (onDeckId != null && _episodes.any((episode) => episode.id == onDeckId)) {
+        return onDeckId;
+      }
+      return _episodes.isNotEmpty ? _episodes.first.id : null;
+    }
+    return onDeckId ?? firstUnwatchedEpisode(_episodes)?.id ?? (_episodes.isNotEmpty ? _episodes.first.id : null);
   }
 
   // Cached per metadata object: the TV rail memoizes cards by item identity,
