@@ -315,6 +315,56 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   final ScrollController _synopsisScrollController = ScrollController();
   late final FocusNode _synopsisFocusNode = FocusNode(debugLabel: 'discover_synopsis_panel');
   bool _isTabVisible = true;
+  // One presentation per app process, not per tab visit or Discover rebuild.
+  static bool _continueCycleUsedThisLaunch = false;
+  Timer? _continueCycleTimer;
+  bool _continueCycleActive = false;
+  int _continueCycleIndex = 0;
+
+  int get _continueCycleSeconds => switch (SettingsService.instance.read(SettingsService.continueWatchingCycleDelay)) {
+    ContinueWatchingCycleDelay.s3 => 3,
+    ContinueWatchingCycleDelay.s5 => 5,
+    ContinueWatchingCycleDelay.s7 => 7,
+    ContinueWatchingCycleDelay.s10 => 10,
+    ContinueWatchingCycleDelay.s15 => 15,
+  };
+
+  // Return false so the very same key event reaches its original handler.
+  bool _onContinueCycleRemoteKey(KeyEvent event) {
+    if (_continueCycleActive && event is KeyDownEvent) _stopContinueCycle();
+    return false;
+  }
+
+  void _stopContinueCycle() {
+    _continueCycleTimer?.cancel();
+    _continueCycleTimer = null;
+    if (!_continueCycleActive) return;
+    if (mounted) setState(() => _continueCycleActive = false);
+  }
+
+  void _maybeStartContinueCycle() {
+    if (!mounted || _continueCycleUsedThisLaunch || _continueCycleActive ||
+        !PlatformDetector.isTV() || !_isTabVisible || _onDeck.length < 2 ||
+        !SettingsService.instance.read(SettingsService.continueWatchingAutoCycle)) return;
+    _continueCycleUsedThisLaunch = true;
+    _continueCycleIndex = 0;
+    setState(() => _continueCycleActive = true);
+    // The presentation disables preview even during its initial waiting period.
+    unawaited(PlexTrailerPreview.stop());
+    _continueCycleTimer = Timer.periodic(Duration(seconds: _continueCycleSeconds), (timer) {
+      if (!mounted || !_isTabVisible || !(ModalRoute.of(context)?.isCurrent ?? false) ||
+          _onDeck.length < 2 || !SettingsService.instance.read(SettingsService.continueWatchingAutoCycle)) {
+        _stopContinueCycle();
+        return;
+      }
+      final next = (_continueCycleIndex + 1) % _onDeck.length;
+      if (_tvBrowseRailKey.currentState?.selectContinueWatchingCycleItem(next) != true) {
+        _stopContinueCycle();
+        return;
+      }
+      _continueCycleIndex = next;
+    });
+  }
 
   bool _initialLoadComplete = false;
   bool _pendingTvBrowseRailFocus = false;
@@ -1014,6 +1064,8 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     _updateHubKeys();
     unawaited(_discover.load());
     _startAutoScroll();
+    HardwareKeyboard.instance.addHandler(_onContinueCycleRemoteKey);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeStartContinueCycle());
   }
 
   /// Mirror provider changes into this state's UI concerns: rebuild, apply
@@ -1047,6 +1099,10 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       });
     }
     _applyPendingTvBrowseRailFocus();
+    if (!_continueCycleUsedThisLaunch && _onDeck.length >= 2) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _maybeStartContinueCycle());
+    }
+    if (_continueCycleActive && _onDeck.length < 2) _stopContinueCycle();
 
     if ((isNewLoad || heroOutOfBounds) && _heroController.hasClients && _onDeck.isNotEmpty) {
       _heroController.jumpToPage(0);
@@ -1123,6 +1179,8 @@ class _DiscoverScreenState extends State<DiscoverScreen>
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onContinueCycleRemoteKey);
+    _continueCycleTimer?.cancel();
     _discover.removeListener(_onDiscoverChanged);
     _librariesProvider.removeListener(_onCatalogLibrariesChanged);
     _hiddenLibrariesProvider.removeListener(_onCatalogLibrariesChanged);
@@ -1159,6 +1217,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
         unawaited(_discover.refreshContinueWatching());
       }
     } else if (state == AppLifecycleState.inactive || state == AppLifecycleState.hidden) {
+      _stopContinueCycle();
       // Stop animations to prevent scroll state corruption while backgrounded
       _autoScrollTimer?.cancel();
       _stopIndicatorProgress();
@@ -1235,6 +1294,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
 
   @override
   void onTabHidden() {
+    _stopContinueCycle();
     _isTabVisible = false;
     _pendingTvBrowseRailFocus = false;
     _autoScrollTimer?.cancel();
@@ -1605,6 +1665,8 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     return SettingsBuilder(
       prefs: const [
         SettingsService.showServerNameOnHubs,
+        SettingsService.continueWatchingAutoCycle,
+        SettingsService.continueWatchingCycleDelay,
         SettingsService.showHeroSection,
         SettingsService.hideSpoilers,
         SettingsService.showHeroFormatBadges,
@@ -1846,6 +1908,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       metadataBelowBuilder: _buildTvSpotlightFormatMetadata,
       resolveClient: _getMediaClientForItem,
       hideSpoilers: hideSpoilers,
+      allowTrailerPreview: !_continueCycleActive,
       foreground: Stack(
         fit: StackFit.expand,
         clipBehavior: Clip.none,
