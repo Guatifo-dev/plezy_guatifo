@@ -252,7 +252,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    backgroundColor: Colors.black,
+    backgroundColor: Colors.transparent,
     body: Focus(autofocus: true, onKeyEvent: (_, event) {
       if (event is KeyDownEvent && (event.logicalKey == LogicalKeyboardKey.select ||
           event.logicalKey == LogicalKeyboardKey.enter)) {
