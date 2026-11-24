@@ -399,6 +399,10 @@ class TvBrowseRail extends StatefulWidget {
   final String? initialItemId;
   final bool autofocus;
   final bool compactDetailRail;
+  /// Discover-only presentation enhancements; other rails keep their original focus.
+  final bool discoverFocusEnhancement;
+  final bool continueCycleActive;
+  final Duration continueCycleInterval;
   final EpisodePosterMode Function(MediaHub hub)? episodePosterModeForHub;
   final double Function(MediaHub hub)? widePosterScaleForHub;
 
@@ -442,6 +446,9 @@ class TvBrowseRail extends StatefulWidget {
     this.initialItemId,
     this.autofocus = false,
     this.compactDetailRail = false,
+    this.discoverFocusEnhancement = false,
+    this.continueCycleActive = false,
+    this.continueCycleInterval = const Duration(seconds: 5),
     this.episodePosterModeForHub,
     this.widePosterScaleForHub,
     this.showTitleImpliedForHub,
@@ -1888,11 +1895,14 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
         final isFocused = isItemFocused();
         return (isFocused, isFocused && !_focusModel.verticalScrollActive);
       },
-      builder: (context, focus, child) => FocusBuilders.buildLockedFocusWrapper(
+      builder: (context, focus, child) { 
+        final focusedCard = FocusBuilders.buildLockedFocusWrapper(
         context: context,
         isFocused: focus.$1,
         borderRadius: tokens(context).radiusSm,
-        focusScale: fullCardLayout ? TvBrowseRailLayout.fullCardFocusScale : FocusTheme.focusScale,
+        focusScale: widget.discoverFocusEnhancement
+            ? (fullCardLayout ? 1.045 : 1.04)
+            : (fullCardLayout ? TvBrowseRailLayout.fullCardFocusScale : FocusTheme.focusScale),
         useFocusGlow: fullCardLayout,
         showGlow: focus.$2,
         // The card draws the border itself (poster rect for
@@ -1911,7 +1921,36 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
                 _cardKeyFor(hub, itemIndex).currentState?.showContextMenu();
               },
         child: child!,
-      ),
+        );
+        if (!widget.continueCycleActive || !focus.$1 || hub.id != 'continue_watching') {
+          return focusedCard;
+        }
+        // Only the selected poster paints an indicator. TweenAnimationBuilder
+        // owns its ticker and is disposed on every selection change.
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            focusedCard,
+            Positioned(
+              left: 4,
+              right: 4,
+              bottom: -8,
+              child: TweenAnimationBuilder<double>(
+                key: ValueKey('continue-cycle-$hubIndex-$itemIndex'),
+                tween: Tween(begin: 0, end: 1),
+                duration: widget.continueCycleInterval,
+                builder: (context, progress, _) => LinearProgressIndicator(
+                  value: progress,
+                  minHeight: 3,
+                  backgroundColor: Colors.white24,
+                  valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFF18A34)),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
       // MergeSemantics: one node per card (MediaCard merges
       // internally) — the per-frame semantics pass scales with
       // node count on TV boxes with an accessibility service.
