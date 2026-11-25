@@ -253,7 +253,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
                   title: Text(channel.name),
                   subtitle: Text(channel.group),
                   onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                    builder: (_) => _IptvPlayer(channel: channel, useExoPlayer: _useExoPlayer, tunneling: _tunneling, buffer: _buffer, forceHls: _forceHls))),
+                    builder: (_) => _IptvPlayer(channel: channel, channels: List.unmodifiable(visible), useExoPlayer: _useExoPlayer, tunneling: _tunneling, buffer: _buffer, forceHls: _forceHls))),
                 );
               },
             )),
@@ -265,12 +265,13 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
 }
 
 class _IptvPlayer extends StatefulWidget {
-  const _IptvPlayer({required this.channel, required this.useExoPlayer, required this.tunneling, required this.buffer, required this.forceHls});
+  const _IptvPlayer({required this.channel, required this.channels, required this.useExoPlayer, required this.tunneling, required this.buffer, required this.forceHls});
   final bool forceHls;
   final String buffer;
   final bool tunneling;
   final bool useExoPlayer;
   final _Channel channel;
+  final List<_Channel> channels;
   @override
   State<_IptvPlayer> createState() => _IptvPlayerState();
 }
@@ -286,10 +287,18 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   String _technical = '';
   bool _readingStats = false;
   Future<void>? _closing;
+  late int _channelIndex;
+  late int _highlightIndex;
+  bool _switching = true, _showChannels = false;
+  final _channelScroll = ScrollController();
+  _Channel get _channel => widget.channels[_channelIndex];
 
   @override
   void initState() {
     super.initState();
+    _channelIndex = widget.channels.indexOf(widget.channel);
+    if (_channelIndex < 0) _channelIndex = 0;
+    _highlightIndex = _channelIndex;
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_start()));
   }
@@ -343,9 +352,20 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
         // Keep the backend default if an optional setting is unsupported.
       }
       if (!mounted || _closing != null) return;
+      await _openChannel(player);
+    } catch (error) {
+      debugPrint('[VisionDRM] playback preparation failed: ${error.runtimeType}');
+      unawaited(_wakelock.setEnabled(false));
+      if (mounted) setState(() => _failed = true);
+    } finally {
+      _switching = false;
+    }
+  }
+
+  Future<void> _openChannel(Player player) async {
       debugPrint('[VisionIPTV] opening: ${_startup.elapsedMilliseconds} ms');
-      final path = Uri.parse(widget.channel.url).path.toLowerCase();
-      final isDash = path.endsWith('.mpd') || widget.channel.manifestType == 'mpd' || widget.channel.manifestType == 'dash';
+      final path = Uri.parse(_channel.url).path.toLowerCase();
+      final isDash = path.endsWith('.mpd') || _channel.manifestType == 'mpd' || _channel.manifestType == 'dash';
       // Media3 infers DASH from the manifest URI when no HLS MIME is forced.
       final forceLiveHls = !widget.useExoPlayer ||
           (!isDash && (widget.forceHls || path.endsWith('.m3u8')));
@@ -354,8 +374,8 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
         debugPrint('[VisionIPTV] Exo format: $format');
       }
       debugPrint('[VisionDRM] preparing playback');
-      final drmType = widget.channel.drmType;
-      final license = widget.channel.drmLicense;
+      final drmType = _channel.drmType;
+      final license = _channel.drmLicense;
       final clearKey = drmType == 'clearkey' || drmType == 'org.w3.clearkey';
       debugPrint('[VisionDRM] DASH=$isDash DRM recognized=$clearKey license present=${license != null && license.isNotEmpty}');
       if (widget.useExoPlayer && player is PlayerAndroid && (isDash || clearKey)) {
@@ -381,18 +401,66 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
           }
         }
         debugPrint('[VisionDRM] invoking native player');
-        await player.open(Media(widget.channel.url), isLive: false, dashManifest: true,
+        await player.open(Media(_channel.url), isLive: false, dashManifest: true,
           clearKeyLicense: localLicense, clearKeyLicenseUrl: licenseUrl);
       } else {
-        await player.open(Media(widget.channel.url), isLive: forceLiveHls);
+        await player.open(Media(_channel.url), isLive: forceLiveHls);
       }
       debugPrint('[VisionDRM] open returned');
       debugPrint('[VisionIPTV] open returned: ${_startup.elapsedMilliseconds} ms');
       if (mounted) _hideLater();
+  }
+
+  Future<void> _switchChannel(int index) async {
+    final player = _player;
+    if (!mounted || _closing != null || _switching || player == null || widget.channels.isEmpty) return;
+    final next = (index % widget.channels.length + widget.channels.length) % widget.channels.length;
+    if (next == _channelIndex && !_failed) return;
+    _timer?.cancel();
+    setState(() {
+      _switching = true;
+      _channelIndex = next;
+      _highlightIndex = next;
+      _showChannels = false;
+      _ready = false;
+      _failed = false;
+      _showName = true;
+      _technical = '';
+    });
+    _startup..reset()..start();
+    try {
+      await player.stop();
+      if (!mounted || _closing != null) return;
+      unawaited(_wakelock.setEnabled(true));
+      await _openChannel(player);
     } catch (error) {
-      debugPrint('[VisionDRM] playback preparation failed: ${error.runtimeType}');
-      unawaited(_wakelock.setEnabled(false));
-      if (mounted) setState(() => _failed = true);
+      debugPrint('[VisionIPTV] channel switch failed: ${error.runtimeType}');
+      if (mounted && _closing == null) setState(() => _failed = true);
+    } finally {
+      _switching = false;
+    }
+  }
+
+  void _scrollToHighlight() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_showChannels || !_channelScroll.hasClients) return;
+      final position = _channelScroll.position;
+      final target = (_highlightIndex * 56.0 - position.viewportDimension / 2 + 28)
+          .clamp(0.0, position.maxScrollExtent).toDouble();
+      _channelScroll.jumpTo(target);
+    });
+  }
+
+  void _toggleChannels() {
+    setState(() {
+      _showChannels = !_showChannels;
+      _highlightIndex = _channelIndex;
+    });
+    if (_showChannels) {
+      _timer?.cancel();
+      _scrollToHighlight();
+    } else {
+      _hideLater();
     }
   }
 
@@ -462,32 +530,99 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
+    _channelScroll.dispose();
     unawaited(_close());
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    backgroundColor: Colors.transparent,
-    body: Focus(autofocus: true, onKeyEvent: (_, event) {
-      if (event is KeyDownEvent && (event.logicalKey == LogicalKeyboardKey.select ||
-          event.logicalKey == LogicalKeyboardKey.enter)) {
-        setState(() => _showName = true);
-        unawaited(_readStats());
-        _hideLater();
-        return KeyEventResult.handled;
-      }
-      return KeyEventResult.ignored;
-    }, child: Stack(fit: StackFit.expand, children: [
-      if (_player != null) Video(player: _player!),
-      if (!_ready && !_failed) const Center(child: CircularProgressIndicator()),
-      if (_failed) const Center(child: Text('No se pudo reproducir el canal. Pulsa Atrás.')),
-      if (_showName) Positioned(left: 24, bottom: 24, child: ColoredBox(
-        color: Colors.black87, child: Padding(padding: const EdgeInsets.all(12),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(widget.channel.name, style: const TextStyle(color: Colors.white, fontSize: 22)),
-            if (_technical.isNotEmpty) Text(_technical, style: const TextStyle(color: Colors.white70, fontSize: 14)),
-          ])))),
-    ])),
+  Widget build(BuildContext context) => PopScope(
+    canPop: !_showChannels,
+    onPopInvokedWithResult: (didPop, _) {
+      if (!didPop && _showChannels) _toggleChannels();
+    },
+    child: Scaffold(
+      backgroundColor: Colors.transparent,
+      body: Focus(autofocus: true, onKeyEvent: (_, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        final key = event.logicalKey;
+        if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown) {
+          final delta = key == LogicalKeyboardKey.arrowUp ? 1 : -1;
+          if (_showChannels) {
+            setState(() => _highlightIndex = (_highlightIndex - delta)
+                .clamp(0, widget.channels.length - 1).toInt());
+            _scrollToHighlight();
+          } else {
+            unawaited(_switchChannel(_channelIndex + delta));
+          }
+          return KeyEventResult.handled;
+        }
+        if (key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter) {
+          if (_showChannels) {
+            if (_highlightIndex == _channelIndex && !_failed) {
+              _toggleChannels();
+            } else {
+              unawaited(_switchChannel(_highlightIndex));
+            }
+          } else {
+            _toggleChannels();
+          }
+          return KeyEventResult.handled;
+        }
+        if (key == LogicalKeyboardKey.escape && _showChannels) {
+          _toggleChannels();
+          return KeyEventResult.handled;
+        }
+        if (key == LogicalKeyboardKey.arrowRight) {
+          setState(() => _showName = true);
+          unawaited(_readStats());
+          _hideLater();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      }, child: Stack(fit: StackFit.expand, children: [
+        if (_player != null) Video(player: _player!),
+        if (!_ready && !_failed) const Center(child: CircularProgressIndicator()),
+        if (_failed) const Center(child: Text('No se pudo reproducir el canal. Cambia de canal o pulsa Atrás.')),
+        if (_showName && !_showChannels) Positioned(left: 24, bottom: 24, child: ColoredBox(
+          color: Colors.black87, child: Padding(padding: const EdgeInsets.all(12),
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(_channel.name, style: const TextStyle(color: Colors.white, fontSize: 22)),
+              if (_technical.isNotEmpty) Text(_technical, style: const TextStyle(color: Colors.white70, fontSize: 14)),
+            ])))),
+        if (_showChannels) Align(alignment: Alignment.centerLeft, child: SizedBox(
+          width: 340,
+          child: ColoredBox(color: const Color(0xEB000000),
+            child: SafeArea(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Padding(padding: EdgeInsets.all(16), child: Text('Canales IPTV', style: TextStyle(color: Colors.white, fontSize: 22))),
+              Expanded(child: ListView.builder(
+                controller: _channelScroll,
+                itemExtent: 56,
+                itemCount: widget.channels.length,
+                itemBuilder: (_, index) {
+                  final channel = widget.channels[index];
+                  final focused = index == _highlightIndex;
+                  final current = index == _channelIndex;
+                  return Container(
+                    color: focused ? Colors.blue.shade700 : Colors.transparent,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Row(children: [
+                      SizedBox(width: 32, child: Text('${index + 1}', style: const TextStyle(color: Colors.white70))),
+                      SizedBox(width: 40, height: 32, child: channel.logo.isEmpty
+                        ? const Icon(Icons.tv, color: Colors.white70)
+                        : Image.network(channel.logo, fit: BoxFit.contain, errorBuilder: (_, _, _) => const Icon(Icons.tv, color: Colors.white70))),
+                      const SizedBox(width: 10),
+                      Expanded(child: Text(channel.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white))),
+                      if (current) const Icon(Icons.play_arrow, color: Colors.white),
+                    ]),
+                  );
+                },
+              )),
+              const Padding(padding: EdgeInsets.all(12), child: Text('OK: sintonizar · Atrás: cerrar', style: TextStyle(color: Colors.white70))),
+            ])),
+          ),
+        )),
+      ])),
+    ),
   );
 }
