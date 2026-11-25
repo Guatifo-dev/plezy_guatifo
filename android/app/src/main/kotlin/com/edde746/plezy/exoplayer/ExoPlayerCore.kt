@@ -55,6 +55,10 @@ import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.audio.AudioCapabilities
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
+import androidx.media3.exoplayer.dash.DashMediaSource
+import androidx.media3.exoplayer.drm.DefaultDrmSessionManager
+import androidx.media3.exoplayer.drm.FrameworkMediaDrm
+import androidx.media3.exoplayer.drm.LocalMediaDrmCallback
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.FilteringMediaSource
 import androidx.media3.exoplayer.source.MediaSource
@@ -390,6 +394,9 @@ class ExoPlayerCore(private val activity: Activity) :
   private var currentMediaUri: String? = null
   private var currentHeaders: Map<String, String>? = null
   private var currentMediaIsLive: Boolean = false
+  private var currentDashManifest = false
+  private var currentClearKeyLicense: String? = null
+  private var currentClearKeyLicenseUrl: String? = null
   private var currentMediaGeneration: Int = 0
   private var terminalErrorGeneration: Int? = null
   private var currentVisible: Boolean = false
@@ -2756,7 +2763,16 @@ class ExoPlayerCore(private val activity: Activity) :
     // Every Live TV backend negotiates HLS before opening the native player.
     // Pin the MIME type so tokenized manifests never fall back to progressive
     // extension sniffing, and so initial opens and recovery use one source path.
-    playbackMimeType(currentMediaIsLive)?.let(mediaItemBuilder::setMimeType)
+    if (currentDashManifest) {
+      mediaItemBuilder.setMimeType(MimeTypes.APPLICATION_MPD)
+    } else {
+      playbackMimeType(currentMediaIsLive)?.let(mediaItemBuilder::setMimeType)
+    }
+    if (currentClearKeyLicense != null || currentClearKeyLicenseUrl != null) {
+      val drm = MediaItem.DrmConfiguration.Builder(C.CLEARKEY_UUID)
+      currentClearKeyLicenseUrl?.let { drm.setLicenseUri(it) }
+      mediaItemBuilder.setDrmConfiguration(drm.build())
+    }
 
     if (externalSubtitles.isNotEmpty()) {
       mediaItemBuilder.setSubtitleConfigurations(externalSubtitles.toList())
@@ -2767,7 +2783,18 @@ class ExoPlayerCore(private val activity: Activity) :
 
   private fun buildPlaybackMediaSource(uri: String): MediaSource? {
     val factory = playbackMediaSourceFactory ?: return null
-    val primarySource = factory.createMediaSource(buildMediaItem(uri))
+    val localLicense = currentClearKeyLicense
+    val primarySource = if (localLicense != null && currentDashManifest) {
+      val sourceFactory = dataSourceFactory ?: return null
+      val manager = DefaultDrmSessionManager.Builder()
+        .setUuidAndExoMediaDrmProvider(C.CLEARKEY_UUID, FrameworkMediaDrm.DEFAULT_PROVIDER)
+        .build(LocalMediaDrmCallback(localLicense.toByteArray(Charsets.UTF_8)))
+      DashMediaSource.Factory(sourceFactory)
+        .setDrmSessionManagerProvider { manager }
+        .createMediaSource(buildMediaItem(uri))
+    } else {
+      factory.createMediaSource(buildMediaItem(uri))
+    }
     if (externalSubtitleContainerUris.isEmpty()) return primarySource
 
     val sources = mutableListOf<MediaSource>(primarySource)
@@ -3402,7 +3429,10 @@ class ExoPlayerCore(private val activity: Activity) :
     mediaGeneration: Int,
     isLive: Boolean = false,
     externalSubtitleList: List<Map<String, Any?>>? = null,
-    contentFrameRate: Float = -1f
+    contentFrameRate: Float = -1f,
+    dashManifest: Boolean = false,
+    clearKeyLicense: String? = null,
+    clearKeyLicenseUrl: String? = null
   ) {
     if (!isInitialized) return
 
@@ -3452,6 +3482,9 @@ class ExoPlayerCore(private val activity: Activity) :
     currentMediaUri = uri
     currentHeaders = headers
     currentMediaIsLive = isLive
+    currentDashManifest = dashManifest
+    currentClearKeyLicense = clearKeyLicense
+    currentClearKeyLicenseUrl = clearKeyLicenseUrl
     resetPlaybackProgress(startPositionMs)
 
     // Apply auth/custom headers to the HTTP DataSource for this session
@@ -4383,6 +4416,9 @@ class ExoPlayerCore(private val activity: Activity) :
     pendingStartPositionMs = 0L
     pendingPlayWhenReady = null
     currentMediaIsLive = false
+    currentDashManifest = false
+    currentClearKeyLicense = null
+    currentClearKeyLicenseUrl = null
     currentVisible = false
     emitSeekable(false, force = true)
     selectedAudioTrackId = null

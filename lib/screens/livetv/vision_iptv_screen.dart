@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../mixins/refreshable.dart';
 import '../../mpv/mpv.dart';
+import '../../mpv/player/platform/player_android.dart';
 import '../../providers/multi_server_provider.dart';
 import '../../services/playback_coordinator.dart';
 import 'package:provider/provider.dart';
@@ -344,7 +345,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
       if (!mounted || _closing != null) return;
       debugPrint('[VisionIPTV] opening: ${_startup.elapsedMilliseconds} ms');
       final path = Uri.parse(widget.channel.url).path.toLowerCase();
-      final isDash = path.endsWith('.mpd');
+      final isDash = path.endsWith('.mpd') || widget.channel.manifestType == 'mpd' || widget.channel.manifestType == 'dash';
       // Media3 infers DASH from the manifest URI when no HLS MIME is forced.
       final forceLiveHls = !widget.useExoPlayer ||
           (!isDash && (widget.forceHls || path.endsWith('.m3u8')));
@@ -352,7 +353,140 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
         final format = isDash ? 'DASH' : (forceLiveHls ? 'HLS' : 'Auto');
         debugPrint('[VisionIPTV] Exo format: $format');
       }
-      await player.open(Media(widget.channel.url), isLive: forceLiveHls);
+      final drmType = widget.channel.drmType;
+      final license = widget.channel.drmLicense;
+      final clearKey = drmType == 'clearkey' || drmType == 'org.w3.clearkey';
+      if (widget.useExoPlayer && player is PlayerAndroid && (isDash || clearKey)) {
+        String? localLicense;
+        String? licenseUrl;
+        if (clearKey) {
+          if (license == null || license.isEmpty) throw StateError('Missing ClearKey license');
+          final licenseUri = Uri.tryParse(license);
+          if (licenseUri != null && ['http', 'https'].contains(licenseUri.scheme) && licenseUri.host.isNotEmpty) {
+            licenseUrl = license;
+          } else if (license.startsWith('{')) {
+            final decoded = jsonDecode(license);
+            if (decoded is! Map || decoded['keys'] is! List) throw StateError('Invalid ClearKey license');
+            localLicense = jsonEncode(decoded);
+          } else {
+            String encodeHex(String hex) {
+              if (!RegExp(r'^[0-9a-fA-F]{32}
+      debugPrint('[VisionIPTV] open returned: ${_startup.elapsedMilliseconds} ms');
+      if (mounted) _hideLater();
+    } catch (_) {
+      unawaited(_wakelock.setEnabled(false));
+      if (mounted) setState(() => _failed = true);
+    }
+  }
+
+  Future<void> _readStats() async {
+    final player = _player;
+    if (player == null || _readingStats || _closing != null) return;
+    _readingStats = true;
+    try {
+      final engine = await player.runtimePlayerType();
+      final stats = player.providesNativeStats ? await player.getStats() : <String, dynamic>{};
+      Future<String> field(String native, String property) async {
+        final value = stats[native] ?? stats[property] ?? await player.getProperty(property);
+        return value?.toString() ?? '—';
+      }
+      final values = await Future.wait([
+        field('videoWidth', 'video-params/w'),
+        field('videoHeight', 'video-params/h'),
+        field('videoCodec', 'video-codec'),
+        field('videoFps', 'container-fps'),
+        field('audioCodec', 'audio-codec-name'),
+        field('videoDroppedFrames', 'frame-drop-count'),
+      ]);
+      final decoder = engine.toLowerCase() == 'mpv' ? await field('hwdec-current', 'hwdec-current') : (stats['videoDecoderName']?.toString() ?? '—');
+      if (widget.useExoPlayer) {
+        debugPrint('[VisionIPTV] requested ExoPlayer; actual: $engine; decoder: $decoder; stats engine: ${stats['playerType']}');
+      }
+      final tunnel = stats['tunneledPlayback'];
+      final tunnelInfo = tunnel is bool ? (tunnel ? ' · Tunneling activo' : ' · Tunneling inactivo') : '';
+      if (mounted && _closing == null && identical(player, _player)) {
+        setState(() => _technical = '${engine.toUpperCase()} · ${values[0]} × ${values[1]} · ${values[2]} · ${values[3]} fps · Audio: ${values[4]} · Frames perdidos: ${values[5]}\nDecodificador: $decoder$tunnelInfo');
+      }
+    } catch (_) {
+      // Stats are optional and must never interrupt live playback.
+    } finally {
+      _readingStats = false;
+    }
+  }
+
+  void _hideLater() {
+    _timer?.cancel();
+    _timer = Timer(const Duration(seconds: 4), () {
+      if (mounted) setState(() => _showName = false);
+    });
+  }
+
+  Future<void> _close() => _closing ??= _release();
+  Future<void> _release() async {
+    unawaited(_wakelock.setEnabled(false));
+    await _errors?.cancel();
+    await _frames?.cancel();
+    final player = _player;
+    _player = null;
+    if (player != null) {
+      try { await player.dispose(); } catch (_) {}
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
+      unawaited(_close());
+      if (mounted) Navigator.of(context).maybePop();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _timer?.cancel();
+    unawaited(_close());
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: Colors.transparent,
+    body: Focus(autofocus: true, onKeyEvent: (_, event) {
+      if (event is KeyDownEvent && (event.logicalKey == LogicalKeyboardKey.select ||
+          event.logicalKey == LogicalKeyboardKey.enter)) {
+        setState(() => _showName = true);
+        unawaited(_readStats());
+        _hideLater();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }, child: Stack(fit: StackFit.expand, children: [
+      if (_player != null) Video(player: _player!),
+      if (!_ready && !_failed) const Center(child: CircularProgressIndicator()),
+      if (_failed) const Center(child: Text('No se pudo reproducir el canal. Pulsa Atrás.')),
+      if (_showName) Positioned(left: 24, bottom: 24, child: ColoredBox(
+        color: Colors.black87, child: Padding(padding: const EdgeInsets.all(12),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(widget.channel.name, style: const TextStyle(color: Colors.white, fontSize: 22)),
+            if (_technical.isNotEmpty) Text(_technical, style: const TextStyle(color: Colors.white70, fontSize: 14)),
+          ])))),
+    ])),
+  );
+}
+).hasMatch(hex)) throw StateError('Invalid ClearKey value');
+              return base64UrlEncode(List<int>.generate(16, (i) => int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16))).replaceAll('=', '');
+            }
+            final pair = license.split(':');
+            if (pair.length != 2) throw StateError('Unsupported ClearKey license');
+            localLicense = jsonEncode({'keys': [{'kty': 'oct', 'kid': encodeHex(pair[0].trim()), 'k': encodeHex(pair[1].trim())}], 'type': 'temporary'});
+          }
+        }
+        await player.open(Media(widget.channel.url), isLive: false, dashManifest: true,
+          clearKeyLicense: localLicense, clearKeyLicenseUrl: licenseUrl);
+      } else {
+        await player.open(Media(widget.channel.url), isLive: forceLiveHls);
+      }
       debugPrint('[VisionIPTV] open returned: ${_startup.elapsedMilliseconds} ms');
       if (mounted) _hideLater();
     } catch (_) {

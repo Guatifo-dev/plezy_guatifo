@@ -180,6 +180,9 @@ class PlayerAndroid extends PlayerBase {
     List<SubtitleTrack>? externalSubtitles,
     Duration? timelineDuration,
     Duration timelineOffset = Duration.zero,
+    bool dashManifest = false,
+    String? clearKeyLicense,
+    String? clearKeyLicenseUrl,
   }) async {
     if (disposed) return;
     await _ensureInitialized();
@@ -204,6 +207,9 @@ class PlayerAndroid extends PlayerBase {
       await invoke('open', {
         'uri': media.uri,
         'headers': media.headers,
+        if (dashManifest) 'dashManifest': true,
+        if (clearKeyLicense != null) 'clearKeyLicense': clearKeyLicense,
+        if (clearKeyLicenseUrl != null) 'clearKeyLicenseUrl': clearKeyLicenseUrl,
         'startPositionMs': sourceStart.inMilliseconds,
         'hasStartPosition': hasStartPosition,
         'autoPlay': play,

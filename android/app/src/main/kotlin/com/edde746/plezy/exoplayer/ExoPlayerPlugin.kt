@@ -400,6 +400,9 @@ class ExoPlayerPlugin :
     val hasStartPosition = call.argument<Boolean>("hasStartPosition") ?: (startPositionMs > 0L)
     val autoPlay = call.argument<Boolean>("autoPlay") ?: true
     val isLive = call.argument<Boolean>("isLive") ?: false
+    val dashManifest = call.argument<Boolean>("dashManifest") ?: false
+    val clearKeyLicense = call.argument<String>("clearKeyLicense")
+    val clearKeyLicenseUrl = call.argument<String>("clearKeyLicenseUrl")
     val externalSubtitles = call.argument<List<Map<String, Any?>>>("externalSubtitles")
     // Server-reported frame rate for this item; -1 when the metadata did not carry one.
     val contentFrameRate = call.argument<Number>("contentFrameRate")?.toFloat() ?: -1f
@@ -484,7 +487,10 @@ class ExoPlayerPlugin :
         mediaGeneration = request.mediaGeneration,
         isLive = isLive,
         externalSubtitleList = request.externalSubtitles,
-        contentFrameRate = request.contentFrameRate
+        contentFrameRate = request.contentFrameRate,
+        dashManifest = dashManifest,
+        clearKeyLicense = clearKeyLicense,
+        clearKeyLicenseUrl = clearKeyLicenseUrl
       )
       request.success()
     }
