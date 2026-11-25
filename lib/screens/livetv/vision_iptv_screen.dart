@@ -24,6 +24,7 @@ class _Channel {
   final String name, group, url, logo;
   final String? drmType, drmLicense, manifestType;
   final String tvgId;
+  String get favoriteId => jsonEncode([group, name, tvgId]);
 }
 
 List<_Channel> _parsePlaylist(String source, Uri base) {
@@ -79,8 +80,8 @@ final _iptvSettingsChanged = ValueNotifier<int>(0);
 void notifyVisionIptvSettingsChanged() => _iptvSettingsChanged.value++;
 
 class _Programme {
-  const _Programme(this.title, this.start, this.stop);
-  final String title;
+  const _Programme(this.title, this.start, this.stop, this.description);
+  final String title, description;
   final DateTime start, stop;
 }
 
@@ -104,7 +105,8 @@ Map<String, List<_Programme>> _parseGuide(List<int> bytes) {
     final stop = _xmltvDate(p.getAttribute('stop'));
     if (id == null || start == null || stop == null || stop.isBefore(now) || start.isAfter(now.add(const Duration(days: 3)))) continue;
     final titles = p.findElements('title');
-    (result[id] ??= []).add(_Programme(titles.isEmpty ? '' : titles.first.innerText, start, stop));
+    final descriptions = p.findElements('desc');
+    (result[id] ??= []).add(_Programme(titles.isEmpty ? '' : titles.first.innerText, start, stop, descriptions.isEmpty ? '' : descriptions.first.innerText));
   }
   for (final entries in result.values) {
     entries.sort((a, b) => a.start.compareTo(b.start));
@@ -148,6 +150,15 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
   Timer? _guideTimer;
   bool _guideLoading = false;
   bool _restoring = false;
+  Set<String> _favorites = {};
+  bool _favoritesOnly = false;
+  _Channel? _focusedChannel;
+  _Programme? _focusedProgramme;
+  final _guideScroll = ScrollController();
+  int _timeShift = 0;
+  static const double _channelWidth = 180;
+  static const double _rowHeight = 60;
+
 
   @override
   void initState() {
@@ -168,6 +179,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
     if (!mounted) return;
     _url.text = prefs.getString('vision_iptv_url') ?? '';
     setState(() {
+      _favorites = (prefs.getStringList('vision_iptv_favorites') ?? []).toSet();
       _epgUrl = prefs.getString('vision_iptv_epg') ?? '';
       _useExoPlayer = prefs.getBool('vision_iptv_exo') ?? true;
       _tunneling = prefs.getBool('vision_iptv_tunneling') ?? false;
@@ -179,6 +191,157 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
   }
 
   void _settingsUpdated() => unawaited(_restore());
+
+  Future<void> _toggleFavorite(_Channel channel) async {
+    setState(() {
+      if (!_favorites.remove(channel.favoriteId)) _favorites.add(channel.favoriteId);
+    });
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('vision_iptv_favorites', _favorites.toList());
+  }
+
+  void _playChannel(_Channel channel, List<_Channel> visible) {
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => _IptvPlayer(channel: channel, channels: List.unmodifiable(visible),
+        guide: _guide, useExoPlayer: _useExoPlayer, tunneling: _tunneling,
+        buffer: _buffer, forceHls: _forceHls)));
+  }
+
+  Future<void> _channelOptions(_Channel channel, List<_Channel> visible) async {
+    final favorite = _favorites.contains(channel.favoriteId);
+    final action = await showDialog<String>(context: context, builder: (ctx) => AlertDialog(
+      title: Text(channel.name),
+      actions: [
+        TextButton(autofocus: true, onPressed: () => Navigator.pop(ctx, 'favorite'),
+          child: Text(favorite ? 'Quitar de favoritos' : 'Añadir a favoritos')),
+        TextButton(onPressed: () => Navigator.pop(ctx, 'play'), child: const Text('Ver canal')),
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+      ],
+    ));
+    if (!mounted) return;
+    if (action == 'favorite') await _toggleFavorite(channel);
+    if (action == 'play' && mounted) _playChannel(channel, visible);
+  }
+
+  String _hm(DateTime date) {
+    final d = date.toLocal();
+    return '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+  }
+
+  Widget _guideCell({required Widget child, required VoidCallback onTap,
+      required VoidCallback onOptions, required VoidCallback onFocus, bool current = false}) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(padding: const EdgeInsets.all(2), child: Material(
+      color: current ? scheme.primary.withAlpha(55) : scheme.surfaceContainerHigh,
+      borderRadius: BorderRadius.circular(7),
+      clipBehavior: Clip.antiAlias,
+      child: Focus(onKeyEvent: (_, event) {
+        if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.contextMenu) {
+          onOptions();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      }, child: InkWell(
+        onTap: onTap, onLongPress: onOptions,
+        onFocusChange: (focused) { if (focused) onFocus(); },
+        focusColor: scheme.primary.withAlpha(170),
+        child: Padding(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), child: child),
+      )),
+    ));
+  }
+
+  Widget _guideRow(_Channel channel, List<_Channel> visible, DateTime start, double width) {
+    final end = start.add(const Duration(hours: 2));
+    final entries = (_guide[channel.tvgId] ?? const <_Programme>[])
+      .where((p) => p.start.isBefore(end) && p.stop.isAfter(start)).toList();
+    final now = DateTime.now();
+    double x(DateTime d) => (d.difference(start).inSeconds / 7200 * width).clamp(0.0, width).toDouble();
+    void focus(_Programme? p) {
+      if (mounted && (_focusedChannel != channel || _focusedProgramme != p)) {
+        setState(() { _focusedChannel = channel; _focusedProgramme = p; });
+      }
+    }
+    Widget cell(_Programme? p) => _guideCell(
+      onTap: () => _playChannel(channel, visible),
+      onOptions: () => _channelOptions(channel, visible),
+      onFocus: () => focus(p),
+      current: p != null && !now.isBefore(p.start) && now.isBefore(p.stop),
+      child: Align(alignment: Alignment.centerLeft, child: Text(p?.title ?? 'Sin programación',
+        maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13))),
+    );
+    return SizedBox(height: _rowHeight, child: Row(children: [
+      SizedBox(width: _channelWidth, child: _guideCell(
+        onTap: () => _playChannel(channel, visible),
+        onOptions: () => _channelOptions(channel, visible),
+        onFocus: () => focus(null),
+        child: Row(children: [
+          SizedBox(width: 35, height: 32, child: channel.logo.isEmpty
+            ? const Icon(Icons.tv) : Image.network(channel.logo, fit: BoxFit.contain,
+              errorBuilder: (_, _, _) => const Icon(Icons.tv))),
+          const SizedBox(width: 7),
+          Expanded(child: Text(channel.name, maxLines: 2, overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 13))),
+          if (_favorites.contains(channel.favoriteId)) const Icon(Icons.star, size: 15, color: Colors.amber),
+        ]),
+      )),
+      SizedBox(width: width, child: Stack(fit: StackFit.expand, children: [
+        if (entries.isEmpty) cell(null),
+        for (final p in entries)
+          if (x(p.stop) - x(p.start) > 1)
+            Positioned(left: x(p.start), width: x(p.stop) - x(p.start), top: 0, bottom: 0, child: cell(p)),
+        if (!now.isBefore(start) && now.isBefore(end))
+          Positioned(left: x(now), top: 0, bottom: 0, child: IgnorePointer(child: Container(width: 2, color: Colors.orange))),
+      ])),
+    ]));
+  }
+
+  Widget _buildGuide(List<_Channel> visible) {
+    final now = DateTime.now();
+    final start = DateTime(now.year, now.month, now.day, now.hour, now.minute < 30 ? 0 : 30)
+      .add(Duration(minutes: 30 * _timeShift));
+    final scheme = Theme.of(context).colorScheme;
+    final selected = _focusedChannel;
+    final programme = _focusedProgramme;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Container(height: 100, padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(color: scheme.surfaceContainerHigh, borderRadius: BorderRadius.circular(12)),
+        child: Row(children: [
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(selected?.name ?? 'Guía de televisión', maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold)),
+            if (programme != null) Text('${_hm(programme.start)} – ${_hm(programme.stop)}  ${programme.title}',
+              maxLines: 1, overflow: TextOverflow.ellipsis),
+            if (programme != null && programme.description.isNotEmpty)
+              Expanded(child: Text(programme.description, maxLines: 2, overflow: TextOverflow.ellipsis)),
+            if (programme == null) const Text('Selecciona un canal o programa · MENU: opciones'),
+          ])),
+          if (selected != null) IconButton(
+            tooltip: _favorites.contains(selected.favoriteId) ? 'Quitar de favoritos' : 'Añadir a favoritos',
+            onPressed: () => _toggleFavorite(selected),
+            icon: Icon(_favorites.contains(selected.favoriteId) ? Icons.star : Icons.star_border, color: Colors.amber)),
+        ])),
+      const SizedBox(height: 6),
+      Row(children: [
+        TextButton(onPressed: () => setState(() => _timeShift--), child: const Text('‹ 30 min')),
+        TextButton(onPressed: () => setState(() => _timeShift = 0), child: const Text('Ahora')),
+        TextButton(onPressed: () => setState(() => _timeShift++), child: const Text('30 min ›')),
+      ]),
+      Expanded(child: LayoutBuilder(builder: (context, constraints) {
+        final width = (constraints.maxWidth - _channelWidth).clamp(100.0, 10000.0).toDouble();
+        return Column(children: [
+          SizedBox(height: 28, child: Row(children: [
+            const SizedBox(width: _channelWidth, child: Text('Canales')),
+            for (var i = 0; i < 4; i++)
+              SizedBox(width: width / 4, child: Text(_hm(start.add(Duration(minutes: 30 * i))))),
+          ])),
+          Expanded(child: visible.isEmpty
+            ? const Center(child: Text('No hay canales en este grupo'))
+            : ListView.builder(controller: _guideScroll, itemExtent: _rowHeight,
+                itemCount: visible.length, itemBuilder: (_, i) => _guideRow(visible[i], visible, start, width))),
+        ]);
+      })),
+    ]);
+  }
 
   Future<void> _configureEpg() async {
     final controller = TextEditingController(text: _epgUrl);
@@ -336,6 +499,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
   void dispose() {
     if (!widget.settingsOnly) _iptvSettingsChanged.removeListener(_settingsUpdated);
     _guideTimer?.cancel();
+    _guideScroll.dispose();
     _entry.dispose();
     _url.dispose();
     super.dispose();
@@ -358,7 +522,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
       ])),
     );
     final groups = _channels.map((c) => c.group).toSet().toList();
-    final visible = _channels.where((c) => _group == null || c.group == _group).toList();
+    final visible = _channels.where((c) => _favoritesOnly ? _favorites.contains(c.favoriteId) : (_group == null || c.group == _group)).toList();
     return Scaffold(
       body: SafeArea(child: Padding(
         padding: const EdgeInsets.all(20),
@@ -382,30 +546,22 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
           if (_error != null) Padding(padding: const EdgeInsets.all(8), child: Text(_error!)),
           const SizedBox(height: 12),
           Expanded(child: Row(children: [
-            SizedBox(width: 190, child: ListView.builder(
-              itemCount: groups.length + 1,
+            SizedBox(width: 160, child: ListView.builder(
+              itemCount: groups.length + 2,
               itemBuilder: (_, i) {
-                final group = i == 0 ? null : groups[i - 1];
-                return ListTile(focusNode: i == 0 ? _entry : null, title: Text(group ?? 'Todos'), selected: _group == group,
-                  onTap: () => setState(() => _group = group));
+                final group = i < 2 ? null : groups[i - 2];
+                return ListTile(focusNode: i == 0 && _channels.isNotEmpty ? _entry : null,
+                  leading: i == 1 ? const Icon(Icons.star, color: Colors.amber) : null,
+                  title: Text(i == 1 ? 'Favoritos' : group ?? 'Todos', maxLines: 2, overflow: TextOverflow.ellipsis),
+                  selected: i == 1 ? _favoritesOnly : !_favoritesOnly && _group == group,
+                  onTap: () {
+                    setState(() { _favoritesOnly = i == 1; _group = group; _focusedChannel = null; _focusedProgramme = null; });
+                    if (_guideScroll.hasClients) _guideScroll.jumpTo(0);
+                  });
               },
             )),
-            const VerticalDivider(),
-            Expanded(child: ListView.builder(
-              itemCount: visible.length,
-              itemBuilder: (_, i) {
-                final channel = visible[i];
-                return ListTile(
-                  leading: channel.logo.isEmpty ? const Icon(Icons.tv) : Image.network(channel.logo,
-                    width: 48, height: 36, fit: BoxFit.contain,
-                    errorBuilder: (_, _, _) => const Icon(Icons.tv)),
-                  title: Text(channel.name),
-                  subtitle: Text(_programmeLine(_guide, channel).isEmpty ? channel.group : _programmeLine(_guide, channel)),
-                  onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                    builder: (_) => _IptvPlayer(channel: channel, channels: List.unmodifiable(visible), guide: _guide, useExoPlayer: _useExoPlayer, tunneling: _tunneling, buffer: _buffer, forceHls: _forceHls))),
-                );
-              },
-            )),
+            const VerticalDivider(width: 12),
+            Expanded(child: _buildGuide(visible)),
           ])),
         ]),
       )),
