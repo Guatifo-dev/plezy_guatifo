@@ -56,6 +56,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
   bool _loading = false;
   bool _useExoPlayer = true;
   bool _tunneling = false;
+  String _buffer = 'minimum';
 
   @override
   void initState() {
@@ -70,6 +71,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
     setState(() {
       _useExoPlayer = prefs.getBool('vision_iptv_exo') ?? true;
       _tunneling = prefs.getBool('vision_iptv_tunneling') ?? false;
+      _buffer = prefs.getString('vision_iptv_buffer') ?? 'minimum';
     });
     if (_url.text.isNotEmpty) await _load();
   }
@@ -83,6 +85,25 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
     setState(() => _tunneling = !_tunneling);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('vision_iptv_tunneling', _tunneling);
+  }
+
+  String get _bufferLabel => _buffer == 'normal' ? 'Normal' : _buffer == 'small' ? 'Pequeño' : 'Mínimo (0)';
+
+  Future<void> _selectBuffer() async {
+    final value = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Búfer IPTV (MPV)'),
+        actions: [
+          for (final entry in const {'minimum': 'Mínimo (0)', 'small': 'Pequeño', 'normal': 'Normal'}.entries)
+            TextButton(autofocus: _buffer == entry.key, onPressed: () => Navigator.pop(ctx, entry.key), child: Text(entry.value)),
+        ],
+      ),
+    );
+    if (!mounted || value == null) return;
+    setState(() => _buffer = value);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('vision_iptv_buffer', value);
   }
 
   Future<void> _selectPlayer() async {
@@ -166,6 +187,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
             FilledButton(focusNode: _entry, onPressed: _loading ? null : _configure, child: const Text('Configurar lista')),
             OutlinedButton(onPressed: _loading ? null : _load, child: const Text('Actualizar')),
             OutlinedButton(onPressed: _selectPlayer, child: Text(_useExoPlayer ? 'Motor: ExoPlayer' : 'Motor: MPV')),
+            if (!_useExoPlayer) OutlinedButton(onPressed: _selectBuffer, child: Text('Búfer: $_bufferLabel')),
             if (_useExoPlayer) OutlinedButton(onPressed: _toggleTunneling, child: Text(_tunneling ? 'Tunneling: Sí' : 'Tunneling: No')),
             if (context.watch<MultiServerProvider>().hasLiveTv)
               OutlinedButton(onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
@@ -195,7 +217,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
                   title: Text(channel.name),
                   subtitle: Text(channel.group),
                   onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                    builder: (_) => _IptvPlayer(channel: channel, useExoPlayer: _useExoPlayer, tunneling: _tunneling))),
+                    builder: (_) => _IptvPlayer(channel: channel, useExoPlayer: _useExoPlayer, tunneling: _tunneling, buffer: _buffer))),
                 );
               },
             )),
@@ -207,7 +229,8 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
 }
 
 class _IptvPlayer extends StatefulWidget {
-  const _IptvPlayer({required this.channel, required this.useExoPlayer, required this.tunneling});
+  const _IptvPlayer({required this.channel, required this.useExoPlayer, required this.tunneling, required this.buffer});
+  final String buffer;
   final bool tunneling;
   final bool useExoPlayer;
   final _Channel channel;
@@ -262,6 +285,21 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
           await player.setProperty('tunneled-playback', widget.tunneling ? 'yes' : 'no');
         } else {
           await player.setProperty('hwdec', 'mediacodec,mediacodec-copy');
+          if (widget.buffer != 'normal') {
+            final minimum = widget.buffer == 'minimum';
+            for (final entry in <String, String>{
+              'cache-pause-initial': minimum ? 'no' : 'yes',
+              'cache-pause-wait': minimum ? '0' : '1',
+              'cache-secs': minimum ? '1' : '3',
+            }.entries) {
+              try {
+                await player.setProperty(entry.key, entry.value);
+              } catch (error) {
+                debugPrint('[VisionIPTV] buffer property ${entry.key}: $error');
+              }
+            }
+          }
+          debugPrint('[VisionIPTV] MPV buffer: ${widget.buffer}');
         }
       } catch (_) {
         // Keep the backend default if an optional setting is unsupported.
