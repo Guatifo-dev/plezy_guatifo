@@ -15,27 +15,53 @@ import 'live_tv_screen.dart';
 import '../video_player/wakelock_controller.dart';
 
 class _Channel {
-  const _Channel(this.name, this.group, this.url, this.logo);
+  const _Channel(this.name, this.group, this.url, this.logo, {this.drmType, this.drmLicense, this.manifestType});
   final String name, group, url, logo;
+  final String? drmType, drmLicense, manifestType;
 }
 
 List<_Channel> _parsePlaylist(String source, Uri base) {
   final channels = <_Channel>[];
   String? name;
   String group = 'Otros', logo = '';
+  String? drmType, drmLicense, manifestType;
   for (final raw in const LineSplitter().convert(source)) {
     final line = raw.trim();
     if (line.startsWith('#EXTINF:')) {
+      drmType = null;
+      drmLicense = null;
+      manifestType = null;
       final comma = line.indexOf(',');
       name = comma < 0 ? 'Canal' : line.substring(comma + 1).trim();
       group = RegExp(r'group-title="([^"]*)"').firstMatch(line)?.group(1) ?? 'Otros';
       logo = RegExp(r'tvg-logo="([^"]*)"').firstMatch(line)?.group(1) ?? '';
+    } else if (name != null && line.toUpperCase().startsWith('#KODIPROP:')) {
+      final equals = line.indexOf('=');
+      if (equals < 0) continue;
+      final property = line.substring(10, equals).trim().toLowerCase();
+      final value = line.substring(equals + 1).trim();
+      if (value.isEmpty) continue;
+      switch (property) {
+        case 'inputstream.adaptive.license_type':
+          drmType = value.toLowerCase();
+          break;
+        case 'inputstream.adaptive.license_key':
+          drmLicense = value;
+          break;
+        case 'inputstream.adaptive.manifest_type':
+          manifestType = value.toLowerCase();
+          break;
+      }
     } else if (line.isNotEmpty && !line.startsWith('#') && name != null) {
       final uri = base.resolve(line);
       if (uri.scheme == 'http' || uri.scheme == 'https') {
-        channels.add(_Channel(name, group.isEmpty ? 'Otros' : group, uri.toString(), logo));
+        channels.add(_Channel(name, group.isEmpty ? 'Otros' : group, uri.toString(), logo,
+          drmType: drmType, drmLicense: drmLicense, manifestType: manifestType));
       }
       name = null;
+      drmType = null;
+      drmLicense = null;
+      manifestType = null;
     }
   }
   return channels;
