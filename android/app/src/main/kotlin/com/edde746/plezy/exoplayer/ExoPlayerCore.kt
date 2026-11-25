@@ -4009,6 +4009,10 @@ class ExoPlayerCore(private val activity: Activity) :
     else -> null
   }
 
+  fun setIptvBounds(left: Int, top: Int, width: Int, height: Int) {
+    PlayerSurfaceHost.setIptvBounds(surfaceContainer, left, top, width, height)
+  }
+
   override fun setVisible(visible: Boolean) {
     if (disposing) return
     currentVisible = visible

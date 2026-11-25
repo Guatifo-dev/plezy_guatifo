@@ -84,6 +84,18 @@ internal object PlayerSurfaceHost {
     }
   }
 
+  fun setIptvBounds(container: FrameLayout?, left: Int, top: Int, width: Int, height: Int) {
+    if (container == null) return
+    container.layoutParams = FrameLayout.LayoutParams(
+      if (width <= 0) ViewGroup.LayoutParams.MATCH_PARENT else width,
+      if (height <= 0) ViewGroup.LayoutParams.MATCH_PARENT else height
+    ).apply {
+      gravity = android.view.Gravity.TOP or android.view.Gravity.LEFT
+      leftMargin = if (width <= 0) 0 else left
+      topMargin = if (height <= 0) 0 else top
+    }
+  }
+
   fun attachToContent(activity: Activity, container: FrameLayout): ViewGroup {
     val contentView = activity.findViewById<ViewGroup>(android.R.id.content)
     contentView.addView(container, 0)

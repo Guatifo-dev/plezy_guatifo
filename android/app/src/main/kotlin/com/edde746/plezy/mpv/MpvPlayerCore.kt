@@ -3154,6 +3154,10 @@ class MpvPlayerCore private constructor(
     }
   }
 
+  fun setIptvBounds(left: Int, top: Int, width: Int, height: Int) {
+    PlayerSurfaceHost.setIptvBounds(surfaceContainer, left, top, width, height)
+  }
+
   override fun setVisible(visible: Boolean) {
     // Audio-only: no render layer to show or hide — tolerated no-op.
     if (audioOnly || disposing) return

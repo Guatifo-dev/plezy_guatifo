@@ -249,6 +249,17 @@ class ExoPlayerPlugin :
       "selectSubtitleTrack" -> handleSelectSubtitleTrack(call, result)
       "addSubtitleTrack" -> handleAddSubtitleTrack(call, result)
       "setVisible" -> handleSetVisible(call, result)
+      "setIptvBounds" -> {
+        val left = call.argument<Int>("left") ?: 0
+        val top = call.argument<Int>("top") ?: 0
+        val width = call.argument<Int>("width") ?: 0
+        val height = call.argument<Int>("height") ?: 0
+        runOnMain {
+          if (usingMpvFallback) mpvCore?.setIptvBounds(left, top, width, height)
+          else playerCore?.setIptvBounds(left, top, width, height)
+          result.success(null)
+        }
+      }
       "updateFrame" -> handleUpdateFrame(result)
       "setVideoFrameRate" -> handleSetVideoFrameRate(call, result)
       "clearVideoFrameRate" -> handleClearVideoFrameRate(result)

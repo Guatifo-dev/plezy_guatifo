@@ -103,7 +103,7 @@ Map<String, List<_Programme>> _parseGuide(List<int> bytes) {
     final id = p.getAttribute('channel');
     final start = _xmltvDate(p.getAttribute('start'));
     final stop = _xmltvDate(p.getAttribute('stop'));
-    if (id == null || start == null || stop == null || stop.isBefore(now) || start.isAfter(now.add(const Duration(days: 3)))) continue;
+    if (id == null || start == null || stop == null || stop.isBefore(now.subtract(const Duration(days: 1))) || start.isAfter(now.add(const Duration(days: 3)))) continue;
     final titles = p.findElements('title');
     final descriptions = p.findElements('desc');
     (result[id] ??= []).add(_Programme(titles.isEmpty ? '' : titles.first.innerText, start, stop, descriptions.isEmpty ? '' : descriptions.first.innerText));
@@ -172,6 +172,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
     if (!mounted) return;
     _url.text = prefs.getString('vision_iptv_url') ?? '';
     setState(() {
+      _lastChannel = prefs.getString('vision_iptv_last_fullscreen');
       _favorites = (prefs.getStringList('vision_iptv_favorites') ?? []).toSet();
       _epgUrl = prefs.getString('vision_iptv_epg') ?? '';
       _useExoPlayer = prefs.getBool('vision_iptv_exo') ?? true;
@@ -193,6 +194,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
     await prefs.setStringList('vision_iptv_favorites', _favorites.toList());
   }
 
+  String? _lastChannel;
   bool _guideOpen = false;
   bool _openWhenLoaded = false;
   Future<void> _openUnifiedGuide() async {
@@ -200,10 +202,11 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
     _guideOpen = true;
     _openWhenLoaded = false;
     try {
+      final index = _channels.indexWhere((c) => c.favoriteId == _lastChannel);
       await Navigator.of(context).push(MaterialPageRoute<void>(
-        builder: (_) => _IptvPlayer(channel: _channels.first, channels: List.unmodifiable(_channels),
+        builder: (_) => _IptvPlayer(startFullscreen: index >= 0, channel: index >= 0 ? _channels[index] : _channels.first, channels: List.unmodifiable(_channels),
           guide: _guide, guideSource: _guideNotifier, allChannels: List.unmodifiable(_channels),
-          onFavorite: _toggleFavorite, isFavorite: (c) => _favorites.contains(c.favoriteId),
+          onFavorite: _toggleFavorite, isFavorite: (c) => _favorites.contains(c.favoriteId), onFullscreen: (c) async { _lastChannel = c.favoriteId; final prefs = await SharedPreferences.getInstance(); await prefs.setString('vision_iptv_last_fullscreen', c.favoriteId); },
           useExoPlayer: _useExoPlayer, tunneling: _tunneling, buffer: _buffer, forceHls: _forceHls)));
     } finally {
       _guideOpen = false;
@@ -266,8 +269,9 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
   void focusActiveTabIfReady() {
     _entry.requestFocus();
     if (!widget.settingsOnly && !_guideOpen) {
+      _openWhenLoaded = true;
       if (_channels.isEmpty) { _openWhenLoaded = true; }
-      else { WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted && _entry.hasFocus) unawaited(_openUnifiedGuide()); }); }
+      else { WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted && _openWhenLoaded) unawaited(_openUnifiedGuide()); }); }
     }
   }
   @override
@@ -363,7 +367,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
       if (mounted) {
         setState(() { _channels = channels; _guide = {}; });
         _guideNotifier.value = {};
-        if (_openWhenLoaded) WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted && _entry.hasFocus) unawaited(_openUnifiedGuide()); });
+        if (_openWhenLoaded) WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted && _openWhenLoaded) unawaited(_openUnifiedGuide()); });
       }
       if (mounted) unawaited(_loadGuide());
     } catch (_) {
@@ -405,7 +409,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
       if (_loading) const CircularProgressIndicator(),
       if (_error != null) Text(_error!),
       if (_channels.isNotEmpty)
-        FilledButton(focusNode: _entry, autofocus: true, onPressed: _openUnifiedGuide, child: const Text('Abrir guía de televisión'))
+        Focus(focusNode: _entry, autofocus: true, onFocusChange: (focused) { if (focused && !_guideOpen && _openWhenLoaded) WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) unawaited(_openUnifiedGuide()); }); }, child: const Text('TV en directo'))
       else if (!_loading)
         FilledButton(focusNode: _entry, onPressed: () async {
           await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const VisionIptvScreen(settingsOnly: true)));
@@ -419,7 +423,9 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
 }
 
 class _IptvPlayer extends StatefulWidget {
-  const _IptvPlayer({required this.channel, required this.channels, required this.guide, required this.guideSource, required this.allChannels, required this.onFavorite, required this.isFavorite, required this.useExoPlayer, required this.tunneling, required this.buffer, required this.forceHls});
+  const _IptvPlayer({required this.startFullscreen, required this.onFullscreen, required this.channel, required this.channels, required this.guide, required this.guideSource, required this.allChannels, required this.onFavorite, required this.isFavorite, required this.useExoPlayer, required this.tunneling, required this.buffer, required this.forceHls});
+  final bool startFullscreen;
+  final Future<void> Function(_Channel) onFullscreen;
   final bool forceHls;
   final String buffer;
   final bool tunneling;
@@ -451,6 +457,53 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   bool _switching = false, _showChannels = false, _preview = true, _tuned = false;
   int _groupIndex = 0, _programmeIndex = -1, _timeShift = 0;
   bool _groupFocus = false;
+  bool _inProgrammes = true;
+  Timer? _leftHold, _backHold;
+  bool _leftLong = false, _backLong = false;
+  bool _exiting = false;
+  final _videoKey = GlobalKey();
+  Future<void> _resizeVideo() async {
+    if (!mounted || _player == null || _closing != null) return;
+    final box = _videoKey.currentContext?.findRenderObject();
+    if (box is! RenderBox || !box.hasSize) return;
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    final pos = box.localToGlobal(Offset.zero);
+    try {
+      final player = _player!;
+      if (player is PlayerAndroid) {
+        await const MethodChannel('com.plezy/exo_player').invokeMethod('setIptvBounds', {'left': _preview ? (pos.dx*dpr).round() : 0, 'top': _preview ? (pos.dy*dpr).round() : 0, 'width': _preview ? (box.size.width*dpr).round() : 0, 'height': _preview ? (box.size.height*dpr).round() : 0});
+      } else {
+        await const MethodChannel('com.plezy/mpv_player').invokeMethod('setIptvBounds', {'left': _preview ? (pos.dx*dpr).round() : 0, 'top': _preview ? (pos.dy*dpr).round() : 0, 'width': _preview ? (box.size.width*dpr).round() : 0, 'height': _preview ? (box.size.height*dpr).round() : 0});
+      }
+    } catch (e) { debugPrint('[VisionIPTV] resize failed: ${e.runtimeType}'); }
+  }
+  void _scheduleResize() => WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) unawaited(_resizeVideo()); });
+  void _backShort() {
+    if (_preview) { if (_tuned) _previewMode(false); else unawaited(_confirmGuide()); }
+    else { _previewMode(true); }
+  }
+  Future<void> _exitIptv() async {
+    if (_exiting || !mounted) return;
+    setState(() => _exiting = true);
+    await _close();
+    if (mounted) Navigator.of(context).pop();
+  }
+  void _stepProgramme(int delta) {
+    final entries = _guide[widget.channels[_highlightIndex].tvgId] ?? const <_Programme>[];
+    if (entries.isEmpty) return;
+    final visible = _programmes(_highlightIndex);
+    final selected = _programmeIndex >= 0 && _programmeIndex < visible.length ? visible[_programmeIndex] : null;
+    var index = selected == null ? entries.indexWhere((p) => p.stop.isAfter(DateTime.now())) : entries.indexOf(selected) + delta;
+    if (index < 0 || index >= entries.length) return;
+    final target = entries[index];
+    final start = _windowStart;
+    if (!target.stop.isAfter(start) || !target.start.isBefore(start.add(const Duration(hours: 2)))) {
+      final now = DateTime.now();
+      final base = DateTime(now.year, now.month, now.day, now.hour, now.minute < 30 ? 0 : 30);
+      _timeShift = (target.start.difference(base).inSeconds / 1800).floor();
+    }
+    _programmeIndex = _programmes(_highlightIndex).indexOf(target);
+  }
   Map<String, List<_Programme>> get _guide => widget.guideSource.value;
   List<String> get _groups => ['Todos', 'Favoritos', ...widget.channels.map((c) => c.group).toSet()];
   List<int> get _visibleIndices => [for (var i = 0; i < widget.channels.length; i++) if (_groupIndex == 0 || (_groupIndex == 1 ? widget.isFavorite(widget.channels[i]) : widget.channels[i].group == _groups[_groupIndex])) i];
@@ -512,11 +565,12 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     return '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
   }
   void _previewMode(bool value) {
-    setState(() { _preview = value; _showChannels = false; _highlightIndex = _channelIndex; _programmeIndex = -1; _groupFocus = false; _showName = true; if (!_visibleIndices.contains(_channelIndex)) _groupIndex = 0; });
+    setState(() { _preview = value; _showChannels = false; _highlightIndex = _channelIndex; _programmeIndex = -1; _inProgrammes = true; _timeShift = 0; _groupFocus = false; _showName = true; if (!_visibleIndices.contains(_channelIndex)) _groupIndex = 0; if (value) _stepProgramme(0); });
+    _scheduleResize();
     if (value) {
       _timer?.cancel();
       _scrollPreview();
-    } else { _hideLater(); }
+    } else { unawaited(widget.onFullscreen(_channel)); _hideLater(); }
     _playerFocus.requestFocus();
   }
   void _scrollPreview() {
@@ -532,9 +586,11 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
       title: Text(selected.name), actions: [
         TextButton(autofocus: true, onPressed: () => Navigator.pop(ctx, 'favorite'), child: Text(widget.isFavorite(selected) ? 'Quitar de favoritos' : 'Añadir a favoritos')),
         TextButton(onPressed: () => Navigator.pop(ctx, 'technical'), child: const Text('Información técnica')),
+        TextButton(onPressed: () => Navigator.pop(ctx, 'exit'), child: const Text('Salir de IPTV')),
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cerrar')),
       ]));
     if (!mounted) return;
+    if (action == 'exit') { await _exitIptv(); return; }
     if (action == 'favorite') { await widget.onFavorite(selected); if (mounted) setState(() {}); }
     if (action == 'technical' && mounted) { await _readStats(); if (mounted) { setState(() { _technicalVisible = true; _showName = true; }); _hideLater(); } }
     if (mounted) _playerFocus.requestFocus();
@@ -548,9 +604,12 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     _channelIndex = widget.channels.indexOf(widget.channel);
     if (_channelIndex < 0) _channelIndex = 0;
     _highlightIndex = _channelIndex;
+    _preview = !widget.startFullscreen;
+    _tuned = widget.startFullscreen;
+    _switching = _tuned;
     widget.guideSource.addListener(_guideChanged);
     WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) _scrollPreview(); });
+    WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) { _scrollPreview(); if (_tuned) unawaited(_start()); } });
   }
 
   Future<void> _start() async {
@@ -572,6 +631,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
             debugPrint('[VisionIPTV] playback restart: ${_startup.elapsedMilliseconds} ms');
           }
           setState(() { _ready = true; _failed = false; });
+          _scheduleResize();
           unawaited(_readStats());
         }
       });
@@ -658,7 +718,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
       }
       debugPrint('[VisionDRM] open returned');
       debugPrint('[VisionIPTV] open returned: ${_startup.elapsedMilliseconds} ms');
-      if (mounted) _hideLater();
+      if (mounted) { _scheduleResize(); if (!_preview) unawaited(widget.onFullscreen(_channel)); _hideLater(); }
   }
 
   Future<void> _switchChannel(int index) async {
@@ -784,6 +844,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
     _channelScroll.dispose();
+    _leftHold?.cancel(); _backHold?.cancel();
     _previewScroll.dispose();
     _playerFocus.dispose();
     unawaited(_close());
@@ -889,6 +950,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
         Row(children: [Text(_clock(current.start), style: const TextStyle(color: Colors.white70)), const Spacer(), Text(_clock(current.stop), style: const TextStyle(color: Colors.white70))]),
         LinearProgressIndicator(value: progress, color: Colors.orange, backgroundColor: Colors.white24),
       ],
+      if (current != null && current.description.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 8), child: Text(current.description, maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 14))),
       if (next != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text('A continuación · ${_clock(next.start)} · ${next.title}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70))),
       if (_technicalVisible && _technical.isNotEmpty) Text(_technical, style: const TextStyle(color: Colors.white70, fontSize: 12)),
     ]));
@@ -896,16 +958,23 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) => PopScope(
-    canPop: _preview && !_showChannels,
-    onPopInvokedWithResult: (didPop, _) {
-      if (!didPop && _showChannels) { _toggleChannels(); }
-      else if (!didPop && !_preview) { _previewMode(true); }
-    },
+    canPop: _exiting,
+    onPopInvokedWithResult: (didPop, _) { if (!didPop && !_exiting && _backHold == null) _backShort(); },
     child: Scaffold(
       backgroundColor: Colors.transparent,
       body: Focus(focusNode: _playerFocus, autofocus: true, onKeyEvent: (_, event) {
-        if (event is! KeyDownEvent) return KeyEventResult.ignored;
         final key = event.logicalKey;
+        if (key == LogicalKeyboardKey.goBack || key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.browserBack) {
+          if (event is KeyDownEvent) { _backLong = false; _backHold?.cancel(); _backHold = Timer(const Duration(milliseconds: 650), () { _backLong = true; unawaited(_exitIptv()); }); }
+          if (event is KeyUpEvent) { _backHold?.cancel(); _backHold = null; if (!_backLong) _backShort(); }
+          return KeyEventResult.handled;
+        }
+        if (_preview && key == LogicalKeyboardKey.arrowLeft) {
+          if (event is KeyDownEvent) { _leftLong = false; _leftHold?.cancel(); _leftHold = Timer(const Duration(milliseconds: 600), () { if (mounted) setState(() { _leftLong = true; _inProgrammes = false; _programmeIndex = -1; }); }); }
+          if (event is KeyUpEvent) { _leftHold?.cancel(); _leftHold = null; if (!_leftLong) setState(() { if (_inProgrammes) { _stepProgramme(-1); } else if (!_groupFocus) { _groupFocus = true; } }); }
+          return KeyEventResult.handled;
+        }
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
         if (key == LogicalKeyboardKey.contextMenu) { unawaited(_options()); return KeyEventResult.handled; }
         if (_preview) {
           if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown) {
@@ -916,16 +985,8 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
           if (key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter) { unawaited(_confirmGuide()); return KeyEventResult.handled; }
           if (key == LogicalKeyboardKey.arrowRight) {
             setState(() {
-              if (_groupFocus) { if (_visibleIndices.isNotEmpty) _groupFocus = false; }
-              else { final entries = _programmes(_highlightIndex); if (_programmeIndex + 1 < entries.length) { _programmeIndex++; } else { _timeShift++; final shifted = _programmes(_highlightIndex); _programmeIndex = shifted.isEmpty ? -1 : 0; } }
-            });
-            return KeyEventResult.handled;
-          }
-          if (key == LogicalKeyboardKey.arrowLeft) {
-            setState(() {
-              if (_programmeIndex >= 0) { _programmeIndex--; }
-              else if (!_groupFocus) { _groupFocus = true; }
-              else if (_timeShift > 0) { _timeShift--; }
+              if (_groupFocus) { if (_visibleIndices.isNotEmpty) { _groupFocus = false; _inProgrammes = false; } }
+              else { _inProgrammes = true; _stepProgramme(1); }
             });
             return KeyEventResult.handled;
           }
@@ -945,15 +1006,8 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
           return KeyEventResult.handled;
         }
         if (key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter) {
-          if (_showChannels) {
-            if (_highlightIndex == _channelIndex && !_failed) {
-              _toggleChannels();
-            } else {
-              unawaited(_switchChannel(_highlightIndex));
-            }
-          } else {
-            _toggleChannels();
-          }
+          setState(() { _technicalVisible = false; _showName = true; });
+          _hideLater();
           return KeyEventResult.handled;
         }
         if (key == LogicalKeyboardKey.escape && _showChannels) {
@@ -980,7 +1034,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
           top: _preview ? 16 : 0, right: _preview ? 20 : 0,
           left: _preview ? null : 0, bottom: _preview ? null : 0,
           width: _preview ? 288 : null, height: _preview ? 162 : null,
-          child: Video(player: _player!)),
+          child: SizedBox(key: _videoKey, child: Video(player: _player!))),
         if (_tuned && !_ready && !_failed) Positioned(
           top: _preview ? 70 : 0, right: _preview ? 130 : 0,
           left: _preview ? null : 0, bottom: _preview ? null : 0,

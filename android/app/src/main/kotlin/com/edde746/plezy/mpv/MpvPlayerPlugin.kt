@@ -234,6 +234,11 @@ open class MpvPlayerPlugin(
       "observeProperty" -> handleObserveProperty(call, result)
       "command" -> handleCommand(call, result)
       "setVisible" -> handleSetVisible(call, result)
+      "setIptvBounds" -> {
+        playerCore?.setIptvBounds(call.argument<Int>("left") ?: 0, call.argument<Int>("top") ?: 0,
+          call.argument<Int>("width") ?: 0, call.argument<Int>("height") ?: 0)
+        result.success(null)
+      }
       "updateFrame" -> handleUpdateFrame(result)
       "setVideoFrameRate" -> handleSetVideoFrameRate(call, result)
       "clearVideoFrameRate" -> handleClearVideoFrameRate(result)
