@@ -318,8 +318,14 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
       if (!mounted || _closing != null) return;
       debugPrint('[VisionIPTV] opening: ${_startup.elapsedMilliseconds} ms');
       final path = Uri.parse(widget.channel.url).path.toLowerCase();
-      final forceLiveHls = !widget.useExoPlayer || widget.forceHls || path.endsWith('.m3u8');
-      if (widget.useExoPlayer) debugPrint('[VisionIPTV] Exo format: ${forceLiveHls ? 'HLS' : 'Auto'}');
+      final isDash = path.endsWith('.mpd');
+      // Media3 infers DASH from the manifest URI when no HLS MIME is forced.
+      final forceLiveHls = !widget.useExoPlayer ||
+          (!isDash && (widget.forceHls || path.endsWith('.m3u8')));
+      if (widget.useExoPlayer) {
+        final format = isDash ? 'DASH' : (forceLiveHls ? 'HLS' : 'Auto');
+        debugPrint('[VisionIPTV] Exo format: $format');
+      }
       await player.open(Media(widget.channel.url), isLive: forceLiveHls);
       debugPrint('[VisionIPTV] open returned: ${_startup.elapsedMilliseconds} ms');
       if (mounted) _hideLater();
