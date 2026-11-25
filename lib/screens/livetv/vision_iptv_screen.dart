@@ -503,6 +503,8 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   bool _zooming = false;
   int _zoomGeneration = 0;
   bool _okLong = false, _fastScroll = false;
+  bool _dialogBusy = false;
+  bool _menuSelectDown = false, _settingsSelectDown = false;
   static const _bannerChoices = [2, 3, 4, 5, 7, 10, 15, 0];
   int _settingsIndex = 0;
   String _settingsUrl = '', _settingsEpg = '', _settingsBuffer = 'minimum';
@@ -679,7 +681,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     final result = await showDialog<String>(context: context, barrierColor: Colors.black26, builder: (ctx) => AlertDialog(
       backgroundColor: const Color(0xFF242A36), title: Text(label),
       content: SizedBox(width: 420, child: TextField(controller: controller, autofocus: true,
-        keyboardType: isUrl ? TextInputType.url : TextInputType.text, textInputAction: TextInputAction.done,
+        keyboardType: TextInputType.text, textInputAction: TextInputAction.done,
         onSubmitted: (v) => Navigator.pop(ctx, v))),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
@@ -986,6 +988,19 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
       _previewScroll.jumpTo((_visibleIndices.indexOf(_highlightIndex) * 54.0 - p.viewportDimension / 2 + 27).clamp(0.0, p.maxScrollExtent).toDouble());
     });
   }
+  Future<void> _withDialog(Future<void> Function() action) async {
+    if (_dialogBusy) return;
+    _dialogBusy = true;
+    _backHold?.cancel(); _backHold = null;
+    _okHold?.cancel(); _okHold = null;
+    try { await action(); }
+    finally {
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      _dialogBusy = false;
+      if (mounted) _playerFocus.requestFocus();
+    }
+  }
+
   Future<void> _channelContext() async {
     if (_visibleIndices.isEmpty) return;
     final c = widget.channels[_highlightIndex];
@@ -1005,23 +1020,11 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   Future<void> _assignEpg(_Channel c) async {
     final names = widget.epgNames();
     final ids = names.keys.toList()..sort((a,b) => (names[a] ?? a).toLowerCase().compareTo((names[b] ?? b).toLowerCase()));
-    String search = '';
-    final selected = await showDialog<String>(context: context, barrierColor: Colors.black26, builder: (ctx) => StatefulBuilder(builder: (ctx, update) {
-      final filtered = ids.where((id) => '${names[id]} $id'.toLowerCase().contains(search.toLowerCase())).toList();
-      return AlertDialog(backgroundColor: const Color(0xFF242A36), title: Text('Asignar EPG · ${c.name}'),
-        content: SizedBox(width: 480, height: 270, child: Column(children: [
-          TextField(decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Buscar canal EPG'), onChanged: (v) => update(() => search = v)),
-          Expanded(child: filtered.isEmpty ? const Center(child: Text('No hay canales EPG disponibles')) : ListView.builder(itemCount: filtered.length, itemBuilder: (_, i) {
-            final id = filtered[i];
-            return ListTile(autofocus: i == 0, title: Text(names[id] ?? id), subtitle: Text(id), trailing: id == widget.epgId(c) ? const Icon(Icons.check) : null, onTap: () => Navigator.pop(ctx, id));
-          })),
-        ])),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')), TextButton(onPressed: () => Navigator.pop(ctx, ''), child: const Text('Restablecer automática'))],
-      );
-    }));
+    final selected = await showDialog<String>(context: context, barrierColor: Colors.black26,
+      builder: (_) => _EpgChannelPicker(title: c.name, ids: ids, names: names, selectedId: widget.epgId(c)));
     if (!mounted || selected == null) return;
     await widget.onAssignEpg(c, selected.isEmpty ? null : selected);
-    if (mounted) setState(() { _programmeIndex = -1; _stepProgramme(0); });
+    if (mounted) setState(() { _programmeIndex = _programmeIndex.clamp(-1, _programmes(_highlightIndex).length - 1).toInt(); });
   }
 
   Future<void> _options() async {
@@ -1323,7 +1326,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     final poster = p?.poster ?? '';
     final details = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
-        Expanded(child: Text(p?.title ?? channel.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold))),
+        Expanded(child: Text(p?.title ?? channel.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold))),
         if (widget.isFavorite(channel)) const Icon(Icons.star, color: Colors.amber, size: 20),
       ]),
       const SizedBox(height: 5),
@@ -1462,30 +1465,42 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) => PopScope(
     canPop: _exiting,
-    onPopInvokedWithResult: (didPop, _) { if (!didPop && !_exiting && _backHold == null) _backShort(); },
+    onPopInvokedWithResult: (didPop, _) { if (!didPop && !_exiting && !_dialogBusy && _backHold == null) _backShort(); },
     child: Scaffold(
       backgroundColor: Colors.transparent,
       body: Focus(focusNode: _playerFocus, autofocus: true, onKeyEvent: (_, event) {
         final key = event.logicalKey;
         if (_zooming) return KeyEventResult.handled;
+        if (_dialogBusy) return KeyEventResult.ignored;
+        if (event is KeyUpEvent && (key == LogicalKeyboardKey.goBack || key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.browserBack) && _backHold == null) return KeyEventResult.handled;
         if (key == LogicalKeyboardKey.goBack || key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.browserBack) {
           if (event is KeyDownEvent) { _backLong = false; _backHold?.cancel(); _backHold = Timer(const Duration(milliseconds: 650), () { _backLong = true; unawaited(_exitIptv()); }); }
           if (event is KeyUpEvent) { _backHold?.cancel(); _backHold = null; if (!_backLong) _backShort(); }
           return KeyEventResult.handled;
         }
         if (_preview && _settingsOpen) {
+          if (key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter) {
+            if (event is KeyDownEvent) _settingsSelectDown = true;
+            if (event is KeyUpEvent && _settingsSelectDown) { _settingsSelectDown = false; unawaited(_withDialog(_activateSetting)); }
+            return KeyEventResult.handled;
+          }
           if (event is! KeyDownEvent) return KeyEventResult.handled;
           if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown) { _moveSetting(key == LogicalKeyboardKey.arrowDown ? 1 : -1); }
           else if (key == LogicalKeyboardKey.arrowLeft) { _closeSettings(); }
-          else if (key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter) { unawaited(_activateSetting()); }
+
           return KeyEventResult.handled;
         }
         if (_preview && _menuOpen) {
+          if (key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter) {
+            if (event is KeyDownEvent) _menuSelectDown = true;
+            if (event is KeyUpEvent && _menuSelectDown) { _menuSelectDown = false; unawaited(_activateMenu()); }
+            return KeyEventResult.handled;
+          }
           if (event is! KeyDownEvent) return KeyEventResult.handled;
           if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown) {
             setState(() => _menuIndex = (_menuIndex + (key == LogicalKeyboardKey.arrowDown ? 1 : -1)).clamp(0, _menuLabels.length - 1).toInt());
           } else if (key == LogicalKeyboardKey.arrowRight) { _closeMenu(); }
-          else if (key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter) { unawaited(_activateMenu()); }
+
           return KeyEventResult.handled;
         }
         if (_preview && key == LogicalKeyboardKey.arrowLeft) {
@@ -1495,7 +1510,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
         }
         if (_preview && !_groupFocus && (key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter)) {
           if (event is KeyDownEvent) { _okLong = false; _okHold?.cancel(); _okHold = Timer(const Duration(milliseconds: 600), () { if (mounted) { _okLong = true; } }); }
-          if (event is KeyUpEvent) { _okHold?.cancel(); _okHold = null; if (_okLong) { WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted && _preview) unawaited(_channelContext()); }); WidgetsBinding.instance.scheduleFrame(); } else { unawaited(_confirmGuide()); } }
+          if (event is KeyUpEvent) { _okHold?.cancel(); _okHold = null; if (_okLong) { WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted && _preview) unawaited(_withDialog(_channelContext)); }); WidgetsBinding.instance.scheduleFrame(); } else { unawaited(_confirmGuide()); } }
           return KeyEventResult.handled;
         }
         if (_preview && !_groupFocus && (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown)) {
@@ -1638,4 +1653,69 @@ class _ZoomAperture extends CustomPainter {
   }
   @override
   bool shouldRepaint(covariant _ZoomAperture oldDelegate) => oldDelegate.rect != rect;
+}
+
+class _EpgChannelPicker extends StatefulWidget {
+  const _EpgChannelPicker({required this.title, required this.ids, required this.names, required this.selectedId});
+  final String title, selectedId;
+  final List<String> ids;
+  final Map<String, String> names;
+  @override
+  State<_EpgChannelPicker> createState() => _EpgChannelPickerState();
+}
+class _EpgChannelPickerState extends State<_EpgChannelPicker> {
+  final _search = FocusNode();
+  final _results = FocusNode();
+  final _scroll = ScrollController();
+  String _query = '';
+  int _index = 0;
+  List<String> get _filtered => widget.ids.where((id) => '${widget.names[id]} $id'.toLowerCase().contains(_query.toLowerCase())).toList();
+  void _move(int delta) {
+    final rows = _filtered;
+    if (rows.isEmpty) return;
+    setState(() => _index = (_index + delta).clamp(0, rows.length - 1).toInt());
+    if (_scroll.hasClients) {
+      final p = _scroll.position;
+      _scroll.jumpTo((_index * 56.0 - p.viewportDimension / 2 + 28).clamp(0.0, p.maxScrollExtent).toDouble());
+    }
+  }
+  @override
+  void dispose() { _search.dispose(); _results.dispose(); _scroll.dispose(); super.dispose(); }
+  @override
+  Widget build(BuildContext context) {
+    final rows = _filtered;
+    return AlertDialog(
+      backgroundColor: const Color(0xFF242A36), title: Text('Asignar EPG · ${widget.title}'),
+      content: SizedBox(width: 480, height: 280, child: Column(children: [
+        Focus(onKeyEvent: (_, e) {
+          if (e is KeyDownEvent && e.logicalKey == LogicalKeyboardKey.arrowDown) { _results.requestFocus(); return KeyEventResult.handled; }
+          return KeyEventResult.ignored;
+        }, child: TextField(focusNode: _search, decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Buscar canal EPG'),
+          onSubmitted: (_) => _results.requestFocus(),
+          onChanged: (v) { setState(() { _query = v; _index = 0; }); if (_scroll.hasClients) _scroll.jumpTo(0); })),
+        Expanded(child: Focus(focusNode: _results, autofocus: true, onFocusChange: (_) => setState(() {}), onKeyEvent: (_, e) {
+          final k = e.logicalKey;
+          if (e is KeyDownEvent || e is KeyRepeatEvent) {
+            if (k == LogicalKeyboardKey.arrowUp) { if (_index == 0) { _search.requestFocus(); } else { _move(-1); } return KeyEventResult.handled; }
+            if (k == LogicalKeyboardKey.arrowDown) { _move(1); return KeyEventResult.handled; }
+          }
+          if (k == LogicalKeyboardKey.select || k == LogicalKeyboardKey.enter) {
+            if (e is KeyUpEvent && rows.isNotEmpty) Navigator.pop(context, rows[_index]);
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        }, child: ExcludeFocus(child: rows.isEmpty ? const Center(child: Text('No hay canales EPG disponibles')) : ListView.builder(
+          controller: _scroll, itemExtent: 56, itemCount: rows.length, itemBuilder: (_, i) {
+            final id = rows[i];
+            return ListTile(selected: _results.hasFocus && i == _index, selectedTileColor: const Color(0xFF1565C0),
+              title: Text(widget.names[id] ?? id, maxLines: 1, overflow: TextOverflow.ellipsis),
+              subtitle: Text(id, maxLines: 1, overflow: TextOverflow.ellipsis),
+              trailing: id == widget.selectedId ? const Icon(Icons.check) : null,
+              onTap: () => Navigator.pop(context, id));
+          })))),
+      ])),
+      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+        TextButton(onPressed: () => Navigator.pop(context, ''), child: const Text('Restablecer automática'))],
+    );
+  }
 }
