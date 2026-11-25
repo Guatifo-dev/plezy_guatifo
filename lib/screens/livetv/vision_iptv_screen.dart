@@ -54,6 +54,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
   String? _error;
   bool _loading = false;
   bool _useExoPlayer = true;
+  bool _tunneling = false;
 
   @override
   void initState() {
@@ -65,7 +66,10 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     _url.text = prefs.getString('vision_iptv_url') ?? '';
-    setState(() => _useExoPlayer = prefs.getBool('vision_iptv_exo') ?? true);
+    setState(() {
+      _useExoPlayer = prefs.getBool('vision_iptv_exo') ?? true;
+      _tunneling = prefs.getBool('vision_iptv_tunneling') ?? false;
+    });
     if (_url.text.isNotEmpty) await _load();
   }
 
@@ -73,6 +77,12 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
   void focusActiveTabIfReady() => _entry.requestFocus();
   @override
   void manualRefresh() => unawaited(_load());
+
+  Future<void> _toggleTunneling() async {
+    setState(() => _tunneling = !_tunneling);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('vision_iptv_tunneling', _tunneling);
+  }
 
   Future<void> _selectPlayer() async {
     final value = await showDialog<bool>(
@@ -155,6 +165,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
             FilledButton(focusNode: _entry, onPressed: _loading ? null : _configure, child: const Text('Configurar lista')),
             OutlinedButton(onPressed: _loading ? null : _load, child: const Text('Actualizar')),
             OutlinedButton(onPressed: _selectPlayer, child: Text(_useExoPlayer ? 'Motor: ExoPlayer' : 'Motor: MPV')),
+            if (_useExoPlayer) OutlinedButton(onPressed: _toggleTunneling, child: Text(_tunneling ? 'Tunneling: Sí' : 'Tunneling: No')),
             if (context.watch<MultiServerProvider>().hasLiveTv)
               OutlinedButton(onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
                 builder: (_) => const Scaffold(body: LiveTvScreen()))), child: const Text('TV de Plex')),
@@ -183,7 +194,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
                   title: Text(channel.name),
                   subtitle: Text(channel.group),
                   onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                    builder: (_) => _IptvPlayer(channel: channel, useExoPlayer: _useExoPlayer))),
+                    builder: (_) => _IptvPlayer(channel: channel, useExoPlayer: _useExoPlayer, tunneling: _tunneling))),
                 );
               },
             )),
@@ -195,7 +206,8 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
 }
 
 class _IptvPlayer extends StatefulWidget {
-  const _IptvPlayer({required this.channel, required this.useExoPlayer});
+  const _IptvPlayer({required this.channel, required this.useExoPlayer, required this.tunneling});
+  final bool tunneling;
   final bool useExoPlayer;
   final _Channel channel;
   @override
@@ -223,7 +235,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     try {
       await PlaybackCoordinator.instance.claimVideo();
       if (!mounted || _closing != null) return;
-      final player = Player(useExoPlayer: widget.useExoPlayer);
+      final player = Player(useExoPlayer: widget.useExoPlayer, hardwareDecoding: true);
       _player = player;
       _errors = player.streams.error.listen((_) {
         if (mounted) setState(() => _failed = true);
@@ -235,6 +247,16 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
         }
       });
       setState(() {});
+      try {
+        if (widget.useExoPlayer) {
+          await player.setProperty('tunneled-playback', widget.tunneling ? 'yes' : 'no');
+        } else {
+          await player.setProperty('hwdec', 'mediacodec,mediacodec-copy');
+        }
+      } catch (_) {
+        // Keep the backend default if an optional setting is unsupported.
+      }
+      if (!mounted || _closing != null) return;
       await player.open(Media(widget.channel.url), isLive: true);
       if (mounted) _hideLater();
     } catch (_) {
@@ -261,8 +283,11 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
         field('audioCodec', 'audio-codec-name'),
         field('videoDroppedFrames', 'frame-drop-count'),
       ]);
+      final decoder = engine.toLowerCase() == 'mpv' ? await field('hwdec-current', 'hwdec-current') : (stats['videoDecoderName']?.toString() ?? '—');
+      final tunnel = stats['tunneledPlayback'];
+      final tunnelInfo = tunnel is bool ? (tunnel ? ' · Tunneling activo' : ' · Tunneling inactivo') : '';
       if (mounted && _closing == null && identical(player, _player)) {
-        setState(() => _technical = '${engine.toUpperCase()} · ${values[0]} × ${values[1]} · ${values[2]} · ${values[3]} fps · Audio: ${values[4]} · Frames perdidos: ${values[5]}');
+        setState(() => _technical = '${engine.toUpperCase()} · ${values[0]} × ${values[1]} · ${values[2]} · ${values[3]} fps · Audio: ${values[4]} · Frames perdidos: ${values[5]}\nDecodificador: $decoder$tunnelInfo');
       }
     } catch (_) {
       // Stats are optional and must never interrupt live playback.
