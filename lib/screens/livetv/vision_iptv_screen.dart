@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:xml/xml.dart';
+import 'package:xml/xml_events.dart';
+import 'package:sqlite3/sqlite3.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'package:flutter/material.dart';
@@ -101,35 +103,77 @@ class _GuideData {
   final Map<String, String> names;
 }
 
-_GuideData _parseGuide(List<int> bytes) {
-  final raw = bytes.length > 1 && bytes[0] == 31 && bytes[1] == 139 ? gzip.decode(bytes) : bytes;
-  final doc = XmlDocument.parse(utf8.decode(raw, allowMalformed: true));
-  final result = <String, List<_Programme>>{};
-  final names = <String, String>{};
-  for (final c in doc.findAllElements('channel')) {
-    final id = c.getAttribute('id');
-    if (id == null) continue;
-    final labels = c.findElements('display-name');
-    names[id] = labels.isEmpty ? id : labels.first.innerText;
-    result[id] = [];
-  }
-  final now = DateTime.now();
-  for (final p in doc.findAllElements('programme')) {
-    final id = p.getAttribute('channel');
-    final start = _xmltvDate(p.getAttribute('start'));
-    final stop = _xmltvDate(p.getAttribute('stop'));
-    if (id == null || start == null || stop == null || stop.isBefore(now.subtract(const Duration(days: 1))) || start.isAfter(now.add(const Duration(days: 3)))) continue;
-    final titles = p.findElements('title');
-    final descriptions = p.findElements('desc');
-    final icons = p.findElements('icon');
-    final poster = icons.isEmpty ? '' : icons.first.getAttribute('src') ?? '';
-    names.putIfAbsent(id, () => id);
-    (result[id] ??= []).add(_Programme(titles.isEmpty ? '' : titles.first.innerText, start, stop, descriptions.isEmpty ? '' : descriptions.first.innerText, poster: poster));
-  }
-  for (final entries in result.values) {
-    entries.sort((a, b) => a.start.compareTo(b.start));
-  }
-  return _GuideData(result, names);
+// Import one XML element at a time into a disk-backed index. Never build a
+// document tree or retain the whole decompressed XMLTV in the Dart heap.
+Future<int> _indexGuide((String, String) input) async {
+  final file = File(input.$1);
+  final db = sqlite3.open(input.$2);
+  try {
+    db.execute('CREATE TABLE channels(id TEXT PRIMARY KEY, name TEXT NOT NULL)');
+    db.execute('CREATE TABLE programmes(channel TEXT, start INTEGER, stop INTEGER, title TEXT, description TEXT, poster TEXT)');
+    final channel = db.prepare('INSERT OR REPLACE INTO channels VALUES (?, ?)');
+    final programme = db.prepare('INSERT INTO programmes VALUES (?, ?, ?, ?, ?, ?)');
+    final now = DateTime.now();
+    final earliest = now.subtract(const Duration(days: 1));
+    final latest = now.add(const Duration(days: 3));
+    int count = 0;
+    try {
+      final signature = await file.openRead(0, 2).expand((x) => x).toList();
+      Stream<List<int>> bytes = file.openRead();
+      if (signature.length == 2 && signature[0] == 31 && signature[1] == 139) bytes = gzip.decoder.bind(bytes);
+      db.execute('BEGIN');
+      await for (final nodes in bytes.transform(const Utf8Decoder(allowMalformed: true))
+          .toXmlEvents().selectSubtreeEvents((event) => event.name == 'channel' || event.name == 'programme').toXmlNodes()) {
+        for (final node in nodes.whereType<XmlElement>()) {
+          if (node.name.local == 'channel') {
+            final id = node.getAttribute('id');
+            if (id == null) continue;
+            channel.execute([id, node.getElement('display-name')?.innerText ?? id]);
+          } else if (node.name.local == 'programme') {
+            final id = node.getAttribute('channel');
+            final start = _xmltvDate(node.getAttribute('start')), stop = _xmltvDate(node.getAttribute('stop'));
+            if (id == null || start == null || stop == null || stop.isBefore(earliest) || start.isAfter(latest)) continue;
+            programme.execute([id, start.millisecondsSinceEpoch, stop.millisecondsSinceEpoch,
+              node.getElement('title')?.innerText ?? '', node.getElement('desc')?.innerText ?? '',
+              node.getElement('icon')?.getAttribute('src') ?? '']);
+            count++;
+          }
+        }
+      }
+      db.execute('COMMIT');
+      db.execute('CREATE INDEX programme_channel_start ON programmes(channel, start)');
+      db.execute('INSERT OR IGNORE INTO channels SELECT DISTINCT channel, channel FROM programmes');
+      return count;
+    } finally {
+      channel.dispose(); programme.dispose();
+    }
+  } finally { db.dispose(); }
+}
+
+_GuideData _readIndexedGuide((String, List<String>) input) {
+  final db = sqlite3.open(input.$1, mode: OpenMode.readOnly);
+  try {
+    final names = <String, String>{for (final row in db.select('SELECT id,name FROM channels ORDER BY name COLLATE NOCASE')) row['id'] as String: row['name'] as String};
+    final result = <String, List<_Programme>>{};
+    final query = db.prepare('SELECT start,stop,title,description,poster FROM programmes WHERE channel=? ORDER BY start');
+    try {
+      for (final id in input.$2.toSet()) {
+        if (id.isEmpty) continue;
+        result[id] = [for (final p in query.select([id])) _Programme(p['title'] as String,
+          DateTime.fromMillisecondsSinceEpoch(p['start'] as int, isUtc: true),
+          DateTime.fromMillisecondsSinceEpoch(p['stop'] as int, isUtc: true), p['description'] as String, poster: p['poster'] as String)];
+      }
+    } finally { query.dispose(); }
+    return _GuideData(result, names);
+  } finally { db.dispose(); }
+}
+
+(List<_Channel>, String) _decodePlaylist((List<int>, String) input) {
+  final source = utf8.decode(input.$1, allowMalformed: true);
+  final uri = Uri.parse(input.$2);
+  final header = const LineSplitter().convert(source).firstWhere((line) => line.startsWith('#EXTM3U'), orElse: () => '');
+  final auto = RegExp(r'(?:x-tvg-url|url-tvg|tvg-url)="([^"]+)"', caseSensitive: false).firstMatch(header)?.group(1);
+  return (_parsePlaylist(source, uri), auto == null ? '' : uri.resolve(auto.split(',').first.trim()).toString());
 }
 
 String _programmeLine(Map<String, List<_Programme>> guide, _Channel channel) {
@@ -168,6 +212,9 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
   final _guideNotifier = ValueNotifier<Map<String, List<_Programme>>>({});
   Timer? _guideTimer;
   bool _guideLoading = false;
+  String? _loadedPlaylist, _loadedGuide, _guideDbPath;
+  DateTime? _guideLoadedAt;
+  int _guideGeneration = 0;
   bool _restoring = false;
   Set<String> _favorites = {};
   List<String> _recent = [];
@@ -206,7 +253,10 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
       _forceHls = prefs.getBool('vision_iptv_force_hls') ?? false;
     });
     _restoring = false;
-    if (!widget.settingsOnly && _url.text.isNotEmpty) await _load();
+    if (!widget.settingsOnly && _url.text.isNotEmpty) {
+      if (_loadedPlaylist != _url.text || _channels.isEmpty) { await _load(); }
+      else { await _loadGuide(); }
+    }
   }
 
   void _settingsUpdated() => unawaited(_restore());
@@ -235,7 +285,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
           recent: () => List.unmodifiable(_recent), onTuned: (c) async { _recent = [c.favoriteId, ..._recent.where((id) => id != c.favoriteId)].take(30).toList(); final prefs = await SharedPreferences.getInstance(); await prefs.setStringList('vision_iptv_recent', _recent); },
           onRefreshGuide: () => _loadGuide(force: true), guideStatus: () => _epgStatus,
           bannerSeconds: _bannerSeconds, epgNames: () => _epgNames, epgId: (c) => _epgOverrides[c.favoriteId] ?? c.tvgId,
-          onAssignEpg: (c, id) async { if (id == null) { _epgOverrides.remove(c.favoriteId); } else { _epgOverrides[c.favoriteId] = id; } final prefs = await SharedPreferences.getInstance(); await prefs.setString('vision_iptv_epg_overrides', jsonEncode(_epgOverrides)); },
+          onAssignEpg: (c, id) async { if (id == null) { _epgOverrides.remove(c.favoriteId); } else { _epgOverrides[c.favoriteId] = id; } final prefs = await SharedPreferences.getInstance(); await prefs.setString('vision_iptv_epg_overrides', jsonEncode(_epgOverrides)); await _reloadIndexedGuide(); },
           useExoPlayer: _useExoPlayer, tunneling: _tunneling, buffer: _buffer, forceHls: _forceHls)));
     } finally {
       _guideOpen = false;
@@ -263,32 +313,65 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
     await prefs.setString('vision_iptv_epg', _epgUrl);
   }
 
+  Future<void> _reloadIndexedGuide() async {
+    final path = _guideDbPath;
+    if (path == null || !mounted) return;
+    final generation = ++_guideGeneration;
+    final ids = _channels.map((c) => _epgOverrides[c.favoriteId] ?? c.tvgId).toSet().toList();
+    final data = await compute(_readIndexedGuide, (path, ids));
+    if (!mounted || generation != _guideGeneration || path != _guideDbPath) return;
+    setState(() { _guide = data.programmes; _epgNames = data.names; });
+    _guideNotifier.value = data.programmes;
+  }
+
   Future<void> _loadGuide({bool force = false}) async {
     if (_guideLoading || !mounted) return;
     final url = _epgUrl.isNotEmpty ? _epgUrl : _autoEpg;
     final uri = Uri.tryParse(url);
     if (uri == null || !['http', 'https'].contains(uri.scheme) || uri.host.isEmpty) return;
+    if (!force && _loadedGuide == url && _guideDbPath != null && _guideLoadedAt != null &&
+        DateTime.now().difference(_guideLoadedAt!) < const Duration(hours: 6)) return;
     _guideLoading = true;
     try {
       final dir = await getApplicationCacheDirectory();
-      final cache = File('${dir.path}/vision_epg.xml');
+      final cache = File('${dir.path}/vision_epg_index_v1.sqlite');
+      final temp = File('${dir.path}/vision_epg_import.sqlite');
+      final xml = File('${dir.path}/vision_epg_import.xml');
       final prefs = await SharedPreferences.getInstance();
-      final same = prefs.getString('vision_epg_cache_source') == url;
+      final same = prefs.getString('vision_epg_index_source') == url;
       if (same && await cache.exists()) {
-        final age = DateTime.now().difference(await cache.lastModified());
-        try {
-          final cached = await compute(_parseGuide, await cache.readAsBytes());
-          if (mounted) { setState(() { _guide = cached.programmes; _epgNames = cached.names; _epgStatus = 'Guía disponible'; }); _guideNotifier.value = cached.programmes; }
-          if (!force && age < const Duration(hours: 6)) return;
-        } catch (_) {}
+        final modified = await cache.lastModified();
+        _guideDbPath = cache.path;
+        await _reloadIndexedGuide();
+        _loadedGuide = url; _guideLoadedAt = modified;
+        if (mounted) setState(() => _epgStatus = 'Guía disponible');
+        if (!force && DateTime.now().difference(modified) < const Duration(hours: 6)) return;
       }
-      final response = await http.get(uri).timeout(const Duration(seconds: 45));
-      if (response.statusCode != 200) throw StateError('EPG HTTP');
-      final parsed = await compute(_parseGuide, response.bodyBytes);
-      await cache.writeAsBytes(response.bodyBytes, flush: true);
-      await prefs.setString('vision_epg_cache_source', url);
-      if (mounted) { setState(() { _guide = parsed.programmes; _epgNames = parsed.names; _epgStatus = 'Guía actualizada'; }); _guideNotifier.value = parsed.programmes; }
-    } catch (_) {
+      if (mounted) setState(() => _epgStatus = 'Descargando programación…');
+      final client = http.Client();
+      try {
+        final response = await client.send(http.Request('GET', uri)).timeout(const Duration(seconds: 45));
+        if (response.statusCode != 200) throw StateError('EPG HTTP');
+        await response.stream.timeout(const Duration(seconds: 45)).pipe(xml.openWrite());
+      } finally { client.close(); }
+      if (await temp.exists()) await temp.delete();
+      if (mounted) setState(() => _epgStatus = 'Indexando programación…');
+      try {
+        final count = await compute(_indexGuide, (xml.path, temp.path));
+        debugPrint('[VisionIPTV] indexed $count programmes');
+        await temp.rename(cache.path);
+      } finally {
+        if (await xml.exists()) await xml.delete();
+        if (await temp.exists()) await temp.delete();
+      }
+      await prefs.setString('vision_epg_index_source', url);
+      if (!mounted) return;
+      _guideDbPath = cache.path;
+      _loadedGuide = url; _guideLoadedAt = DateTime.now();
+      await _reloadIndexedGuide();
+      if (mounted) setState(() => _epgStatus = 'Guía actualizada');
+    } catch (e) {
+      debugPrint('[VisionIPTV] guide index error: ${e.runtimeType}');
       if (mounted) setState(() => _epgStatus = 'No se pudo actualizar la guía');
     } finally {
       _guideLoading = false;
@@ -388,14 +471,12 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
     try {
       final response = await http.get(uri).timeout(const Duration(seconds: 30));
       if (response.statusCode != 200) throw StateError('HTTP');
-      final source = utf8.decode(response.bodyBytes, allowMalformed: true);
-      final header = const LineSplitter().convert(source).firstWhere((line) => line.startsWith('#EXTM3U'), orElse: () => '');
-      final auto = RegExp(r'(?:x-tvg-url|url-tvg|tvg-url)="([^"]+)"', caseSensitive: false).firstMatch(header)?.group(1);
-      _autoEpg = auto == null ? '' : uri.resolve(auto.split(',').first.trim()).toString();
-      final channels = _parsePlaylist(source, uri);
+      final (channels, autoEpg) = await compute(_decodePlaylist, (response.bodyBytes, uri.toString()));
+      _autoEpg = autoEpg;
       if (channels.isEmpty) throw StateError('Empty');
       if (mounted) {
-        setState(() { _channels = channels; _guide = {}; });
+        setState(() { _channels = channels; _guide = {}; _epgNames = {}; });
+        _loadedPlaylist = uri.toString(); _loadedGuide = null; _guideDbPath = null; _guideGeneration++;
         _guideNotifier.value = {};
         if (_openWhenLoaded) WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted && _openWhenLoaded) unawaited(_openUnifiedGuide()); });
       }
@@ -1019,7 +1100,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
 
   Future<void> _assignEpg(_Channel c) async {
     final names = widget.epgNames();
-    final ids = names.keys.toList()..sort((a,b) => (names[a] ?? a).toLowerCase().compareTo((names[b] ?? b).toLowerCase()));
+    final ids = names.keys.toList();
     final selected = await showDialog<String>(context: context, barrierColor: Colors.black26,
       builder: (_) => _EpgChannelPicker(title: c.name, ids: ids, names: names, selectedId: widget.epgId(c)));
     if (!mounted || selected == null) return;
@@ -1345,7 +1426,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
       Expanded(child: Text(p?.description ?? '', maxLines: 6, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 14))),
     ]);
     if (poster.isEmpty || _fastScroll || !poster.startsWith('http')) return details;
-    return Row(children: [Expanded(child: details), const SizedBox(width: 12), SizedBox(width: 108, height: 162, child: ClipRRect(borderRadius: BorderRadius.circular(9), child: Image.network(poster, fit: BoxFit.contain, errorBuilder: (_, _, _) => const SizedBox.shrink())))]);
+    return Row(children: [Expanded(child: details), const SizedBox(width: 12), SizedBox(width: 108, height: 162, child: ClipRRect(borderRadius: BorderRadius.circular(9), child: Image.network(poster, cacheHeight: 324, fit: BoxFit.contain, errorBuilder: (_, _, _) => const SizedBox.shrink())))]);
   }
 
   Widget _previewGuide() {
@@ -1398,7 +1479,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
                   
                   child: Row(children: [
                     SizedBox(width: 28, child: Text('${i + 1}', style: TextStyle(color: channelFocused ? const Color(0xFF2196F3) : (_tuned && i == _channelIndex ? focus : Colors.white70)))),
-                    SizedBox(width: 42, height: 30, child: channel.logo.isEmpty ? Icon(Icons.tv, color: channelFocused ? const Color(0xFF2196F3) : Colors.white) : Image.network(channel.logo, fit: BoxFit.contain, errorBuilder: (_, _, _) => Icon(Icons.tv, color: channelFocused ? const Color(0xFF2196F3) : Colors.white))),
+                    SizedBox(width: 42, height: 30, child: channel.logo.isEmpty ? Icon(Icons.tv, color: channelFocused ? const Color(0xFF2196F3) : Colors.white) : Image.network(channel.logo, cacheWidth: 128, fit: BoxFit.contain, errorBuilder: (_, _, _) => Icon(Icons.tv, color: channelFocused ? const Color(0xFF2196F3) : Colors.white))),
                     const SizedBox(width: 7),
                     Expanded(child: Text(channel.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: channelFocused ? const Color(0xFF2196F3) : Colors.white, fontSize: 13))),
                     if (_tuned && i == _channelIndex) Icon(Icons.play_arrow, color: channelFocused ? const Color(0xFF2196F3) : focus, size: 15),
@@ -1441,7 +1522,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     final number = widget.allChannels.indexOf(_channel) + 1;
     return Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: const Color(0xED10151D), borderRadius: BorderRadius.circular(14)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
       Row(children: [
-        SizedBox(width: 87, height: 72, child: _channel.logo.isEmpty ? const Icon(Icons.tv, color: Colors.white) : Image.network(_channel.logo, fit: BoxFit.contain, errorBuilder: (_, _, _) => const Icon(Icons.tv, color: Colors.white))),
+        SizedBox(width: 87, height: 72, child: _channel.logo.isEmpty ? const Icon(Icons.tv, color: Colors.white) : Image.network(_channel.logo, cacheWidth: 192, fit: BoxFit.contain, errorBuilder: (_, _, _) => const Icon(Icons.tv, color: Colors.white))),
         const SizedBox(width: 12),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('${number.toString().padLeft(3, '0')} · ${_channel.name}', style: const TextStyle(color: Colors.white, fontSize: 18)),
@@ -1611,7 +1692,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
                       SizedBox(width: 32, child: Text('${index + 1}', style: const TextStyle(color: Colors.white70))),
                       SizedBox(width: 40, height: 32, child: channel.logo.isEmpty
                         ? const Icon(Icons.tv, color: Colors.white70)
-                        : Image.network(channel.logo, fit: BoxFit.contain, errorBuilder: (_, _, _) => const Icon(Icons.tv, color: Colors.white70))),
+                        : Image.network(channel.logo, cacheWidth: 128, fit: BoxFit.contain, errorBuilder: (_, _, _) => const Icon(Icons.tv, color: Colors.white70))),
                       const SizedBox(width: 10),
                       Expanded(child: Text(channel.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white))),
                       if (current) const Icon(Icons.play_arrow, color: Colors.white),
@@ -1667,9 +1748,14 @@ class _EpgChannelPickerState extends State<_EpgChannelPicker> {
   final _search = FocusNode();
   final _results = FocusNode();
   final _scroll = ScrollController();
-  String _query = '';
   int _index = 0;
-  List<String> get _filtered => widget.ids.where((id) => '${widget.names[id]} $id'.toLowerCase().contains(_query.toLowerCase())).toList();
+  late final Map<String, String> _searchKeys = {for (final id in widget.ids) id: '${widget.names[id]} $id'.toLowerCase()};
+  late List<String> _filtered = widget.ids;
+  void _filter(String query) {
+    final needle = query.toLowerCase().trim();
+    setState(() { _filtered = needle.isEmpty ? widget.ids : widget.ids.where((id) => _searchKeys[id]!.contains(needle)).toList(); _index = 0; });
+    if (_scroll.hasClients) _scroll.jumpTo(0);
+  }
   void _move(int delta) {
     final rows = _filtered;
     if (rows.isEmpty) return;
@@ -1692,7 +1778,7 @@ class _EpgChannelPickerState extends State<_EpgChannelPicker> {
           return KeyEventResult.ignored;
         }, child: TextField(focusNode: _search, decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Buscar canal EPG'),
           onSubmitted: (_) => _results.requestFocus(),
-          onChanged: (v) { setState(() { _query = v; _index = 0; }); if (_scroll.hasClients) _scroll.jumpTo(0); })),
+          onChanged: _filter)),
         Expanded(child: Focus(focusNode: _results, autofocus: true, onFocusChange: (_) => setState(() {}), onKeyEvent: (_, e) {
           final k = e.logicalKey;
           if (e is KeyDownEvent || e is KeyRepeatEvent) {
