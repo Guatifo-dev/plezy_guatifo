@@ -215,6 +215,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
           useExoPlayer: _useExoPlayer, tunneling: _tunneling, buffer: _buffer, forceHls: _forceHls)));
     } finally {
       _guideOpen = false;
+      if (mounted) unawaited(_restore());
       if (mounted) { if (widget.onExit != null) { widget.onExit!(); } else { _entry.requestFocus(); } }
     }
   }
@@ -467,6 +468,11 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   int _groupIndex = 0, _programmeIndex = -1, _timeShift = 0;
   bool _groupFocus = false;
   bool _menuOpen = false, _recentOnly = false, _refreshingGuide = false;
+  bool _settingsOpen = false, _settingsDirty = false;
+  int _settingsIndex = 0;
+  String _settingsUrl = '', _settingsEpg = '', _settingsBuffer = 'minimum';
+  bool _settingsExo = true, _settingsHls = false, _settingsTunnel = false;
+  final _settingsScroll = ScrollController();
   int _menuIndex = 0;
   String _menuStatus = '';
   static const _menuLabels = ['Guía de televisión', 'Favoritos', 'Últimos canales', 'Actualizar programación', 'Ajustes IPTV', 'Salir de IPTV'];
@@ -518,6 +524,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   }
   void _backShort() {
     if (!_preview) { _previewMode(true); return; }
+    if (_settingsOpen) { _closeSettings(); return; }
     if (_menuOpen) { _closeMenu(); return; }
     if (_groupFocus || _timeShift != 0 || !_onCurrentProgramme) { _resetGuideToNow(); return; }
     if (_tuned) { _previewMode(false); } else { unawaited(_confirmGuide()); }
@@ -600,18 +607,136 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
         }
         break;
       case 4:
-        await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const VisionIptvScreen(settingsOnly: true)));
-        if (mounted) {
-          notifyVisionIptvSettingsChanged();
-          setState(() => _menuStatus = 'Ajustes guardados. Se aplicarán al volver a entrar en IPTV.');
-          _playerFocus.requestFocus();
-          _scheduleResize();
-        }
+        await _openSettings();
         break;
       case 5:
         await _exitIptv();
         break;
     }
+  }
+
+  Future<void> _openSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted || !_menuOpen || _exiting) return;
+    setState(() {
+      _settingsUrl = prefs.getString('vision_iptv_url') ?? '';
+      _settingsEpg = prefs.getString('vision_iptv_epg') ?? '';
+      _settingsExo = prefs.getBool('vision_iptv_exo') ?? true;
+      _settingsHls = prefs.getBool('vision_iptv_force_hls') ?? false;
+      _settingsTunnel = prefs.getBool('vision_iptv_tunneling') ?? false;
+      _settingsBuffer = prefs.getString('vision_iptv_buffer') ?? 'minimum';
+      _settingsIndex = 0;
+      _settingsOpen = true;
+    });
+  }
+
+  void _closeSettings() {
+    setState(() { _settingsOpen = false; if (_settingsDirty) _menuStatus = 'Ajustes guardados. Se aplicarán al volver a entrar en IPTV.'; });
+    _playerFocus.requestFocus();
+  }
+
+  List<String> get _settingKeys => ['m3u', 'epg', 'player', if (_settingsExo) ...['format', 'tunnel'] else 'buffer', 'refresh', 'back'];
+
+  Future<void> _editSettingsUrl(bool epg) async {
+    final controller = TextEditingController(text: epg ? _settingsEpg : _settingsUrl);
+    final result = await showDialog<String>(context: context, barrierColor: Colors.black26, builder: (ctx) => AlertDialog(
+      backgroundColor: const Color(0xFF242A36),
+      title: Text(epg ? 'URL EPG (XMLTV)' : 'Lista IPTV M3U'),
+      content: TextField(controller: controller, autofocus: true, keyboardType: TextInputType.url,
+        decoration: InputDecoration(hintText: epg ? 'Vacío: detección automática' : 'URL de la lista'),
+        onSubmitted: (v) => Navigator.pop(ctx, v)),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+        FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('Guardar')),
+      ],
+    ));
+    controller.dispose();
+    if (!mounted) return;
+    if (result != null) {
+      final value = result.trim();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(epg ? 'vision_iptv_epg' : 'vision_iptv_url', value);
+      if (mounted) setState(() { if (epg) { _settingsEpg = value; } else { _settingsUrl = value; } _settingsDirty = true; });
+    }
+    if (mounted) { _playerFocus.requestFocus(); _scheduleResize(); }
+  }
+
+  Future<void> _activateSetting() async {
+    final key = _settingKeys[_settingsIndex];
+    if (key == 'back') { _closeSettings(); return; }
+    if (key == 'm3u' || key == 'epg') { await _editSettingsUrl(key == 'epg'); return; }
+    if (key == 'refresh') {
+      if (_refreshingGuide) return;
+      setState(() { _refreshingGuide = true; _menuStatus = 'Actualizando…'; });
+      try {
+        await widget.onRefreshGuide();
+        if (mounted) setState(() => _menuStatus = widget.guideStatus());
+      } catch (_) {
+        if (mounted) setState(() => _menuStatus = 'No se pudo actualizar la guía');
+      } finally {
+        if (mounted) setState(() => _refreshingGuide = false);
+      }
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted || !_settingsOpen) return;
+    setState(() {
+      _settingsDirty = true;
+      switch (key) {
+        case 'player': _settingsExo = !_settingsExo; break;
+        case 'format': _settingsHls = !_settingsHls; break;
+        case 'tunnel': _settingsTunnel = !_settingsTunnel; break;
+        case 'buffer': _settingsBuffer = _settingsBuffer == 'minimum' ? 'small' : _settingsBuffer == 'small' ? 'normal' : 'minimum'; break;
+      }
+      _settingsIndex = _settingsIndex.clamp(0, _settingKeys.length - 1).toInt();
+    });
+    switch (key) {
+      case 'player': await prefs.setBool('vision_iptv_exo', _settingsExo); break;
+      case 'format': await prefs.setBool('vision_iptv_force_hls', _settingsHls); break;
+      case 'tunnel': await prefs.setBool('vision_iptv_tunneling', _settingsTunnel); break;
+      case 'buffer': await prefs.setString('vision_iptv_buffer', _settingsBuffer); break;
+    }
+  }
+
+  void _moveSetting(int delta) {
+    setState(() => _settingsIndex = (_settingsIndex + delta).clamp(0, _settingKeys.length - 1).toInt());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_settingsScroll.hasClients) return;
+      final p = _settingsScroll.position;
+      _settingsScroll.jumpTo((_settingsIndex * 44.0 - p.viewportDimension / 2 + 22).clamp(0.0, p.maxScrollExtent).toDouble());
+    });
+  }
+
+  Widget _iptvSettingsPanel() {
+    final labels = <String, String>{'m3u': 'Lista M3U', 'epg': 'URL EPG', 'player': 'Reproductor IPTV', 'format': 'Formato', 'tunnel': 'Tunneling', 'buffer': 'Búfer MPV', 'refresh': 'Actualizar programación', 'back': 'Volver al menú'};
+    final values = <String, String>{'m3u': _settingsUrl.isEmpty ? 'Sin configurar' : 'Configurada', 'epg': _settingsEpg.isEmpty ? 'Automática desde M3U' : 'Manual', 'player': _settingsExo ? 'ExoPlayer' : 'MPV', 'format': _settingsHls ? 'HLS' : 'Auto', 'tunnel': _settingsTunnel ? 'Sí' : 'No', 'buffer': _settingsBuffer == 'minimum' ? 'Mínimo (0)' : _settingsBuffer == 'small' ? 'Pequeño' : 'Normal', 'refresh': _refreshingGuide ? 'Actualizando…' : '', 'back': ''};
+    final icons = <String, IconData>{'m3u': Icons.list, 'epg': Icons.calendar_today, 'player': Icons.play_circle_outline, 'format': Icons.video_settings, 'tunnel': Icons.settings_ethernet, 'buffer': Icons.memory, 'refresh': Icons.refresh, 'back': Icons.arrow_back};
+    final keys = _settingKeys;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: const Color(0xFF1B202A), borderRadius: BorderRadius.circular(10)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Ajustes IPTV', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        Expanded(child: ListView.builder(controller: _settingsScroll, itemExtent: 44, itemCount: keys.length, itemBuilder: (_, i) {
+          final key = keys[i], focused = i == _settingsIndex;
+          final fg = focused ? Colors.black : Colors.white;
+          return Container(margin: const EdgeInsets.only(bottom: 4), padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(color: focused ? const Color(0xFF90CAF9) : const Color(0xFF242A36), borderRadius: BorderRadius.circular(7)),
+            child: Row(children: [
+              Icon(icons[key], size: 19, color: fg),
+              const SizedBox(width: 10),
+              Expanded(child: Text(labels[key]!, style: TextStyle(color: fg, fontSize: 14))),
+              Text(values[key]!, style: TextStyle(color: focused ? Colors.black87 : Colors.white70, fontSize: 13)),
+              const SizedBox(width: 8),
+              Icon(Icons.chevron_right, color: fg, size: 18),
+            ]));
+        })),
+        const SizedBox(height: 4),
+        Text(_settingsDirty ? 'Cambios guardados · se aplicarán al volver a entrar en IPTV' : 'OK: cambiar · Atrás: volver al menú', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+        if (_menuStatus.isNotEmpty) Text(_menuStatus, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+      ]),
+    );
   }
 
   Widget _iptvMenu() {
@@ -620,7 +745,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const Padding(padding: EdgeInsets.all(8), child: Text('IPTV', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold))),
         Expanded(child: ListView.builder(itemCount: _menuLabels.length, itemBuilder: (_, i) {
-          final focused = i == _menuIndex;
+          final focused = !_settingsOpen && i == _menuIndex;
           final foreground = focused ? Colors.black : Colors.white;
           return Container(height: 36, margin: const EdgeInsets.only(bottom: 2),
             padding: const EdgeInsets.symmetric(horizontal: 9),
@@ -981,6 +1106,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     _leftHold?.cancel(); _backHold?.cancel();
     _clockTimer?.cancel();
     _groupScroll.dispose();
+    _settingsScroll.dispose();
     _previewScroll.dispose();
     _playerFocus.dispose();
     unawaited(_close());
@@ -1029,6 +1155,11 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     final end = start.add(const Duration(hours: 2));
     final rows = _visibleIndices;
     const surface = Color(0xFF242A36), focus = Color(0xFF90CAF9);
+    if (_settingsOpen) return Row(children: [
+      _iptvMenu(),
+      const SizedBox(width: 12),
+      Expanded(child: _iptvSettingsPanel()),
+    ]);
     if (_menuOpen) return Row(children: [
       _iptvMenu(),
       const SizedBox(width: 12),
@@ -1132,6 +1263,13 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
         if (key == LogicalKeyboardKey.goBack || key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.browserBack) {
           if (event is KeyDownEvent) { _backLong = false; _backHold?.cancel(); _backHold = Timer(const Duration(milliseconds: 650), () { _backLong = true; unawaited(_exitIptv()); }); }
           if (event is KeyUpEvent) { _backHold?.cancel(); _backHold = null; if (!_backLong) _backShort(); }
+          return KeyEventResult.handled;
+        }
+        if (_preview && _settingsOpen) {
+          if (event is! KeyDownEvent) return KeyEventResult.handled;
+          if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown) { _moveSetting(key == LogicalKeyboardKey.arrowDown ? 1 : -1); }
+          else if (key == LogicalKeyboardKey.arrowLeft) { _closeSettings(); }
+          else if (key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter) { unawaited(_activateSetting()); }
           return KeyEventResult.handled;
         }
         if (_preview && _menuOpen) {
