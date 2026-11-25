@@ -12,6 +12,7 @@ import '../../providers/multi_server_provider.dart';
 import '../../services/playback_coordinator.dart';
 import 'package:provider/provider.dart';
 import 'live_tv_screen.dart';
+import '../video_player/wakelock_controller.dart';
 
 class _Channel {
   const _Channel(this.name, this.group, this.url, this.logo);
@@ -215,6 +216,8 @@ class _IptvPlayer extends StatefulWidget {
 }
 
 class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
+  final _wakelock = WakelockController();
+  final _startup = Stopwatch();
   Player? _player;
   StreamSubscription<PlayerError>? _errors;
   StreamSubscription<void>? _frames;
@@ -233,7 +236,11 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
 
   Future<void> _start() async {
     try {
+      if (!mounted || _closing != null) return;
+      _startup.start();
+      unawaited(_wakelock.setEnabled(true));
       await PlaybackCoordinator.instance.claimVideo();
+      debugPrint('[VisionIPTV] claim: ${_startup.elapsedMilliseconds} ms');
       if (!mounted || _closing != null) return;
       final player = Player(useExoPlayer: widget.useExoPlayer, hardwareDecoding: true);
       _player = player;
@@ -242,6 +249,9 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
       });
       _frames = player.streams.playbackRestart.listen((_) {
         if (mounted) {
+          if (!_ready) {
+            debugPrint('[VisionIPTV] playback restart: ${_startup.elapsedMilliseconds} ms');
+          }
           setState(() { _ready = true; _failed = false; });
           unawaited(_readStats());
         }
@@ -257,9 +267,12 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
         // Keep the backend default if an optional setting is unsupported.
       }
       if (!mounted || _closing != null) return;
+      debugPrint('[VisionIPTV] opening: ${_startup.elapsedMilliseconds} ms');
       await player.open(Media(widget.channel.url), isLive: true);
+      debugPrint('[VisionIPTV] open returned: ${_startup.elapsedMilliseconds} ms');
       if (mounted) _hideLater();
     } catch (_) {
+      unawaited(_wakelock.setEnabled(false));
       if (mounted) setState(() => _failed = true);
     }
   }
@@ -305,6 +318,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
 
   Future<void> _close() => _closing ??= _release();
   Future<void> _release() async {
+    unawaited(_wakelock.setEnabled(false));
     await _errors?.cancel();
     await _frames?.cancel();
     final player = _player;
