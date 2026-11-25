@@ -1,5 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:xml/xml.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -16,15 +20,16 @@ import 'live_tv_screen.dart';
 import '../video_player/wakelock_controller.dart';
 
 class _Channel {
-  const _Channel(this.name, this.group, this.url, this.logo, {this.drmType, this.drmLicense, this.manifestType});
+  const _Channel(this.name, this.group, this.url, this.logo, {this.drmType, this.drmLicense, this.manifestType, this.tvgId = ''});
   final String name, group, url, logo;
   final String? drmType, drmLicense, manifestType;
+  final String tvgId;
 }
 
 List<_Channel> _parsePlaylist(String source, Uri base) {
   final channels = <_Channel>[];
   String? name;
-  String group = 'Otros', logo = '';
+  String group = 'Otros', logo = '', tvgId = '';
   String? drmType, drmLicense, manifestType;
   for (final raw in const LineSplitter().convert(source)) {
     final line = raw.trim();
@@ -32,6 +37,7 @@ List<_Channel> _parsePlaylist(String source, Uri base) {
       drmType = null;
       drmLicense = null;
       manifestType = null;
+      tvgId = RegExp(r'tvg-id="([^"]*)"').firstMatch(line)?.group(1) ?? '';
       final comma = line.indexOf(',');
       name = comma < 0 ? 'Canal' : line.substring(comma + 1).trim();
       group = RegExp(r'group-title="([^"]*)"').firstMatch(line)?.group(1) ?? 'Otros';
@@ -57,7 +63,7 @@ List<_Channel> _parsePlaylist(String source, Uri base) {
       final uri = base.resolve(line);
       if (uri.scheme == 'http' || uri.scheme == 'https') {
         channels.add(_Channel(name, group.isEmpty ? 'Otros' : group, uri.toString(), logo,
-          drmType: drmType, drmLicense: drmLicense, manifestType: manifestType));
+          drmType: drmType, drmLicense: drmLicense, manifestType: manifestType, tvgId: tvgId));
       }
       name = null;
       drmType = null;
@@ -68,8 +74,60 @@ List<_Channel> _parsePlaylist(String source, Uri base) {
   return channels;
 }
 
+final _iptvSettingsChanged = ValueNotifier<int>(0);
+
+void notifyVisionIptvSettingsChanged() => _iptvSettingsChanged.value++;
+
+class _Programme {
+  const _Programme(this.title, this.start, this.stop);
+  final String title;
+  final DateTime start, stop;
+}
+
+DateTime? _xmltvDate(String? input) {
+  if (input == null) return null;
+  final m = RegExp(r'^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(?:\s*([+-]\d{4}|Z))?').firstMatch(input);
+  if (m == null) return null;
+  final zone = m[7] ?? 'Z';
+  final offset = zone == 'Z' ? 'Z' : '${zone.substring(0, 3)}:${zone.substring(3)}';
+  return DateTime.tryParse('${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}$offset');
+}
+
+Map<String, List<_Programme>> _parseGuide(List<int> bytes) {
+  final raw = bytes.length > 1 && bytes[0] == 31 && bytes[1] == 139 ? gzip.decode(bytes) : bytes;
+  final doc = XmlDocument.parse(utf8.decode(raw, allowMalformed: true));
+  final result = <String, List<_Programme>>{};
+  final now = DateTime.now();
+  for (final p in doc.findAllElements('programme')) {
+    final id = p.getAttribute('channel');
+    final start = _xmltvDate(p.getAttribute('start'));
+    final stop = _xmltvDate(p.getAttribute('stop'));
+    if (id == null || start == null || stop == null || stop.isBefore(now) || start.isAfter(now.add(const Duration(days: 3)))) continue;
+    final titles = p.findElements('title');
+    (result[id] ??= []).add(_Programme(titles.isEmpty ? '' : titles.first.innerText, start, stop));
+  }
+  for (final entries in result.values) {
+    entries.sort((a, b) => a.start.compareTo(b.start));
+  }
+  return result;
+}
+
+String _programmeLine(Map<String, List<_Programme>> guide, _Channel channel) {
+  final now = DateTime.now();
+  final entries = guide[channel.tvgId] ?? const <_Programme>[];
+  for (final p in entries) {
+    if (!now.isBefore(p.start) && now.isBefore(p.stop)) {
+      final start = p.start.toLocal(), stop = p.stop.toLocal();
+      String hm(DateTime d) => '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+      return '${hm(start)}–${hm(stop)}  ${p.title}';
+    }
+  }
+  return '';
+}
+
 class VisionIptvScreen extends StatefulWidget {
-  const VisionIptvScreen({super.key});
+  const VisionIptvScreen({super.key, this.settingsOnly = false});
+  final bool settingsOnly;
   @override
   State<VisionIptvScreen> createState() => _VisionIptvScreenState();
 }
@@ -85,24 +143,92 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
   bool _tunneling = false;
   String _buffer = 'minimum';
   bool _forceHls = false;
+  String _epgUrl = '', _autoEpg = '', _epgStatus = '';
+  Map<String, List<_Programme>> _guide = {};
+  Timer? _guideTimer;
+  bool _guideLoading = false;
+  bool _restoring = false;
 
   @override
   void initState() {
     super.initState();
+    if (!widget.settingsOnly) {
+      _iptvSettingsChanged.addListener(_settingsUpdated);
+      _guideTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+        if (mounted) setState(() {});
+      });
+    }
     unawaited(_restore());
   }
 
   Future<void> _restore() async {
+    if (_restoring) return;
+    _restoring = true;
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     _url.text = prefs.getString('vision_iptv_url') ?? '';
     setState(() {
+      _epgUrl = prefs.getString('vision_iptv_epg') ?? '';
       _useExoPlayer = prefs.getBool('vision_iptv_exo') ?? true;
       _tunneling = prefs.getBool('vision_iptv_tunneling') ?? false;
       _buffer = prefs.getString('vision_iptv_buffer') ?? 'minimum';
       _forceHls = prefs.getBool('vision_iptv_force_hls') ?? false;
     });
-    if (_url.text.isNotEmpty) await _load();
+    _restoring = false;
+    if (!widget.settingsOnly && _url.text.isNotEmpty) await _load();
+  }
+
+  void _settingsUpdated() => unawaited(_restore());
+
+  Future<void> _configureEpg() async {
+    final controller = TextEditingController(text: _epgUrl);
+    final value = await showDialog<String>(context: context, builder: (ctx) => AlertDialog(
+      title: const Text('URL EPG (XMLTV)'),
+      content: TextField(controller: controller, autofocus: true, keyboardType: TextInputType.url,
+        decoration: const InputDecoration(hintText: 'Vacío: detección automática'), onSubmitted: (v) => Navigator.pop(ctx, v)),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+        FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('Guardar')),
+      ],
+    ));
+    controller.dispose();
+    if (!mounted || value == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() => _epgUrl = value.trim());
+    await prefs.setString('vision_iptv_epg', _epgUrl);
+  }
+
+  Future<void> _loadGuide({bool force = false}) async {
+    if (_guideLoading || !mounted) return;
+    final url = _epgUrl.isNotEmpty ? _epgUrl : _autoEpg;
+    final uri = Uri.tryParse(url);
+    if (uri == null || !['http', 'https'].contains(uri.scheme) || uri.host.isEmpty) return;
+    _guideLoading = true;
+    try {
+      final dir = await getApplicationCacheDirectory();
+      final cache = File('${dir.path}/vision_epg.xml');
+      final prefs = await SharedPreferences.getInstance();
+      final same = prefs.getString('vision_epg_cache_source') == url;
+      if (same && await cache.exists()) {
+        final age = DateTime.now().difference(await cache.lastModified());
+        try {
+          final cached = await compute(_parseGuide, await cache.readAsBytes());
+          if (mounted) setState(() { _guide = cached; _epgStatus = 'Guía disponible'; });
+          if (!force && age < const Duration(hours: 6)) return;
+        } catch (_) {}
+      }
+      final response = await http.get(uri).timeout(const Duration(seconds: 45));
+      if (response.statusCode != 200) throw StateError('EPG HTTP');
+      final parsed = await compute(_parseGuide, response.bodyBytes);
+      await cache.writeAsBytes(response.bodyBytes, flush: true);
+      await prefs.setString('vision_epg_cache_source', url);
+      if (mounted) setState(() { _guide = parsed; _epgStatus = 'Guía actualizada'; });
+    } catch (_) {
+      if (mounted) setState(() => _epgStatus = 'No se pudo actualizar la guía');
+    } finally {
+      _guideLoading = false;
+    }
   }
 
   @override
@@ -177,7 +303,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
     _url.text = value.trim();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('vision_iptv_url', _url.text);
-    if (mounted) await _load();
+    if (mounted && !widget.settingsOnly) await _load();
   }
 
   Future<void> _load() async {
@@ -191,9 +317,14 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
     try {
       final response = await http.get(uri).timeout(const Duration(seconds: 30));
       if (response.statusCode != 200) throw StateError('HTTP');
-      final channels = _parsePlaylist(utf8.decode(response.bodyBytes, allowMalformed: true), uri);
+      final source = utf8.decode(response.bodyBytes, allowMalformed: true);
+      final header = const LineSplitter().convert(source).firstWhere((line) => line.startsWith('#EXTM3U'), orElse: () => '');
+      final auto = RegExp(r'(?:x-tvg-url|url-tvg|tvg-url)="([^"]+)"', caseSensitive: false).firstMatch(header)?.group(1);
+      _autoEpg = auto == null ? '' : uri.resolve(auto.split(',').first.trim()).toString();
+      final channels = _parsePlaylist(source, uri);
       if (channels.isEmpty) throw StateError('Empty');
-      if (mounted) setState(() { _channels = channels; _group = null; });
+      if (mounted) setState(() { _channels = channels; _group = null; _guide = {}; });
+      if (mounted) unawaited(_loadGuide());
     } catch (_) {
       if (mounted) setState(() => _error = 'No se pudo cargar la lista IPTV.');
     } finally {
@@ -203,6 +334,8 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
 
   @override
   void dispose() {
+    if (!widget.settingsOnly) _iptvSettingsChanged.removeListener(_settingsUpdated);
+    _guideTimer?.cancel();
     _entry.dispose();
     _url.dispose();
     super.dispose();
@@ -210,6 +343,20 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
 
   @override
   Widget build(BuildContext context) {
+    if (widget.settingsOnly) return Scaffold(
+      appBar: AppBar(title: const Text('Ajustes IPTV')),
+      body: SafeArea(child: ListView(children: [
+        ListTile(autofocus: true, title: const Text('Lista M3U'), subtitle: Text(_url.text.isEmpty ? 'Sin configurar' : 'Configurada'), onTap: _configure),
+        ListTile(title: const Text('URL EPG'), subtitle: Text(_epgUrl.isEmpty ? 'Automática desde M3U' : 'Configuración manual'), onTap: _configureEpg),
+        ListTile(title: const Text('Reproductor IPTV'), subtitle: Text(_useExoPlayer ? 'ExoPlayer' : 'MPV'), onTap: _selectPlayer),
+        if (!_useExoPlayer) ListTile(title: const Text('Búfer'), subtitle: Text(_bufferLabel), onTap: _selectBuffer),
+        if (_useExoPlayer) ListTile(title: const Text('Formato'), subtitle: Text(_forceHls ? 'HLS' : 'Auto'), onTap: _toggleFormat),
+        if (_useExoPlayer) ListTile(title: const Text('Tunneling'), subtitle: Text(_tunneling ? 'Sí' : 'No'), onTap: _toggleTunneling),
+        ListTile(title: const Text('Actualizar lista y guía'), subtitle: Text(_epgStatus), onTap: () async { await _load(); if (mounted) await _loadGuide(force: true); }),
+        if (_loading) const LinearProgressIndicator(),
+        if (_error != null) ListTile(title: Text(_error!)),
+      ])),
+    );
     final groups = _channels.map((c) => c.group).toSet().toList();
     final visible = _channels.where((c) => _group == null || c.group == _group).toList();
     return Scaffold(
@@ -218,17 +365,19 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('TV en directo · IPTV', style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: 12),
-          Wrap(spacing: 12, runSpacing: 8, children: [
-            FilledButton(focusNode: _entry, onPressed: _loading ? null : _configure, child: const Text('Configurar lista')),
-            OutlinedButton(onPressed: _loading ? null : _load, child: const Text('Actualizar')),
-            OutlinedButton(onPressed: _selectPlayer, child: Text(_useExoPlayer ? 'Motor: ExoPlayer' : 'Motor: MPV')),
-            if (!_useExoPlayer) OutlinedButton(onPressed: _selectBuffer, child: Text('Búfer: $_bufferLabel')),
-            if (_useExoPlayer) OutlinedButton(onPressed: _toggleFormat, child: Text(_forceHls ? 'Formato: HLS' : 'Formato: Auto')),
-            if (_useExoPlayer) OutlinedButton(onPressed: _toggleTunneling, child: Text(_tunneling ? 'Tunneling: Sí' : 'Tunneling: No')),
-            if (context.watch<MultiServerProvider>().hasLiveTv)
-              OutlinedButton(onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                builder: (_) => const Scaffold(body: LiveTvScreen()))), child: const Text('TV de Plex')),
-          ]),
+          if (_channels.isEmpty && !_loading)
+            FilledButton(focusNode: _entry, onPressed: () async {
+              await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const VisionIptvScreen(settingsOnly: true)));
+              if (mounted) _iptvSettingsChanged.value++;
+            }, child: const Text('Ajustes IPTV'))
+          else
+            Row(children: [
+              Text(_epgStatus),
+              const Spacer(),
+              if (context.watch<MultiServerProvider>().hasLiveTv)
+                OutlinedButton(onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                  builder: (_) => const Scaffold(body: LiveTvScreen()))), child: const Text('TV de Plex')),
+            ]),
           if (_loading) const LinearProgressIndicator(),
           if (_error != null) Padding(padding: const EdgeInsets.all(8), child: Text(_error!)),
           const SizedBox(height: 12),
@@ -237,7 +386,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
               itemCount: groups.length + 1,
               itemBuilder: (_, i) {
                 final group = i == 0 ? null : groups[i - 1];
-                return ListTile(title: Text(group ?? 'Todos'), selected: _group == group,
+                return ListTile(focusNode: i == 0 ? _entry : null, title: Text(group ?? 'Todos'), selected: _group == group,
                   onTap: () => setState(() => _group = group));
               },
             )),
@@ -251,9 +400,9 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
                     width: 48, height: 36, fit: BoxFit.contain,
                     errorBuilder: (_, _, _) => const Icon(Icons.tv)),
                   title: Text(channel.name),
-                  subtitle: Text(channel.group),
+                  subtitle: Text(_programmeLine(_guide, channel).isEmpty ? channel.group : _programmeLine(_guide, channel)),
                   onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                    builder: (_) => _IptvPlayer(channel: channel, channels: List.unmodifiable(visible), useExoPlayer: _useExoPlayer, tunneling: _tunneling, buffer: _buffer, forceHls: _forceHls))),
+                    builder: (_) => _IptvPlayer(channel: channel, channels: List.unmodifiable(visible), guide: _guide, useExoPlayer: _useExoPlayer, tunneling: _tunneling, buffer: _buffer, forceHls: _forceHls))),
                 );
               },
             )),
@@ -265,13 +414,14 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
 }
 
 class _IptvPlayer extends StatefulWidget {
-  const _IptvPlayer({required this.channel, required this.channels, required this.useExoPlayer, required this.tunneling, required this.buffer, required this.forceHls});
+  const _IptvPlayer({required this.channel, required this.channels, required this.guide, required this.useExoPlayer, required this.tunneling, required this.buffer, required this.forceHls});
   final bool forceHls;
   final String buffer;
   final bool tunneling;
   final bool useExoPlayer;
   final _Channel channel;
   final List<_Channel> channels;
+  final Map<String, List<_Programme>> guide;
   @override
   State<_IptvPlayer> createState() => _IptvPlayerState();
 }
@@ -588,6 +738,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
           color: Colors.black87, child: Padding(padding: const EdgeInsets.all(12),
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(_channel.name, style: const TextStyle(color: Colors.white, fontSize: 22)),
+              if (_programmeLine(widget.guide, _channel).isNotEmpty) Text(_programmeLine(widget.guide, _channel), style: const TextStyle(color: Colors.white70, fontSize: 16)),
               if (_technical.isNotEmpty) Text(_technical, style: const TextStyle(color: Colors.white70, fontSize: 14)),
             ])))),
         if (_showChannels) Align(alignment: Alignment.centerLeft, child: SizedBox(

@@ -50,6 +50,7 @@ import '../../profiles/active_profile_provider.dart';
 import '../../profiles/profile.dart';
 import '../../watch_together/services/watch_party_relays.dart';
 import 'about_screen.dart';
+import '../livetv/vision_iptv_screen.dart';
 import 'add_connection_screen.dart';
 import 'account_preferences_screen.dart';
 import 'appearance_settings_screen.dart';
@@ -211,6 +212,16 @@ class _SettingsScreenState extends State<SettingsScreen> with FocusableTab, Moun
                       _buildGeneralTile(),
                       _buildAppearanceTile(),
                       _buildPlaybackTile(),
+                      SettingNavigationTile(
+                        focusNode: _focusTracker.get('vision_iptv'),
+                        icon: Symbols.tv_rounded,
+                        title: 'IPTV',
+                        subtitle: 'Lista, guía EPG y reproductor',
+                        onTap: () async {
+                          await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const VisionIptvScreen(settingsOnly: true)));
+                          notifyVisionIptvSettingsChanged();
+                        },
+                      ),
                       if (hasLibraries) _buildManageLibrariesTile(sheetContext),
                       _buildServicesTile(),
                     ],
