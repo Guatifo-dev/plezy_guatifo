@@ -53,6 +53,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
   String? _group;
   String? _error;
   bool _loading = false;
+  bool _useExoPlayer = true;
 
   @override
   void initState() {
@@ -64,6 +65,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     _url.text = prefs.getString('vision_iptv_url') ?? '';
+    setState(() => _useExoPlayer = prefs.getBool('vision_iptv_exo') ?? true);
     if (_url.text.isNotEmpty) await _load();
   }
 
@@ -71,6 +73,23 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
   void focusActiveTabIfReady() => _entry.requestFocus();
   @override
   void manualRefresh() => unawaited(_load());
+
+  Future<void> _selectPlayer() async {
+    final value = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reproductor IPTV'),
+        actions: [
+          TextButton(autofocus: _useExoPlayer, onPressed: () => Navigator.pop(ctx, true), child: const Text('ExoPlayer')),
+          TextButton(autofocus: !_useExoPlayer, onPressed: () => Navigator.pop(ctx, false), child: const Text('MPV')),
+        ],
+      ),
+    );
+    if (!mounted || value == null) return;
+    setState(() => _useExoPlayer = value);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('vision_iptv_exo', value);
+  }
 
   Future<void> _configure() async {
     final controller = TextEditingController(text: _url.text);
@@ -135,6 +154,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
           Wrap(spacing: 12, runSpacing: 8, children: [
             FilledButton(focusNode: _entry, onPressed: _loading ? null : _configure, child: const Text('Configurar lista')),
             OutlinedButton(onPressed: _loading ? null : _load, child: const Text('Actualizar')),
+            OutlinedButton(onPressed: _selectPlayer, child: Text(_useExoPlayer ? 'Motor: ExoPlayer' : 'Motor: MPV')),
             if (context.watch<MultiServerProvider>().hasLiveTv)
               OutlinedButton(onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
                 builder: (_) => const Scaffold(body: LiveTvScreen()))), child: const Text('TV de Plex')),
@@ -163,7 +183,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
                   title: Text(channel.name),
                   subtitle: Text(channel.group),
                   onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                    builder: (_) => _IptvPlayer(channel: channel))),
+                    builder: (_) => _IptvPlayer(channel: channel, useExoPlayer: _useExoPlayer))),
                 );
               },
             )),
@@ -175,7 +195,8 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
 }
 
 class _IptvPlayer extends StatefulWidget {
-  const _IptvPlayer({required this.channel});
+  const _IptvPlayer({required this.channel, required this.useExoPlayer});
+  final bool useExoPlayer;
   final _Channel channel;
   @override
   State<_IptvPlayer> createState() => _IptvPlayerState();
@@ -187,6 +208,8 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   StreamSubscription<void>? _frames;
   bool _failed = false, _ready = false, _showName = true;
   Timer? _timer;
+  String _technical = '';
+  bool _readingStats = false;
   Future<void>? _closing;
 
   @override
@@ -200,19 +223,51 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     try {
       await PlaybackCoordinator.instance.claimVideo();
       if (!mounted || _closing != null) return;
-      final player = Player(useExoPlayer: true);
+      final player = Player(useExoPlayer: widget.useExoPlayer);
       _player = player;
       _errors = player.streams.error.listen((_) {
         if (mounted) setState(() => _failed = true);
       });
       _frames = player.streams.playbackRestart.listen((_) {
-        if (mounted) setState(() { _ready = true; _failed = false; });
+        if (mounted) {
+          setState(() { _ready = true; _failed = false; });
+          unawaited(_readStats());
+        }
       });
       setState(() {});
       await player.open(Media(widget.channel.url), isLive: true);
       if (mounted) _hideLater();
     } catch (_) {
       if (mounted) setState(() => _failed = true);
+    }
+  }
+
+  Future<void> _readStats() async {
+    final player = _player;
+    if (player == null || _readingStats || _closing != null) return;
+    _readingStats = true;
+    try {
+      final engine = await player.runtimePlayerType();
+      final stats = player.providesNativeStats ? await player.getStats() : <String, dynamic>{};
+      Future<String> field(String native, String property) async {
+        final value = stats[native] ?? stats[property] ?? await player.getProperty(property);
+        return value?.toString() ?? '—';
+      }
+      final values = await Future.wait([
+        field('videoWidth', 'video-params/w'),
+        field('videoHeight', 'video-params/h'),
+        field('videoCodec', 'video-codec'),
+        field('videoFps', 'container-fps'),
+        field('audioCodec', 'audio-codec-name'),
+        field('videoDroppedFrames', 'frame-drop-count'),
+      ]);
+      if (mounted && _closing == null && identical(player, _player)) {
+        setState(() => _technical = '${engine.toUpperCase()} · ${values[0]} × ${values[1]} · ${values[2]} · ${values[3]} fps · Audio: ${values[4]} · Frames perdidos: ${values[5]}');
+      }
+    } catch (_) {
+      // Stats are optional and must never interrupt live playback.
+    } finally {
+      _readingStats = false;
     }
   }
 
@@ -257,6 +312,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
       if (event is KeyDownEvent && (event.logicalKey == LogicalKeyboardKey.select ||
           event.logicalKey == LogicalKeyboardKey.enter)) {
         setState(() => _showName = true);
+        unawaited(_readStats());
         _hideLater();
         return KeyEventResult.handled;
       }
@@ -267,7 +323,10 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
       if (_failed) const Center(child: Text('No se pudo reproducir el canal. Pulsa Atrás.')),
       if (_showName) Positioned(left: 24, bottom: 24, child: ColoredBox(
         color: Colors.black87, child: Padding(padding: const EdgeInsets.all(12),
-          child: Text(widget.channel.name, style: const TextStyle(color: Colors.white, fontSize: 22))))),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(widget.channel.name, style: const TextStyle(color: Colors.white, fontSize: 22)),
+            if (_technical.isNotEmpty) Text(_technical, style: const TextStyle(color: Colors.white70, fontSize: 14)),
+          ])))),
     ])),
   );
 }
