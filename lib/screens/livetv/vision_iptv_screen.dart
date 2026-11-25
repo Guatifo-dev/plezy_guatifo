@@ -353,9 +353,11 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
         final format = isDash ? 'DASH' : (forceLiveHls ? 'HLS' : 'Auto');
         debugPrint('[VisionIPTV] Exo format: $format');
       }
+      debugPrint('[VisionDRM] preparing playback');
       final drmType = widget.channel.drmType;
       final license = widget.channel.drmLicense;
       final clearKey = drmType == 'clearkey' || drmType == 'org.w3.clearkey';
+      debugPrint('[VisionDRM] DASH=$isDash DRM recognized=$clearKey license present=${license != null && license.isNotEmpty}');
       if (widget.useExoPlayer && player is PlayerAndroid && (isDash || clearKey)) {
         String? localLicense;
         String? licenseUrl;
@@ -378,14 +380,17 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
             localLicense = jsonEncode({'keys': [{'kty': 'oct', 'kid': encodeHex(pair[0].trim()), 'k': encodeHex(pair[1].trim())}], 'type': 'temporary'});
           }
         }
+        debugPrint('[VisionDRM] invoking native player');
         await player.open(Media(widget.channel.url), isLive: false, dashManifest: true,
           clearKeyLicense: localLicense, clearKeyLicenseUrl: licenseUrl);
       } else {
         await player.open(Media(widget.channel.url), isLive: forceLiveHls);
       }
+      debugPrint('[VisionDRM] open returned');
       debugPrint('[VisionIPTV] open returned: ${_startup.elapsedMilliseconds} ms');
       if (mounted) _hideLater();
-    } catch (_) {
+    } catch (error) {
+      debugPrint('[VisionDRM] playback preparation failed: ${error.runtimeType}');
       unawaited(_wakelock.setEnabled(false));
       if (mounted) setState(() => _failed = true);
     }
