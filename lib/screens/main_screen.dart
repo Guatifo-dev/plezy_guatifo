@@ -1234,7 +1234,7 @@ class _MainScreenState extends State<MainScreen>
         onLibraryOrderChanged: _onLibraryOrderChanged,
         onLibrarySelected: _handleLibrariesScreenSelected,
       ),
-      NavigationTabId.liveTv => VisionIptvScreen(key: _screenKeys[tab]),
+      NavigationTabId.liveTv => VisionIptvScreen(key: _screenKeys[tab], onExit: () { if (mounted && _currentTab == NavigationTabId.liveTv) _selectTab(NavigationTabId.discover); }),
       NavigationTabId.search => SearchScreen(key: _screenKeys[tab]),
       NavigationTabId.downloads => DownloadsScreen(key: _screenKeys[tab]),
       NavigationTabId.settings => SettingsScreen(key: _screenKeys[tab]),
