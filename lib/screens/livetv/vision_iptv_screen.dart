@@ -57,6 +57,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
   bool _useExoPlayer = true;
   bool _tunneling = false;
   String _buffer = 'minimum';
+  bool _forceHls = false;
 
   @override
   void initState() {
@@ -72,6 +73,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
       _useExoPlayer = prefs.getBool('vision_iptv_exo') ?? true;
       _tunneling = prefs.getBool('vision_iptv_tunneling') ?? false;
       _buffer = prefs.getString('vision_iptv_buffer') ?? 'minimum';
+      _forceHls = prefs.getBool('vision_iptv_force_hls') ?? false;
     });
     if (_url.text.isNotEmpty) await _load();
   }
@@ -80,6 +82,12 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
   void focusActiveTabIfReady() => _entry.requestFocus();
   @override
   void manualRefresh() => unawaited(_load());
+
+  Future<void> _toggleFormat() async {
+    setState(() => _forceHls = !_forceHls);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('vision_iptv_force_hls', _forceHls);
+  }
 
   Future<void> _toggleTunneling() async {
     setState(() => _tunneling = !_tunneling);
@@ -188,6 +196,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
             OutlinedButton(onPressed: _loading ? null : _load, child: const Text('Actualizar')),
             OutlinedButton(onPressed: _selectPlayer, child: Text(_useExoPlayer ? 'Motor: ExoPlayer' : 'Motor: MPV')),
             if (!_useExoPlayer) OutlinedButton(onPressed: _selectBuffer, child: Text('Búfer: $_bufferLabel')),
+            if (_useExoPlayer) OutlinedButton(onPressed: _toggleFormat, child: Text(_forceHls ? 'Formato: HLS' : 'Formato: Auto')),
             if (_useExoPlayer) OutlinedButton(onPressed: _toggleTunneling, child: Text(_tunneling ? 'Tunneling: Sí' : 'Tunneling: No')),
             if (context.watch<MultiServerProvider>().hasLiveTv)
               OutlinedButton(onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
@@ -217,7 +226,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
                   title: Text(channel.name),
                   subtitle: Text(channel.group),
                   onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                    builder: (_) => _IptvPlayer(channel: channel, useExoPlayer: _useExoPlayer, tunneling: _tunneling, buffer: _buffer))),
+                    builder: (_) => _IptvPlayer(channel: channel, useExoPlayer: _useExoPlayer, tunneling: _tunneling, buffer: _buffer, forceHls: _forceHls))),
                 );
               },
             )),
@@ -229,7 +238,8 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
 }
 
 class _IptvPlayer extends StatefulWidget {
-  const _IptvPlayer({required this.channel, required this.useExoPlayer, required this.tunneling, required this.buffer});
+  const _IptvPlayer({required this.channel, required this.useExoPlayer, required this.tunneling, required this.buffer, required this.forceHls});
+  final bool forceHls;
   final String buffer;
   final bool tunneling;
   final bool useExoPlayer;
@@ -283,6 +293,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
       try {
         if (widget.useExoPlayer) {
           await player.setProperty('tunneled-playback', widget.tunneling ? 'yes' : 'no');
+          await player.setProperty('hwdec', 'mediacodec,mediacodec-copy');
         } else {
           await player.setProperty('hwdec', 'mediacodec,mediacodec-copy');
           if (widget.buffer != 'normal') {
@@ -306,7 +317,10 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
       }
       if (!mounted || _closing != null) return;
       debugPrint('[VisionIPTV] opening: ${_startup.elapsedMilliseconds} ms');
-      await player.open(Media(widget.channel.url), isLive: true);
+      final path = Uri.parse(widget.channel.url).path.toLowerCase();
+      final forceLiveHls = !widget.useExoPlayer || widget.forceHls || path.endsWith('.m3u8');
+      if (widget.useExoPlayer) debugPrint('[VisionIPTV] Exo format: ${forceLiveHls ? 'HLS' : 'Auto'}');
+      await player.open(Media(widget.channel.url), isLive: forceLiveHls);
       debugPrint('[VisionIPTV] open returned: ${_startup.elapsedMilliseconds} ms');
       if (mounted) _hideLater();
     } catch (_) {
@@ -335,6 +349,9 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
         field('videoDroppedFrames', 'frame-drop-count'),
       ]);
       final decoder = engine.toLowerCase() == 'mpv' ? await field('hwdec-current', 'hwdec-current') : (stats['videoDecoderName']?.toString() ?? '—');
+      if (widget.useExoPlayer) {
+        debugPrint('[VisionIPTV] requested ExoPlayer; actual: $engine; decoder: $decoder; stats engine: ${stats['playerType']}');
+      }
       final tunnel = stats['tunneledPlayback'];
       final tunnelInfo = tunnel is bool ? (tunnel ? ' · Tunneling activo' : ' · Tunneling inactivo') : '';
       if (mounted && _closing == null && identical(player, _player)) {
