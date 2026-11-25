@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:xml/xml.dart';
 import 'package:xml/xml_events.dart';
-import 'package:sqlite3/sqlite3.dart';
+import 'package:sqlite3/sqlite3.dart' show sqlite3, OpenMode;
 import 'package:path_provider/path_provider.dart';
 
 import 'package:flutter/material.dart';
