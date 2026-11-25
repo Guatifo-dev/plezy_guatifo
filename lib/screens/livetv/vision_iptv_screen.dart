@@ -203,7 +203,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
   void _playChannel(_Channel channel, List<_Channel> visible) {
     Navigator.of(context).push(MaterialPageRoute<void>(
       builder: (_) => _IptvPlayer(channel: channel, channels: List.unmodifiable(visible),
-        guide: _guide, useExoPlayer: _useExoPlayer, tunneling: _tunneling,
+        guide: _guide, allChannels: List.unmodifiable(_channels), onFavorite: _toggleFavorite, isFavorite: (c) => _favorites.contains(c.favoriteId), useExoPlayer: _useExoPlayer, tunneling: _tunneling,
         buffer: _buffer, forceHls: _forceHls)));
   }
 
@@ -235,18 +235,13 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
       color: current ? scheme.primary.withAlpha(55) : scheme.surfaceContainerHigh,
       borderRadius: BorderRadius.circular(7),
       clipBehavior: Clip.antiAlias,
-      child: Focus(onKeyEvent: (_, event) {
+      child: Focus(canRequestFocus: false, skipTraversal: true, onKeyEvent: (_, event) {
         if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.contextMenu) {
           onOptions();
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
-      }, child: InkWell(
-        onTap: onTap, onLongPress: onOptions,
-        onFocusChange: (focused) { if (focused) onFocus(); },
-        focusColor: scheme.primary.withAlpha(170),
-        child: Padding(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), child: child),
-      )),
+      }, child: _IptvFocusCell(onTap: onTap, onOptions: onOptions, onFocus: onFocus, child: child)),
     ));
   }
 
@@ -570,7 +565,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
 }
 
 class _IptvPlayer extends StatefulWidget {
-  const _IptvPlayer({required this.channel, required this.channels, required this.guide, required this.useExoPlayer, required this.tunneling, required this.buffer, required this.forceHls});
+  const _IptvPlayer({required this.channel, required this.channels, required this.guide, required this.allChannels, required this.onFavorite, required this.isFavorite, required this.useExoPlayer, required this.tunneling, required this.buffer, required this.forceHls});
   final bool forceHls;
   final String buffer;
   final bool tunneling;
@@ -578,6 +573,9 @@ class _IptvPlayer extends StatefulWidget {
   final _Channel channel;
   final List<_Channel> channels;
   final Map<String, List<_Programme>> guide;
+  final List<_Channel> allChannels;
+  final Future<void> Function(_Channel) onFavorite;
+  final bool Function(_Channel) isFavorite;
   @override
   State<_IptvPlayer> createState() => _IptvPlayerState();
 }
@@ -595,7 +593,56 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   Future<void>? _closing;
   late int _channelIndex;
   late int _highlightIndex;
-  bool _switching = true, _showChannels = false;
+  bool _switching = true, _showChannels = false, _preview = true;
+  final _playerFocus = FocusNode();
+  final _previewScroll = ScrollController();
+  bool _technicalVisible = false;
+  _Programme? get _currentProgramme {
+    final now = DateTime.now();
+    for (final p in widget.guide[_channel.tvgId] ?? const <_Programme>[]) {
+      if (!now.isBefore(p.start) && now.isBefore(p.stop)) return p;
+    }
+    return null;
+  }
+  _Programme? get _nextProgramme {
+    final now = DateTime.now();
+    for (final p in widget.guide[_channel.tvgId] ?? const <_Programme>[]) {
+      if (p.start.isAfter(now)) return p;
+    }
+    return null;
+  }
+  String _clock(DateTime date) {
+    final d = date.toLocal();
+    return '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+  }
+  void _previewMode(bool value) {
+    setState(() { _preview = value; _showChannels = false; _highlightIndex = _channelIndex; _showName = true; });
+    if (value) {
+      _timer?.cancel();
+      _scrollPreview();
+    } else { _hideLater(); }
+    _playerFocus.requestFocus();
+  }
+  void _scrollPreview() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_preview || !_previewScroll.hasClients) return;
+      final p = _previewScroll.position;
+      _previewScroll.jumpTo((_highlightIndex * 54.0 - p.viewportDimension / 2 + 27).clamp(0.0, p.maxScrollExtent).toDouble());
+    });
+  }
+  Future<void> _options() async {
+    final selected = _preview || _showChannels ? widget.channels[_highlightIndex] : _channel;
+    final action = await showDialog<String>(context: context, builder: (ctx) => AlertDialog(
+      title: Text(selected.name), actions: [
+        TextButton(autofocus: true, onPressed: () => Navigator.pop(ctx, 'favorite'), child: Text(widget.isFavorite(selected) ? 'Quitar de favoritos' : 'Añadir a favoritos')),
+        TextButton(onPressed: () => Navigator.pop(ctx, 'technical'), child: const Text('Información técnica')),
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cerrar')),
+      ]));
+    if (!mounted) return;
+    if (action == 'favorite') { await widget.onFavorite(selected); if (mounted) setState(() {}); }
+    if (action == 'technical' && mounted) { await _readStats(); if (mounted) { setState(() { _technicalVisible = true; _showName = true; }); _hideLater(); } }
+    if (mounted) _playerFocus.requestFocus();
+  }
   final _channelScroll = ScrollController();
   _Channel get _channel => widget.channels[_channelIndex];
 
@@ -606,7 +653,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     if (_channelIndex < 0) _channelIndex = 0;
     _highlightIndex = _channelIndex;
     WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_start()));
+    WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) { _scrollPreview(); unawaited(_start()); } });
   }
 
   Future<void> _start() async {
@@ -732,6 +779,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
       _failed = false;
       _showName = true;
       _technical = '';
+      _technicalVisible = false;
     });
     _startup..reset()..start();
     try {
@@ -837,21 +885,126 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
     _channelScroll.dispose();
+    _previewScroll.dispose();
+    _playerFocus.dispose();
     unawaited(_close());
     super.dispose();
   }
 
+  Widget _previewDetails() {
+    final channel = widget.channels[_highlightIndex];
+    final line = _programmeLine(widget.guide, channel);
+    final now = DateTime.now();
+    final entries = widget.guide[channel.tvgId] ?? const <_Programme>[];
+    _Programme? current;
+    for (final p in entries) { if (!now.isBefore(p.start) && now.isBefore(p.stop)) { current = p; break; } }
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(channel.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 23, fontWeight: FontWeight.bold)),
+      if (line.isNotEmpty) Text(line, maxLines: 1, overflow: TextOverflow.ellipsis),
+      if (current != null) Expanded(child: Text(current.description, maxLines: 4, overflow: TextOverflow.ellipsis)),
+      const Text('OK: sintonizar / pantalla completa · MENU: opciones', style: TextStyle(fontSize: 12)),
+    ]);
+  }
+
+  Widget _previewGuide() {
+    final now = DateTime.now();
+    final start = DateTime(now.year, now.month, now.day, now.hour, now.minute < 30 ? 0 : 30);
+    final end = start.add(const Duration(hours: 2));
+    final scheme = Theme.of(context).colorScheme;
+    return LayoutBuilder(builder: (_, constraints) {
+      final width = (constraints.maxWidth - 190).clamp(1.0, 10000.0).toDouble();
+      double x(DateTime d) => (d.difference(start).inSeconds / 7200 * width).clamp(0.0, width).toDouble();
+      return Column(children: [
+        SizedBox(height: 25, child: Row(children: [
+          const SizedBox(width: 190, child: Text('Canales')),
+          for (var i = 0; i < 4; i++) SizedBox(width: width / 4, child: Text(_clock(start.add(Duration(minutes: 30 * i))))),
+        ])),
+        Expanded(child: ListView.builder(controller: _previewScroll, itemExtent: 54,
+          itemCount: widget.channels.length, itemBuilder: (_, i) {
+            final channel = widget.channels[i];
+            final focused = i == _highlightIndex;
+            final programmes = (widget.guide[channel.tvgId] ?? const <_Programme>[]).where((p) => p.start.isBefore(end) && p.stop.isAfter(start));
+            final foreground = focused ? Colors.black : scheme.onSurface;
+            return Row(children: [
+              Container(width: 190, margin: const EdgeInsets.symmetric(vertical: 2), padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(color: focused ? const Color(0xFF90CAF9) : scheme.surfaceContainerHigh, borderRadius: BorderRadius.circular(6)),
+                child: Row(children: [
+                  SizedBox(width: 34, height: 30, child: channel.logo.isEmpty ? Icon(Icons.tv, color: foreground) : Image.network(channel.logo, fit: BoxFit.contain, errorBuilder: (_, _, _) => Icon(Icons.tv, color: foreground))),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(channel.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: foreground))),
+                  if (i == _channelIndex) Icon(Icons.play_arrow, color: foreground, size: 16),
+                  if (widget.isFavorite(channel)) const Icon(Icons.star, color: Colors.amber, size: 15),
+                ])),
+              SizedBox(width: width, child: Stack(fit: StackFit.expand, children: [
+                for (final p in programmes)
+                  if (x(p.stop) - x(p.start) > 3) Positioned(left: x(p.start), width: x(p.stop) - x(p.start), top: 2, bottom: 2,
+                    child: Container(margin: const EdgeInsets.symmetric(horizontal: 2), padding: const EdgeInsets.all(5),
+                      decoration: BoxDecoration(color: focused ? const Color(0xFF90CAF9) : scheme.surfaceContainerHigh, borderRadius: BorderRadius.circular(6)),
+                      child: Align(alignment: Alignment.centerLeft, child: Text(p.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: foreground, fontSize: 12))))),
+                Positioned(left: x(now), top: 0, bottom: 0, child: Container(width: 2, color: Colors.orange)),
+              ])),
+            ]);
+          })),
+      ]);
+    });
+  }
+
+  Widget _infoBanner() {
+    final current = _currentProgramme, next = _nextProgramme;
+    final now = DateTime.now();
+    final progress = current == null ? 0.0 : (now.difference(current.start).inSeconds / current.stop.difference(current.start).inSeconds.clamp(1, 9999999)).clamp(0.0, 1.0).toDouble();
+    final number = widget.allChannels.indexOf(_channel) + 1;
+    return Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: const Color(0xED10151D), borderRadius: BorderRadius.circular(14)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+      Row(children: [
+        SizedBox(width: 58, height: 48, child: _channel.logo.isEmpty ? const Icon(Icons.tv, color: Colors.white) : Image.network(_channel.logo, fit: BoxFit.contain, errorBuilder: (_, _, _) => const Icon(Icons.tv, color: Colors.white))),
+        const SizedBox(width: 12),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('${number.toString().padLeft(3, '0')} · ${_channel.name}', style: const TextStyle(color: Colors.white, fontSize: 18)),
+          if (current != null) Text(current.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 23, fontWeight: FontWeight.bold)),
+        ])),
+        if (widget.isFavorite(_channel)) const Icon(Icons.star, color: Colors.amber),
+        const SizedBox(width: 12),
+        Text(_clock(now), style: const TextStyle(color: Colors.white, fontSize: 20)),
+      ]),
+      if (current != null) ...[
+        const SizedBox(height: 8),
+        Row(children: [Text(_clock(current.start), style: const TextStyle(color: Colors.white70)), const Spacer(), Text(_clock(current.stop), style: const TextStyle(color: Colors.white70))]),
+        LinearProgressIndicator(value: progress, color: Colors.orange, backgroundColor: Colors.white24),
+      ],
+      if (next != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text('A continuación · ${_clock(next.start)} · ${next.title}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70))),
+      if (_technicalVisible && _technical.isNotEmpty) Text(_technical, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+    ]));
+  }
+
   @override
   Widget build(BuildContext context) => PopScope(
-    canPop: !_showChannels,
+    canPop: _preview && !_showChannels,
     onPopInvokedWithResult: (didPop, _) {
-      if (!didPop && _showChannels) _toggleChannels();
+      if (!didPop && _showChannels) { _toggleChannels(); }
+      else if (!didPop && !_preview) { _previewMode(true); }
     },
     child: Scaffold(
       backgroundColor: Colors.transparent,
-      body: Focus(autofocus: true, onKeyEvent: (_, event) {
+      body: Focus(focusNode: _playerFocus, autofocus: true, onKeyEvent: (_, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
         final key = event.logicalKey;
+        if (key == LogicalKeyboardKey.contextMenu) { unawaited(_options()); return KeyEventResult.handled; }
+        if (_preview) {
+          if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown) {
+            setState(() => _highlightIndex = (_highlightIndex + (key == LogicalKeyboardKey.arrowDown ? 1 : -1)).clamp(0, widget.channels.length - 1).toInt());
+            _scrollPreview();
+            return KeyEventResult.handled;
+          }
+          if (key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter) {
+            if (_highlightIndex == _channelIndex && !_failed) { _previewMode(false); }
+            else { unawaited(_switchChannel(_highlightIndex)); }
+            return KeyEventResult.handled;
+          }
+          if (key == LogicalKeyboardKey.arrowRight) { _previewMode(false); return KeyEventResult.handled; }
+          if (key == LogicalKeyboardKey.arrowLeft) return KeyEventResult.handled;
+          return KeyEventResult.ignored;
+        }
+        if (key == LogicalKeyboardKey.arrowLeft) { _previewMode(true); return KeyEventResult.handled; }
         if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown) {
           final delta = key == LogicalKeyboardKey.arrowUp ? 1 : -1;
           if (_showChannels) {
@@ -887,16 +1040,24 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
         }
         return KeyEventResult.ignored;
       }, child: Stack(fit: StackFit.expand, children: [
-        if (_player != null) Video(player: _player!),
-        if (!_ready && !_failed) const Center(child: CircularProgressIndicator()),
-        if (_failed) const Center(child: Text('No se pudo reproducir el canal. Cambia de canal o pulsa Atrás.')),
-        if (_showName && !_showChannels) Positioned(left: 24, bottom: 24, child: ColoredBox(
-          color: Colors.black87, child: Padding(padding: const EdgeInsets.all(12),
-            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(_channel.name, style: const TextStyle(color: Colors.white, fontSize: 22)),
-              if (_programmeLine(widget.guide, _channel).isNotEmpty) Text(_programmeLine(widget.guide, _channel), style: const TextStyle(color: Colors.white70, fontSize: 16)),
-              if (_technical.isNotEmpty) Text(_technical, style: const TextStyle(color: Colors.white70, fontSize: 14)),
-            ])))),
+        if (_preview) Positioned.fill(child: ColoredBox(color: Theme.of(context).colorScheme.surface)),
+        if (_preview) Positioned(left: 20, right: 340, top: 20, height: 150, child: _previewDetails()),
+        if (_preview) Positioned(left: 20, right: 20, top: 184, bottom: 20, child: _previewGuide()),
+        if (_player != null) Positioned(
+          key: const ValueKey('vision-iptv-video'),
+          top: _preview ? 16 : 0, right: _preview ? 20 : 0,
+          left: _preview ? null : 0, bottom: _preview ? null : 0,
+          width: _preview ? 288 : null, height: _preview ? 162 : null,
+          child: Video(player: _player!)),
+        if (!_ready && !_failed) Positioned(
+          top: _preview ? 70 : 0, right: _preview ? 130 : 0,
+          left: _preview ? null : 0, bottom: _preview ? null : 0,
+          child: const Center(child: CircularProgressIndicator())),
+        if (_failed) Positioned(top: _preview ? 70 : 0, right: _preview ? 20 : 0,
+          left: _preview ? null : 0, bottom: _preview ? null : 0,
+          child: const Center(child: Text('No se pudo reproducir el canal.'))),
+        if (!_preview && _showName && !_showChannels) Positioned(left: 24, right: 24, bottom: 24, child: _infoBanner()),
+        if (_preview && _technicalVisible && _showName) Positioned(left: 20, bottom: 20, right: 20, child: ColoredBox(color: Colors.black87, child: Padding(padding: const EdgeInsets.all(12), child: Text(_technical, style: const TextStyle(color: Colors.white))))),
         if (_showChannels) Align(alignment: Alignment.centerLeft, child: SizedBox(
           width: 340,
           child: ColoredBox(color: const Color(0xEB000000),
@@ -931,5 +1092,31 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
         )),
       ])),
     ),
+  );
+}
+
+class _IptvFocusCell extends StatefulWidget {
+  const _IptvFocusCell({required this.onTap, required this.onOptions, required this.onFocus, required this.child});
+  final VoidCallback onTap, onOptions, onFocus;
+  final Widget child;
+  @override
+  State<_IptvFocusCell> createState() => _IptvFocusCellState();
+}
+class _IptvFocusCellState extends State<_IptvFocusCell> {
+  bool _focused = false;
+  @override
+  Widget build(BuildContext context) => InkWell(
+    onTap: widget.onTap, onLongPress: widget.onOptions,
+    onFocusChange: (value) {
+      if (!mounted) return;
+      setState(() => _focused = value);
+      if (value) {
+        WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted && _focused) { widget.onFocus(); Scrollable.ensureVisible(context, duration: Duration.zero); } });
+      }
+    },
+    focusColor: Colors.transparent,
+    child: ColoredBox(color: _focused ? const Color(0xFF90CAF9) : Colors.transparent,
+      child: DefaultTextStyle.merge(style: TextStyle(color: _focused ? Colors.black : Theme.of(context).colorScheme.onSurface),
+        child: Padding(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), child: widget.child))),
   );
 }
