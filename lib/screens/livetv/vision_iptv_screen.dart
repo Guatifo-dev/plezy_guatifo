@@ -24,13 +24,64 @@ import 'live_tv_screen.dart';
 import '../video_player/wakelock_controller.dart';
 
 class _Channel {
-  const _Channel(this.name, this.group, this.url, this.logo, {this.drmType, this.drmLicense, this.manifestType, this.tvgId = '', this.source = '', this.sourceName = '', this.epgSource = ''});
+  _Channel(this.name, this.group, this.url, this.logo, {this.drmType, this.drmLicense, this.manifestType, this.tvgId = '', this.source = '', this.sourceName = '', this.epgSource = ''});
   final String name, group, url, logo;
   final String? drmType, drmLicense, manifestType;
   final String tvgId, source, sourceName, epgSource;
-  String get legacyId => jsonEncode([group, name, tvgId]);
-  String get favoriteId => jsonEncode([source, group, name, tvgId]);
+  late final String legacyId = jsonEncode([group, name, tvgId]);
+  late final String favoriteId = jsonEncode([source, group, name, tvgId]);
   _Channel withSource(String id, String label, String epg) => _Channel(name, group, url, logo, drmType: drmType, drmLicense: drmLicense, manifestType: manifestType, tvgId: tvgId, source: id, sourceName: label, epgSource: epg);
+}
+
+Future<void> _writePlaylistSnapshot((String, List<_Channel>, String, int) input) async {
+  final db = sqlite3.open(input.$1);
+  try {
+    db.execute('CREATE TABLE metadata(epg TEXT, vod INTEGER)');
+    db.execute('CREATE TABLE channels(name TEXT, grp TEXT, url TEXT, logo TEXT, drm TEXT, license TEXT, manifest TEXT, tvg TEXT)');
+    db.execute('INSERT INTO metadata VALUES (?,?)', [input.$3,input.$4]);
+    final insert = db.prepare('INSERT INTO channels VALUES (?,?,?,?,?,?,?,?)');
+    try {
+      db.execute('BEGIN');
+      for (final c in input.$2) { insert.execute([c.name,c.group,c.url,c.logo,c.drmType,c.drmLicense,c.manifestType,c.tvgId]); }
+      db.execute('COMMIT');
+      db.execute('CREATE INDEX channel_group ON channels(grp)');
+    } finally { insert.dispose(); }
+  } finally { db.dispose(); }
+}
+
+class _PlaylistSnapshot {
+  _PlaylistSnapshot(this.channels,this.epg,this.vod,this.total,this.groups);
+  final List<_Channel> channels;
+  final String epg;
+  final int vod,total;
+  final List<String> groups;
+}
+_PlaylistSnapshot _readPlaylistSnapshot((String,String,Set<String>,Set<String>) input) {
+  final db = sqlite3.open(input.$1, mode: OpenMode.readOnly);
+  try {
+    final meta = db.select('SELECT epg,vod FROM metadata').first;
+    final groups = [for (final row in db.select('SELECT DISTINCT grp FROM channels ORDER BY grp COLLATE NOCASE')) row['grp'] as String];
+    final total = db.select('SELECT COUNT(*) AS n FROM channels').first['n'] as int;
+    final channels = <(int,_Channel)>[];
+    final query = db.prepare('SELECT rowid AS seq,* FROM channels WHERE grp=? ORDER BY rowid');
+    try {
+      for (final group in groups) {
+        // Hidden groups are not loaded at all, except previously favourited channels.
+        if (input.$3.contains(group) && input.$4.isEmpty) continue;
+        for (final row in query.select([group])) {
+          if (input.$3.contains(group) && !input.$4.contains(jsonEncode([input.$2,group,row['name'],row['tvg']]))) continue;
+          channels.add((row['seq'] as int,_Channel(row['name'] as String,group,row['url'] as String,row['logo'] as String,
+            drmType: row['drm'] as String?,drmLicense: row['license'] as String?,manifestType: row['manifest'] as String?,tvgId: row['tvg'] as String)));
+        }
+      }
+    } finally { query.dispose(); }
+    if (channels.isEmpty && total > 0) {
+      final row = db.select('SELECT rowid AS seq,* FROM channels ORDER BY rowid LIMIT 1').first;
+      channels.add((row['seq'] as int,_Channel(row['name'] as String,row['grp'] as String,row['url'] as String,row['logo'] as String,drmType: row['drm'] as String?,drmLicense: row['license'] as String?,manifestType: row['manifest'] as String?,tvgId: row['tvg'] as String)));
+    }
+    channels.sort((a,b) => a.$1.compareTo(b.$1));
+    return _PlaylistSnapshot(channels.map((c) => c.$2).toList(),meta['epg'] as String,meta['vod'] as int,total,groups);
+  } finally { db.dispose(); }
 }
 
 Future<(List<_Channel>, String, int)> _decodePlaylist((String, String, bool) input) async {
@@ -172,11 +223,11 @@ Future<int> _indexGuide((String, String) input) async {
   } finally { db.dispose(); }
 }
 
-_GuideData _readIndexedGuide((String, List<String>) input) {
+_GuideData _readIndexedGuide((String, List<String>, bool) input) {
   final db = sqlite3.open(input.$1, mode: OpenMode.readOnly);
   try {
-    final names = <String, String>{for (final row in db.select('SELECT id,name FROM channels ORDER BY name COLLATE NOCASE')) row['id'] as String: row['name'] as String};
-    final logos = <String, String>{for (final row in db.select("SELECT id,logo FROM channels WHERE logo <> ''")) row['id'] as String: row['logo'] as String};
+    final names = <String, String>{if (input.$3) for (final row in db.select('SELECT id,name FROM channels ORDER BY name COLLATE NOCASE')) row['id'] as String: row['name'] as String};
+    final logos = <String, String>{if (input.$3) for (final row in db.select("SELECT id,logo FROM channels WHERE logo <> ''")) row['id'] as String: row['logo'] as String};
     final result = <String, List<_Programme>>{};
     final query = db.prepare('SELECT start,stop,title,description,poster FROM programmes WHERE channel=? ORDER BY start');
     try {
@@ -305,13 +356,13 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
   List<Map<String, String>> _lists = [];
   final Map<String, String> _guidePaths = {};
   final _listStatuses = ValueNotifier<Map<String,_ListStatus>>({});
-  final Map<String, (List<_Channel>, String, int)> _playlistCache = {};
+  final Map<String,List<String>> _playlistGroups = {};
   Map<String,Set<String>> _hiddenBySource = {};
   bool _hidden(_Channel c) => _hiddenBySource[c.source]?.contains(c.group) ?? false;
   void _setListStatus(String id, _ListStatus status) {
     if (mounted) _listStatuses.value = {..._listStatuses.value, id: status};
   }
-  List<String> _listGroups(Map<String,String> list) => (_playlistCache[_playlistKey(list)]?.$1.map((c) => c.group).toSet().toList() ?? <String>[])..sort((a,b) => a.toLowerCase().compareTo(b.toLowerCase()));
+  List<String> _listGroups(Map<String,String> list) => _playlistGroups[_playlistKey(list)] ?? const <String>[];
   final Map<String, Map<String, String>> _epgCatalogues = {};
   String get _listSignature => jsonEncode([_epgUrl, _lists.where((v) => v['active'] == 'true').toList()]);
   String _rawEpgId(_Channel c) => _epgOverrides[c.favoriteId] ?? c.tvgId;
@@ -366,7 +417,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
     });
     _restoring = false;
     if (!widget.settingsOnly) {
-      if (_loadedPlaylist != _listSignature || _channels.isEmpty) { await _load(); }
+      if (_loadedPlaylist != _listSignature || _channels.isEmpty) { await _load(reuse: true); }
       else { await _loadGuide(); }
     }
   }
@@ -403,7 +454,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
           custom: custom, customKey: _customKey, epgLogos: () => _epgLogos, logoSource: prefs.getString('vision_iptv_logo_source') ?? 'epg', passthrough: _passthrough, afr: _afr,
           onFavorite: _toggleFavorite, isFavorite: (c) => _favorites.contains(c.favoriteId), onFullscreen: (c) async { _lastChannel = c.favoriteId; final prefs = await SharedPreferences.getInstance(); await prefs.setString('vision_iptv_last_fullscreen', c.favoriteId); },
           recent: () => List.unmodifiable(_recent), onTuned: (c) async { _recent = [c.favoriteId, ..._recent.where((id) => id != c.favoriteId)].take(30).toList(); final prefs = await SharedPreferences.getInstance(); await prefs.setStringList('vision_iptv_recent', _recent); },
-          onRefreshGuide: () => _loadGuide(force: true), guideStatus: () => _epgStatus,
+          onRefreshGuide: () => _loadGuide(force: true), guideStatus: () => _epgStatus, onGuidePage: _requestGuidePage,
           bannerSeconds: _bannerSeconds, epgNames: (c) => _epgCatalogues[c.epgSource] ?? {}, rawEpgId: _rawEpgId, epgId: _resolvedEpgId,
           onAssignEpg: (c, id) async { if (id == null) { _epgOverrides.remove(c.favoriteId); } else { _epgOverrides[c.favoriteId] = id; } final prefs = await SharedPreferences.getInstance(); await prefs.setString('vision_iptv_epg_overrides', jsonEncode(_epgOverrides)); await _reloadIndexedGuide(); },
           useExoPlayer: _useExoPlayer, tunneling: _tunneling, buffer: _buffer, forceHls: _forceHls)));
@@ -417,6 +468,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
   List<_Channel> _orderedChannels(Map<String,dynamic> custom) {
       final ordered = List<_Channel>.of(_channels);
       final order = (custom['order'] as List?)?.whereType<String>().toList() ?? <String>[];
+      if (order.isEmpty) return ordered;
       final rank = {for (var i = 0; i < order.length; i++) order[i]: i};
       final original = {for (var i = 0; i < ordered.length; i++) ordered[i]: i};
       ordered.sort((a,b) => (rank[a.favoriteId] ?? order.length + original[a]!).compareTo(rank[b.favoriteId] ?? order.length + original[b]!));
@@ -460,30 +512,58 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
     await prefs.setString('vision_iptv_default_epg', _epgUrl);
   }
 
+  List<_Channel> _requestedGuideChannels = [];
+  bool _readingGuidePage = false, _guidePagePending = false;
+  int _guidePageVersion = 0;
+  Future<void> _requestGuidePage(List<_Channel> channels) async {
+    _requestedGuideChannels = channels.take(32).toList();
+    _guidePageVersion++;
+    _guidePagePending = true;
+    if (_readingGuidePage) return;
+    _readingGuidePage = true;
+    try {
+      while (mounted && _guidePagePending) {
+        _guidePagePending = false;
+        final generation = _guideGeneration, version = _guidePageVersion;
+        final bySource = <String,Set<String>>{};
+        for (final c in _requestedGuideChannels) {
+          if (c.epgSource.isNotEmpty) (bySource[c.epgSource] ??= {}).add(_rawEpgId(c));
+        }
+        final programmes = <String,List<_Programme>>{};
+        for (final entry in bySource.entries) {
+          final path = _guidePaths[entry.key];
+          if (path == null) continue;
+          try {
+            final data = await compute(_readIndexedGuide,(path,entry.value.toList(),false));
+            for (final p in data.programmes.entries) programmes[_epgKey(entry.key,p.key)] = p.value;
+          } catch (_) {}
+          if (!mounted || generation != _guideGeneration || version != _guidePageVersion) break;
+        }
+        if (!mounted) return;
+        if (generation == _guideGeneration && version == _guidePageVersion) {
+          _guide = programmes;
+          _guideNotifier.value = programmes;
+        }
+      }
+    } finally { _readingGuidePage = false; }
+  }
+
   Future<void> _reloadIndexedGuide() async {
     if (!mounted) return;
     final generation = ++_guideGeneration;
-    final programmes = <String, List<_Programme>>{};
-    final logos = <String, String>{};
-    final catalogues = <String, Map<String, String>>{};
-    final bySource = <String, Set<String>>{};
-    for (final c in _channels) {
-      if (c.epgSource.isNotEmpty && (!_hidden(c) || _favorites.contains(c.favoriteId))) (bySource[c.epgSource] ??= {}).add(_rawEpgId(c));
-    }
-    for (final entry in bySource.entries) {
-      final path = _guidePaths[entry.key];
-      if (path == null) continue;
+    final logos = <String,String>{};
+    final catalogues = <String,Map<String,String>>{};
+    for (final entry in _guidePaths.entries.toList()) {
       try {
-        final data = await compute(_readIndexedGuide, (path, entry.value.toList()));
+        final data = await compute(_readIndexedGuide,(entry.value,<String>[],true));
         if (!mounted || generation != _guideGeneration) return;
         catalogues[entry.key] = data.names;
-        for (final p in data.programmes.entries) { programmes[_epgKey(entry.key, p.key)] = p.value; }
-        for (final l in data.logos.entries) { logos[_epgKey(entry.key, l.key)] = l.value; }
+        for (final l in data.logos.entries) logos[_epgKey(entry.key,l.key)] = l.value;
       } catch (_) {}
     }
     if (!mounted || generation != _guideGeneration) return;
-    setState(() { _guide = programmes; _epgLogos = logos; _epgCatalogues..clear()..addAll(catalogues); });
-    _guideNotifier.value = programmes;
+    _epgLogos = logos; _epgCatalogues..clear()..addAll(catalogues);
+    await _requestGuidePage(_requestedGuideChannels);
   }
 
   Future<void> _loadGuide({bool force = false}) async {
@@ -496,6 +576,11 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
     try {
       final dir = await getApplicationCacheDirectory();
       final prefs = await SharedPreferences.getInstance();
+      for (final url in sources) {
+        final cache = File('${dir.path}/vision_epg_${_sourceId(url)}.sqlite');
+        if (await cache.exists()) _guidePaths[url] = cache.path;
+      }
+      if (mounted && signature == _loadedPlaylist && _guidePaths.isNotEmpty) await _reloadIndexedGuide();
       for (final url in sources) {
         if (!mounted || signature != _loadedPlaylist) return;
         final uri = Uri.tryParse(url);
@@ -650,10 +735,24 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
           failures++; _setListStatus(id, const _ListStatus('Error', detail: 'URL no válida')); continue;
         }
         final key = _playlistKey(list);
-        final previous = _playlistCache[key];
-        final lastUpdated = _listStatuses.value[id]?.updated;
-        (List<_Channel>, String, int)? decoded = reuse && !refreshIds.contains(id) ? previous : null;
-        if (decoded == null) {
+        final dir = await getApplicationSupportDirectory();
+        final disk = File('${dir.path}/vision_playlist_$key.sqlite');
+        final pending = File('${disk.path}.tmp');
+        final hiddenGroups = hidden[id] ?? <String>{};
+        final savedFavorites = _favorites.where((fav) {
+          try { return (jsonDecode(fav) as List).first == id; } catch (_) { return false; }
+        }).toSet();
+        _PlaylistSnapshot? data;
+        DateTime? updated;
+        bool downloadFailed = false;
+        if (reuse && !refreshIds.contains(id) && await disk.exists()) {
+          try {
+            _setListStatus(id, const _ListStatus('Leyendo caché…'));
+            data = await compute(_readPlaylistSnapshot,(disk.path,id,hiddenGroups,savedFavorites));
+            updated = await disk.lastModified();
+          } catch (_) { try { await disk.delete(); } catch (_) {} }
+        }
+        if (data == null) {
           final client = http.Client();
           File? temp;
           try {
@@ -662,8 +761,8 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
             if (_isXtream(list)) {
               parsed = await _fetchXtream(client, uri, list, () => _setListStatus(id, const _ListStatus('Procesando…')));
             } else {
-              final dir = await getApplicationCacheDirectory();
-              final file = File('${dir.path}/vision_m3u_$key.tmp');
+              final cacheDir = await getApplicationCacheDirectory();
+              final file = File('${cacheDir.path}/vision_m3u_$key.tmp');
               temp = file;
               final response = await client.send(http.Request('GET', uri)).timeout(const Duration(seconds: 120));
               if (response.statusCode != 200) throw _PlaylistHttpError(response.statusCode);
@@ -672,27 +771,29 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
               parsed = await compute(_decodePlaylist, (file.path, uri.toString(), _excludeVod(list)));
             }
             if (parsed.$1.isEmpty) throw const FormatException('Sin canales en directo');
-            decoded = parsed;
-            _playlistCache[key] = parsed;
+            if (await pending.exists()) await pending.delete();
+            await compute(_writePlaylistSnapshot,(pending.path,parsed.$1,parsed.$2,parsed.$3));
+            await pending.rename(disk.path);
+            data = await compute(_readPlaylistSnapshot,(disk.path,id,hiddenGroups,savedFavorites));
+            updated = await disk.lastModified();
           } catch (e) {
-            failures++;
+            failures++; downloadFailed = true;
             final reason = e is TimeoutException ? 'Tiempo de descarga agotado' : e is _PlaylistHttpError ? 'HTTP ${e.status}' : e is _XtreamError ? e.message : e is FormatException ? 'Respuesta no válida o sin canales en directo' : 'Fallo de red o lectura (${e.runtimeType})';
-            debugPrint('[VisionIPTV] M3U error: $reason');
-            _setListStatus(id, _ListStatus('Error', detail: previous == null ? reason : '$reason · conservando copia anterior', channels: previous?.$1.length ?? 0, groups: previous?.$1.map((c) => c.group).toSet().length ?? 0, vod: previous?.$3 ?? 0, updated: lastUpdated));
-            decoded = previous;
+            debugPrint('[VisionIPTV] playlist error: $reason');
+            if (await disk.exists()) {
+              try { data = await compute(_readPlaylistSnapshot,(disk.path,id,hiddenGroups,savedFavorites)); updated = await disk.lastModified(); } catch (_) {}
+            }
+            _setListStatus(id, _ListStatus('Error', detail: data == null ? reason : '$reason · conservando copia anterior', channels: data?.total ?? 0, groups: data?.groups.length ?? 0, vod: data?.vod ?? 0, updated: updated));
           } finally {
             client.close();
             if (temp != null) { try { if (await temp.exists()) await temp.delete(); } catch (_) {} }
+            try { if (await pending.exists()) await pending.delete(); } catch (_) {}
           }
         }
-        final data = decoded;
         if (data == null) continue;
-        final (items, autoEpg, vodCount) = data;
-        if (_listStatuses.value[id]?.state != 'Error') {
-          _setListStatus(id, _ListStatus('Cargada', channels: items.length, groups: items.map((c) => c.group).toSet().length, vod: vodCount, updated: identical(data, previous) ? lastUpdated : DateTime.now()));
-        } else if (identical(data, previous) && reuse && !refreshIds.contains(id)) {
-          failures++;
-        }
+        _playlistGroups[key] = data.groups;
+        final items = data.channels, autoEpg = data.epg;
+        if (!downloadFailed) _setListStatus(id, _ListStatus('Cargada', channels: data.total, groups: data.groups.length, vod: data.vod, updated: updated));
         final customEpg = list['epg'] ?? '';
         final epg = customEpg.isNotEmpty ? customEpg : _epgUrl.isNotEmpty ? _epgUrl : autoEpg;
         channels.addAll(items.map((c) => c.withSource(id, list['name'] ?? 'Lista IPTV', epg)));
@@ -706,8 +807,9 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
       _loadedPlaylist = signature; _guideGeneration++;
       final sources = channels.map((c) => c.epgSource).toSet();
       _guidePaths.removeWhere((k,v) => !sources.contains(k));
-      _playlistCache.removeWhere((k,v) => !active.any((l) => _playlistKey(l) == k));
-      await _reloadIndexedGuide();
+      _playlistGroups.removeWhere((k,v) => !active.any((l) => _playlistKey(l) == k));
+      _guide = {}; _guideNotifier.value = {};
+      _epgCatalogues.clear(); _epgLogos = {};
       if (_openWhenLoaded) WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted && _openWhenLoaded) unawaited(_openUnifiedGuide()); });
       unawaited(_loadGuide());
     } catch (_) {
@@ -805,7 +907,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
 }
 
 class _IptvPlayer extends StatefulWidget {
-  const _IptvPlayer({required this.startFullscreen, required this.favoriteOrder, required this.onFavoriteOrder, required this.onReloadLists, required this.listStatuses, required this.listGroups, required this.isHidden, required this.listError, required this.onFullscreen, required this.bannerSeconds, required this.epgNames, required this.rawEpgId, required this.epgId, required this.onAssignEpg, required this.recent, required this.onTuned, required this.onRefreshGuide, required this.guideStatus, required this.channel, required this.channels, required this.guide, required this.guideSource, required this.allChannels, required this.onFavorite, required this.isFavorite, required this.useExoPlayer, required this.tunneling, required this.buffer, required this.forceHls, required this.custom, required this.customKey, required this.epgLogos, required this.logoSource, required this.passthrough, required this.afr});
+  const _IptvPlayer({required this.startFullscreen, required this.favoriteOrder, required this.onFavoriteOrder, required this.onReloadLists, required this.listStatuses, required this.listGroups, required this.isHidden, required this.listError, required this.onFullscreen, required this.bannerSeconds, required this.epgNames, required this.rawEpgId, required this.epgId, required this.onAssignEpg, required this.recent, required this.onTuned, required this.onRefreshGuide, required this.onGuidePage, required this.guideStatus, required this.channel, required this.channels, required this.guide, required this.guideSource, required this.allChannels, required this.onFavorite, required this.isFavorite, required this.useExoPlayer, required this.tunneling, required this.buffer, required this.forceHls, required this.custom, required this.customKey, required this.epgLogos, required this.logoSource, required this.passthrough, required this.afr});
   final Map<String, dynamic> custom;
   final String customKey, logoSource;
   final Map<String, String> Function() epgLogos;
@@ -827,6 +929,7 @@ class _IptvPlayer extends StatefulWidget {
   final List<String> Function() recent;
   final Future<void> Function(_Channel) onTuned;
   final Future<void> Function() onRefreshGuide;
+  final Future<void> Function(List<_Channel>) onGuidePage;
   final String Function() guideStatus;
   final bool forceHls;
   final String buffer;
@@ -990,12 +1093,34 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     _guideAnchor = !now.isBefore(target.start) && now.isBefore(target.stop) ? null : target.start;
   }
   Map<String, List<_Programme>> get _guide => widget.guideSource.value;
-  late Map<String, String> _sourceLabels = {for (final c in widget.channels) c.source: c.sourceName};
-  late Map<String, List<String>> _sourceGroups = {
-    for (final id in _sourceLabels.keys) id: widget.channels.where((c) => c.source == id && !widget.isHidden(c)).map((c) => c.group).toSet().toList(),
-  };
+  Map<String,String> _sourceLabels = {};
+  Map<String,List<String>> _sourceGroups = {};
+  Map<String,List<int>> _groupRows = {};
+  Map<String,int> _channelIndices = {};
+  List<String>? _groupTree;
+  void _rebuildChannelIndices() {
+    final labels = <String,String>{};
+    final groups = <String,Set<String>>{};
+    final rows = <String,List<int>>{'Todos': []};
+    final indices = <String,int>{};
+    for (var i = 0; i < widget.channels.length; i++) {
+      final c = widget.channels[i];
+      indices[c.favoriteId] = i;
+      labels[c.source] = c.sourceName;
+      groups.putIfAbsent(c.source, () => <String>{});
+      if (widget.isHidden(c)) continue;
+      groups[c.source]!.add(c.group);
+      rows['Todos']!.add(i);
+      for (final key in [_groupKey(c.source,null),_groupKey(c.source,''),_groupKey(c.source,c.group)].toSet()) {
+        (rows[key] ??= <int>[]).add(i);
+      }
+    }
+    _sourceLabels = labels;
+    _sourceGroups = {for (final e in groups.entries) e.key:e.value.toList()};
+    _groupRows = rows; _channelIndices = indices; _groupTree = null;
+  }
   late final Set<String> _expandedSources = ((widget.custom['expanded'] as List?)?.whereType<String>() ?? _sourceLabels.keys.take(1)).toSet();
-  List<String> get _groups => ['Todos', 'Favoritos', for (final source in _sourceLabels.keys) ...[
+  List<String> get _groups => _groupTree ??= ['Todos', 'Favoritos', for (final source in _sourceLabels.keys) ...[
     _groupKey(source, null), if (_expandedSources.contains(source)) ...[_groupKey(source, ''), for (final group in _sourceGroups[source]!) _groupKey(source, group)]
   ]];
   String _groupKey(String source, String? group) => jsonEncode([source, group]);
@@ -1008,14 +1133,9 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   String get _selectedGroup => _groups[_groupIndex.clamp(0, _groups.length - 1).toInt()];
   List<int> get _visibleIndices {
     if (_recentOnly || _selectedGroup == 'Favoritos') {
-      final indices = {for (var i = 0; i < widget.channels.length; i++) widget.channels[i].favoriteId: i};
-      return [for (final id in (_recentOnly ? widget.recent() : widget.favoriteOrder())) if (indices.containsKey(id) && (!_recentOnly || !widget.isHidden(widget.channels[indices[id]!]) || widget.isFavorite(widget.channels[indices[id]!])) ) indices[id]!];
+      return [for (final id in (_recentOnly ? widget.recent() : widget.favoriteOrder())) if (_channelIndices.containsKey(id) && (!_recentOnly || !widget.isHidden(widget.channels[_channelIndices[id]!]) || widget.isFavorite(widget.channels[_channelIndices[id]!])) ) _channelIndices[id]!];
     }
-    final key = _selectedGroup;
-    final parts = _groupParts(key);
-    return [for (var i = 0; i < widget.channels.length; i++)
-      if (!widget.isHidden(widget.channels[i]) && (key == 'Todos' ||
-        (parts != null && widget.channels[i].source == parts[0] && (parts[1] == null || parts[1] == '' || widget.channels[i].group == parts[1])))) i];
+    return _groupRows[_selectedGroup] ?? const <int>[];
   }
   bool _toggleGroupHeader() {
     final p = _groupParts(_selectedGroup);
@@ -1025,6 +1145,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     setState(() {
       if (!_expandedSources.remove(id)) _expandedSources.add(id);
       widget.custom['expanded'] = _expandedSources.toList();
+      _groupTree = null;
       _groupIndex = _groups.indexOf(key);
     });
     unawaited(_saveCustom());
@@ -1126,8 +1247,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
       final selectedIndex = next.indexWhere((c) => c.favoriteId == selected.favoriteId);
       setState(() {
         widget.channels..clear()..addAll(next);
-        _sourceLabels = {for (final c in next) c.source: c.sourceName};
-        _sourceGroups = {for (final id in _sourceLabels.keys) id: next.where((c) => c.source == id && !widget.isHidden(c)).map((c) => c.group).toSet().toList()};
+        _rebuildChannelIndices();
         _groupIndex = _groups.indexOf(group);
         if (_groupIndex < 0) _groupIndex = 0;
         _channelIndex = playingIndex >= 0 ? playingIndex : firstVisible >= 0 ? firstVisible : retainedIndex >= 0 ? retainedIndex : 0;
@@ -1537,7 +1657,34 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     final start = _windowStart, end = start.add(const Duration(hours: 2));
     return (_guide[widget.epgId(widget.channels[index])] ?? const <_Programme>[]).where((p) => p.start.isBefore(end) && p.stop.isAfter(start)).toList();
   }
-  void _guideChanged() { if (mounted) setState(() { if (_preview && _programmeIndex < 0 && !_groupFocus) _stepProgramme(0); }); }
+  Timer? _guidePageTimer;
+  void _scheduleGuidePage() {
+    _guidePageTimer?.cancel();
+    _guidePageTimer = Timer(const Duration(milliseconds: 120), () {
+      if (!mounted || _exiting) return;
+      final rows = _visibleIndices;
+      final pos = rows.indexOf(_highlightIndex);
+      final start = (pos - 12).clamp(0, rows.length).toInt();
+      final end = (start + 28).clamp(0, rows.length).toInt();
+      final indices = <int>{_channelIndex,_highlightIndex, for (var i = start; i < end; i++) rows[i]};
+      unawaited(widget.onGuidePage([for (final i in indices) if (i >= 0 && i < widget.channels.length) widget.channels[i]]));
+    });
+  }
+  void _guideChanged() {
+    if (!mounted) return;
+    setState(() {
+      if (_preview) {
+        final at = _guideAnchor ?? DateTime.now();
+        _programmeIndex = _programmes(_highlightIndex).indexWhere((p) => !at.isBefore(p.start) && at.isBefore(p.stop));
+      }
+      if (_bannerProgramme != null) {
+        final old = _bannerProgramme!;
+        final entries = _guide[widget.epgId(_channel)] ?? const <_Programme>[];
+        final i = entries.indexWhere((p) => p.start == old.start && p.stop == old.stop);
+        _bannerProgramme = i < 0 ? null : entries[i];
+      }
+    });
+  }
   void _selectGroup(int index) {
     final visual = [1,0, for (var i = 2; i < _groups.length; i++) i];
     final target = visual[(visual.indexOf(_groupIndex) + (index - _groupIndex)).clamp(0, visual.length - 1).toInt()];
@@ -1607,7 +1754,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     if (value) {
       _timer?.cancel();
       _scrollPreview();
-    } else { unawaited(widget.onFullscreen(_channel)); _hideLater(); }
+    } else { _scheduleGuidePage(); unawaited(widget.onFullscreen(_channel)); _hideLater(); }
     _playerFocus.requestFocus();
   }
   Future<void> _animatePreview(bool value) async {
@@ -1640,6 +1787,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   }
 
   void _scrollPreview() {
+    _scheduleGuidePage();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_preview || !_previewScroll.hasClients) return;
       final p = _previewScroll.position;
@@ -1721,10 +1869,13 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     }
     setState(() {
       for (var i = 0; i < rows.length; i++) { widget.channels[rows[i]] = ordered[i]; }
+      _rebuildChannelIndices();
       _channelIndex = widget.channels.indexOf(playing);
       _highlightIndex = widget.channels.indexOf(c);
       _groupIndex = _groups.indexOf(group).clamp(0, _groups.length - 1).toInt();
-      widget.custom['order'] = widget.channels.map((c) => c.favoriteId).toList();
+      final currentIds = widget.channels.map((c) => c.favoriteId).toList();
+      final currentSet = currentIds.toSet();
+      widget.custom['order'] = [...currentIds, ...(widget.custom['order'] as List? ?? []).whereType<String>().where((id) => !currentSet.contains(id))];
     });
     await _saveCustom();
     _scrollPreview();
@@ -1789,6 +1940,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    _rebuildChannelIndices();
     _channelIndex = widget.channels.indexOf(widget.channel);
     if (_channelIndex < 0) _channelIndex = 0;
     _highlightIndex = _channelIndex;
@@ -1955,6 +2107,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
       _technical = '';
       _technicalVisible = false;
     });
+    _scheduleGuidePage();
     _afrGeneration++;
     _startup..reset()..start();
     try {
@@ -2067,7 +2220,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     _timer?.cancel();
     _channelScroll.dispose();
     _leftHold?.cancel(); _backHold?.cancel(); _favoriteHold?.cancel(); _statusTimer?.cancel();
-    _clockTimer?.cancel();
+    _clockTimer?.cancel(); _guidePageTimer?.cancel();
     _groupScroll.dispose();
     _settingsScroll.dispose();
     _previewScroll.dispose();
@@ -2168,7 +2321,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
             for (var i = 0; i < 4; i++) SizedBox(width: width / 4, child: Text(_slotLabel(start.add(Duration(minutes: 30 * i))), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70))),
           ])),
           Expanded(child: rows.isEmpty ? const Center(child: Text('No hay canales en este grupo', style: TextStyle(color: Colors.white))) :
-            ListView.builder(controller: _previewScroll, itemExtent: 54, itemCount: rows.length, itemBuilder: (_, row) {
+            ListView.builder(controller: _previewScroll, itemExtent: 54, cacheExtent: 108, addAutomaticKeepAlives: false, itemCount: rows.length, itemBuilder: (_, row) {
               final i = rows[row], channel = widget.channels[i];
               final focused = !_menuOpen && !_groupFocus && i == _highlightIndex;
               final programmes = _programmes(i);
@@ -2454,6 +2607,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
               Expanded(child: ListView.builder(
                 controller: _channelScroll,
                 itemExtent: 56,
+                cacheExtent: 112, addAutomaticKeepAlives: false,
                 itemCount: _popupIndices.length,
                 itemBuilder: (_, row) {
                   final index = _popupIndices[row];
