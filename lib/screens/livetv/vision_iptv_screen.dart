@@ -561,8 +561,11 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
         final uri = Uri.tryParse(list['url'] ?? '');
         if (uri == null || !['http','https'].contains(uri.scheme) || uri.host.isEmpty) { failures++; continue; }
         try {
-          var decoded = reuse ? _playlistCache[uri.toString()] : null;
-          if (decoded == null) {
+          final cached = reuse ? _playlistCache[uri.toString()] : null;
+          final (List<_Channel>, String) decoded;
+          if (cached != null) {
+            decoded = cached;
+          } else {
             final response = await http.get(uri).timeout(const Duration(seconds: 30));
             if (response.statusCode != 200) throw StateError('HTTP');
             decoded = await compute(_decodePlaylist, (response.bodyBytes, uri.toString()));
