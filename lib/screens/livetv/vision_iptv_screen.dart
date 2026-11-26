@@ -1035,6 +1035,27 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   bool _zooming = false;
   int _zoomGeneration = 0;
   bool _fastScroll = false;
+  LogicalKeyboardKey? _pendingChannelWrap;
+  void _guideChannelArrow(KeyEvent event, {required bool vertical}) {
+    final key = event.logicalKey;
+    final delta = key == LogicalKeyboardKey.arrowDown ? 1 : -1;
+    final rows = vertical ? _verticalRows : _visibleIndices;
+    final index = rows.indexOf(vertical ? _verticalSelected : _highlightIndex);
+    void move(bool wrap) { if (vertical) { _moveVertical(delta,wrap:wrap); } else { _moveRow(delta,wrap:wrap); } }
+    if (event is KeyDownEvent) {
+      _pendingChannelWrap = null;
+      if (index >= 0 && (index + delta < 0 || index + delta >= rows.length)) { _pendingChannelWrap = key; } else { move(false); }
+    } else if (event is KeyRepeatEvent) {
+      _pendingChannelWrap = null;
+      if (!_fastScroll) setState(() => _fastScroll = true);
+      move(false);
+    } else if (event is KeyUpEvent) {
+      final wrap = _pendingChannelWrap == key && !_fastScroll;
+      _pendingChannelWrap = null;
+      if (_fastScroll) setState(() => _fastScroll = false);
+      if (wrap) move(true);
+    }
+  }
   bool _guideSelectDown = false, _contextSelectDown = false, _favoriteLong = false;
   Timer? _favoriteHold, _statusTimer;
   DateTime? _guideAnchor;
@@ -1830,9 +1851,11 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     _scrollPreview();
     WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted && _groupScroll.hasClients) { final p = _groupScroll.position; _groupScroll.jumpTo(((_groupIndex - 2) * 38.0 - p.viewportDimension / 2 + 19).clamp(0.0, p.maxScrollExtent).toDouble()); } });
   }
-  void _moveRow(int delta) {
+  void _moveRow(int delta, {bool wrap = true}) {
     final rows = _visibleIndices;
     if (rows.isEmpty) return;
+    final position = rows.indexOf(_highlightIndex);
+    if (!wrap && position >= 0 && (position + delta < 0 || position + delta >= rows.length)) return;
     final now = DateTime.now();
     final selected = _selectedProgramme;
     final current = selected != null ? !now.isBefore(selected.start) && now.isBefore(selected.stop) : _guideAnchor == null && _timeShift == 0;
@@ -2419,9 +2442,10 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   void _openVerticalGuide() {
     if (_verticalGuide || _preview || _zooming) return;
     _timer?.cancel();
+    _pendingChannelWrap = null; _fastScroll = false;
     setState(() {
       _verticalGuide = true; _showName = false; _showChannels = false;
-      _verticalColumn = 0; _verticalChannelIndex = _channelIndex;
+      _verticalColumn = 1; _verticalChannelIndex = _channelIndex;
       _verticalProgrammeStart = null; _syncVerticalProgramme(reset:true);
     });
     if (_preparingCatalog) _beginCatalog();
@@ -2429,15 +2453,17 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   }
   void _closeVerticalGuide() {
     if (!_verticalGuide) return;
+    _pendingChannelWrap = null; _fastScroll = false;
     setState(() { _verticalGuide = false; _showName = false; _bannerProgramme = null; _verticalChannelIndex = null; });
     _scheduleResize(); _scheduleGuidePage(); _playerFocus.requestFocus();
   }
-  void _moveVertical(int delta) {
+  void _moveVertical(int delta, {bool wrap = true}) {
     if (_preparingCatalog) return;
     if (_verticalColumn == 0) {
       final rows = _verticalRows;
       if (rows.isEmpty) return;
       final pos = rows.indexOf(_verticalSelected);
+      if (!wrap && pos >= 0 && (pos + delta < 0 || pos + delta >= rows.length)) return;
       final next = rows[(pos + delta + rows.length) % rows.length];
       setState(() { _verticalChannelIndex = next; _verticalProgrammeStart = null; _syncVerticalProgramme(reset:true); });
       _scheduleGuidePage(); _scrollVerticalBoth();
@@ -2480,7 +2506,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     final focusedChannel = widget.channels[_verticalSelected];
     const blue = Color(0xFF90CAF9), surface = Color(0xFF242A36);
     const headerStyle = TextStyle(color:Colors.white70,fontSize:12,fontWeight:FontWeight.bold);
-    return ColoredBox(color:const Color(0xFF10151D), child:Padding(padding:const EdgeInsets.fromLTRB(20,12,20,12),child:Column(children:[
+    return Padding(padding:const EdgeInsets.fromLTRB(20,12,20,12),child:Column(children:[
       SizedBox(height:34,child:Row(children:[
         Expanded(child:Text('${_channel.sourceName} / ${_channel.group}',maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(color:blue,fontSize:16,fontWeight:FontWeight.bold))),
         Text(_clock(now),style:const TextStyle(color:Colors.white,fontSize:16)),
@@ -2544,7 +2570,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
         ]);
       })),
       const SizedBox(height:5),const Text('↑ ↓ Navegar   ·   ← → Cambiar columna   ·   OK Sintonizar   ·   Atrás Pantalla completa',maxLines:1,overflow:TextOverflow.ellipsis,style:TextStyle(color:Colors.white54,fontSize:11)),
-    ])));
+    ]));
   }
 
   Widget _previewDetails() {
@@ -2570,10 +2596,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
           Text('${p!.stop.difference(now).inMinutes} min', style: const TextStyle(color: Colors.white70)),
         ],
         const Spacer(),
-        Flexible(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: [
-          if (channel.sourceName.isNotEmpty) Text(channel.sourceName, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.right, style: const TextStyle(color: Color(0xFF90CAF9), fontSize: 12, fontWeight: FontWeight.w500)),
-          Text(channel.group, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.right, style: const TextStyle(color: Colors.white70, fontSize: 12)),
-        ])),
+        Flexible(child: Text([channel.sourceName, channel.group].where((v) => v.isNotEmpty).join(' - '), maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.right, style: const TextStyle(color: Colors.white70, fontSize: 12))),
       ]),
       const SizedBox(height: 7),
       Expanded(child: Text(p?.description ?? '', maxLines: 6, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 14))),
@@ -2784,6 +2807,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
           return KeyEventResult.handled;
         }
         if (_verticalGuide) {
+          if (_verticalColumn == 0 && (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown)) { _guideChannelArrow(event,vertical:true); return KeyEventResult.handled; }
           if (event is KeyUpEvent) { if (_fastScroll) setState(() => _fastScroll = false); return KeyEventResult.handled; }
           if (event is KeyDownEvent || event is KeyRepeatEvent) {
             if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown) {
@@ -2861,8 +2885,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
           return KeyEventResult.handled;
         }
         if (_preview && !_groupFocus && (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown)) {
-          if (event is KeyDownEvent || event is KeyRepeatEvent) { if (event is KeyRepeatEvent && !_fastScroll) setState(() => _fastScroll = true); _moveRow(key == LogicalKeyboardKey.arrowDown ? 1 : -1); }
-          if (event is KeyUpEvent && _fastScroll) setState(() => _fastScroll = false);
+          _guideChannelArrow(event,vertical:false);
           return KeyEventResult.handled;
         }
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
@@ -2911,6 +2934,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
         }
         return KeyEventResult.ignored;
       }, child: Stack(fit: StackFit.expand, children: [
+        if (_verticalGuide) Positioned.fill(child: IgnorePointer(child: CustomPaint(painter: _ZoomAperture(verticalVideo)))),
         if (_verticalGuide) Positioned.fill(child:_verticalGuidePanel(verticalVideo)),
         if (_zooming && _zoomRect != null) Positioned.fill(child: IgnorePointer(child: CustomPaint(painter: _ZoomAperture(_zoomRect!)))),
         if (_preview && !_zooming) const Positioned(left: 0, right: 0, top: 0, height: 16, child: ColoredBox(color: Color(0xFF10151D))),
