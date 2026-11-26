@@ -451,7 +451,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
           guide: _guide, guideSource: _guideNotifier, allChannels: ordered,
           favoriteOrder: () => _favorites.toList(), onFavoriteOrder: _reorderFavorites, onReloadLists: _reloadListsInPlayer,
           listStatuses: _listStatuses, listGroups: _listGroups, isHidden: _hidden, listError: () => _error,
-          custom: custom, customKey: _customKey, epgLogos: () => _epgLogos, logoSource: prefs.getString('vision_iptv_logo_source') ?? 'epg', passthrough: _passthrough, afr: _afr,
+          custom: custom, customKey: _customKey, epgLogos: () => _epgLogos, logoSource: prefs.getString('vision_iptv_logo_source') ?? 'epg', useEpgNames: prefs.getBool('vision_iptv_use_epg_names') ?? false, passthrough: _passthrough, afr: _afr,
           onFavorite: _toggleFavorite, isFavorite: (c) => _favorites.contains(c.favoriteId), onFullscreen: (c) async { _lastChannel = c.favoriteId; final prefs = await SharedPreferences.getInstance(); await prefs.setString('vision_iptv_last_fullscreen', c.favoriteId); },
           recent: () => List.unmodifiable(_recent), onTuned: (c) async { _recent = [c.favoriteId, ..._recent.where((id) => id != c.favoriteId)].take(30).toList(); final prefs = await SharedPreferences.getInstance(); await prefs.setStringList('vision_iptv_recent', _recent); },
           onRefreshGuide: () => _loadGuide(force: true), guideStatus: () => _epgStatus, onGuidePage: _requestGuidePage,
@@ -907,9 +907,10 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
 }
 
 class _IptvPlayer extends StatefulWidget {
-  const _IptvPlayer({required this.startFullscreen, required this.favoriteOrder, required this.onFavoriteOrder, required this.onReloadLists, required this.listStatuses, required this.listGroups, required this.isHidden, required this.listError, required this.onFullscreen, required this.bannerSeconds, required this.epgNames, required this.rawEpgId, required this.epgId, required this.onAssignEpg, required this.recent, required this.onTuned, required this.onRefreshGuide, required this.onGuidePage, required this.guideStatus, required this.channel, required this.channels, required this.guide, required this.guideSource, required this.allChannels, required this.onFavorite, required this.isFavorite, required this.useExoPlayer, required this.tunneling, required this.buffer, required this.forceHls, required this.custom, required this.customKey, required this.epgLogos, required this.logoSource, required this.passthrough, required this.afr});
+  const _IptvPlayer({required this.startFullscreen, required this.favoriteOrder, required this.onFavoriteOrder, required this.onReloadLists, required this.listStatuses, required this.listGroups, required this.isHidden, required this.listError, required this.onFullscreen, required this.bannerSeconds, required this.epgNames, required this.rawEpgId, required this.epgId, required this.onAssignEpg, required this.recent, required this.onTuned, required this.onRefreshGuide, required this.onGuidePage, required this.guideStatus, required this.channel, required this.channels, required this.guide, required this.guideSource, required this.allChannels, required this.onFavorite, required this.isFavorite, required this.useExoPlayer, required this.tunneling, required this.buffer, required this.forceHls, required this.custom, required this.customKey, required this.epgLogos, required this.logoSource, required this.useEpgNames, required this.passthrough, required this.afr});
   final Map<String, dynamic> custom;
   final String customKey, logoSource;
+  final bool useEpgNames;
   final Map<String, String> Function() epgLogos;
   final bool passthrough, afr;
   final bool startFullscreen;
@@ -981,9 +982,19 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   bool _settingsExo = true, _settingsHls = false, _settingsTunnel = false;
   bool _settingsPassthrough = false, _settingsAfr = false;
   late String _logoSource = widget.logoSource;
+  late bool _useEpgNames = widget.useEpgNames;
   int _afrGeneration = 0;
   bool _afrSwitching = false, _externalPicker = false;
-  String _name(_Channel c) => (widget.custom['names'] as Map?)?[c.favoriteId] as String? ?? c.name;
+  String _name(_Channel c) {
+    final custom = (widget.custom['names'] as Map?)?[c.favoriteId] as String?;
+    if (custom != null && custom.trim().isNotEmpty) return custom;
+    if (_useEpgNames) {
+      final id = widget.rawEpgId(c);
+      final name = id.isEmpty ? null : widget.epgNames(c)[id]?.trim();
+      if (name != null && name.isNotEmpty) return name;
+    }
+    return c.name;
+  }
   String _logo(_Channel c) {
     final choice = (widget.custom['logos'] as Map?)?[c.favoriteId] as String? ?? _logoSource;
     final epg = widget.epgLogos()[widget.epgId(c)] ?? '';
@@ -1213,6 +1224,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
       _settingsUrl = prefs.getString('vision_iptv_url') ?? '';
       _settingsEpg = prefs.getString('vision_iptv_default_epg') ?? prefs.getString('vision_iptv_epg') ?? '';
       _settingsExo = prefs.getBool('vision_iptv_exo') ?? true;
+      _useEpgNames = prefs.getBool('vision_iptv_use_epg_names') ?? false;
       _settingsHls = prefs.getBool('vision_iptv_force_hls') ?? false;
       _settingsTunnel = prefs.getBool('vision_iptv_tunneling') ?? false;
       _settingsPassthrough = prefs.getBool('vision_iptv_passthrough') ?? false;
@@ -1267,7 +1279,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     finally { if (mounted) { setState(() => _applyingLists = false); _playerFocus.requestFocus(); } }
   }
 
-  List<String> get _settingKeys => ['lists', 'epg', 'banner', 'player', if (_settingsExo) ...['format', 'tunnel'] else 'buffer', 'passthrough', 'afr', 'logos', 'backup', 'restore', 'refresh', 'back'];
+  List<String> get _settingKeys => ['lists', 'epg', 'banner', 'player', if (_settingsExo) ...['format', 'tunnel'] else 'buffer', 'passthrough', 'afr', 'logos', 'epg_names', 'backup', 'restore', 'refresh', 'back'];
 
   Future<String?> _askListField(String label, String initial, {required bool isUrl, bool secret = false}) async {
     final controller = TextEditingController(text: initial);
@@ -1501,6 +1513,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
         case 'passthrough': _settingsPassthrough = !_settingsPassthrough; break;
         case 'afr': _settingsAfr = !_settingsAfr; break;
         case 'logos': _logoSource = _logoSource == 'epg' ? 'm3u' : 'epg'; break;
+        case 'epg_names': _useEpgNames = !_useEpgNames; break;
         case 'format': _settingsHls = !_settingsHls; break;
         case 'tunnel': _settingsTunnel = !_settingsTunnel; break;
         case 'buffer': _settingsBuffer = _settingsBuffer == 'minimum' ? 'small' : _settingsBuffer == 'small' ? 'normal' : 'minimum'; break;
@@ -1512,6 +1525,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
       case 'passthrough': await prefs.setBool('vision_iptv_passthrough', _settingsPassthrough); break;
       case 'afr': await prefs.setBool('vision_iptv_afr', _settingsAfr); break;
       case 'logos': await prefs.setString('vision_iptv_logo_source', _logoSource); break;
+      case 'epg_names': await prefs.setBool('vision_iptv_use_epg_names', _useEpgNames); break;
       case 'format': await prefs.setBool('vision_iptv_force_hls', _settingsHls); break;
       case 'tunnel': await prefs.setBool('vision_iptv_tunneling', _settingsTunnel); break;
       case 'buffer': await prefs.setString('vision_iptv_buffer', _settingsBuffer); break;
@@ -1598,9 +1612,9 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   }
 
   Widget _iptvSettingsPanel() {
-    final labels = <String, String>{'m3u': 'Lista M3U activa', 'epg': 'EPG predeterminada', 'lists': 'Listas IPTV', 'banner': 'Duración barra de información', 'player': 'Reproductor IPTV', 'format': 'Formato', 'tunnel': 'Tunneling', 'buffer': 'Búfer MPV', 'passthrough': 'Audio passthrough', 'afr': 'AFR', 'logos': 'Origen de logotipos', 'backup': 'Copia de seguridad', 'restore': 'Restaurar configuración', 'refresh': 'Actualizar programación', 'back': 'Volver al menú'};
-    final values = <String, String>{'m3u': _settingsUrl.isEmpty ? 'Sin configurar' : 'Configurada', 'epg': _settingsEpg.isEmpty ? 'Automática desde M3U' : 'Manual', 'lists': 'Gestionar', 'banner': _bannerSeconds == 0 ? 'Permanente' : '${_bannerSeconds} s', 'player': _settingsExo ? 'ExoPlayer' : 'MPV', 'format': _settingsHls ? 'HLS' : 'Auto', 'tunnel': _settingsTunnel ? 'Sí' : 'No', 'buffer': _settingsBuffer == 'minimum' ? 'Mínimo (0)' : _settingsBuffer == 'small' ? 'Pequeño' : 'Normal', 'passthrough': _settingsPassthrough ? 'Sí' : 'No', 'afr': _settingsAfr ? 'Sí' : 'No', 'logos': _logoSource == 'epg' ? 'EPG' : 'M3U', 'backup': '', 'restore': '', 'refresh': _refreshingGuide ? 'Actualizando…' : '', 'back': ''};
-    final icons = <String, IconData>{'m3u': Icons.list, 'epg': Icons.calendar_today, 'lists': Icons.playlist_add, 'banner': Icons.timer, 'player': Icons.play_circle_outline, 'format': Icons.video_settings, 'tunnel': Icons.settings_ethernet, 'buffer': Icons.memory, 'passthrough': Icons.volume_up, 'afr': Icons.monitor, 'logos': Icons.image, 'backup': Icons.save, 'restore': Icons.folder_open, 'refresh': Icons.refresh, 'back': Icons.arrow_back};
+    final labels = <String, String>{'m3u': 'Lista M3U activa', 'epg': 'EPG predeterminada', 'lists': 'Listas IPTV', 'banner': 'Duración barra de información', 'player': 'Reproductor IPTV', 'format': 'Formato', 'tunnel': 'Tunneling', 'buffer': 'Búfer MPV', 'passthrough': 'Audio passthrough', 'afr': 'AFR', 'logos': 'Origen de logotipos', 'epg_names': 'Renombrar canales según EPG', 'backup': 'Copia de seguridad', 'restore': 'Restaurar configuración', 'refresh': 'Actualizar programación', 'back': 'Volver al menú'};
+    final values = <String, String>{'m3u': _settingsUrl.isEmpty ? 'Sin configurar' : 'Configurada', 'epg': _settingsEpg.isEmpty ? 'Automática desde M3U' : 'Manual', 'lists': 'Gestionar', 'banner': _bannerSeconds == 0 ? 'Permanente' : '${_bannerSeconds} s', 'player': _settingsExo ? 'ExoPlayer' : 'MPV', 'format': _settingsHls ? 'HLS' : 'Auto', 'tunnel': _settingsTunnel ? 'Sí' : 'No', 'buffer': _settingsBuffer == 'minimum' ? 'Mínimo (0)' : _settingsBuffer == 'small' ? 'Pequeño' : 'Normal', 'passthrough': _settingsPassthrough ? 'Sí' : 'No', 'afr': _settingsAfr ? 'Sí' : 'No', 'logos': _logoSource == 'epg' ? 'EPG' : 'M3U', 'epg_names': _useEpgNames ? 'Sí' : 'No', 'backup': '', 'restore': '', 'refresh': _refreshingGuide ? 'Actualizando…' : '', 'back': ''};
+    final icons = <String, IconData>{'m3u': Icons.list, 'epg': Icons.calendar_today, 'lists': Icons.playlist_add, 'banner': Icons.timer, 'player': Icons.play_circle_outline, 'format': Icons.video_settings, 'tunnel': Icons.settings_ethernet, 'buffer': Icons.memory, 'passthrough': Icons.volume_up, 'afr': Icons.monitor, 'logos': Icons.image, 'epg_names': Icons.edit, 'backup': Icons.save, 'restore': Icons.folder_open, 'refresh': Icons.refresh, 'back': Icons.arrow_back};
     final keys = _settingKeys;
     return Container(
       padding: const EdgeInsets.all(12),
