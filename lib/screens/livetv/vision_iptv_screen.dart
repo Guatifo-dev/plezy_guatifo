@@ -579,11 +579,12 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   bool _menuOpen = false, _recentOnly = false, _refreshingGuide = false;
   bool _settingsOpen = false, _settingsDirty = false;
   late int _bannerSeconds = widget.bannerSeconds;
-  Timer? _okHold;
   _Programme? _bannerProgramme;
   bool _zooming = false;
   int _zoomGeneration = 0;
-  bool _okLong = false, _fastScroll = false;
+  bool _fastScroll = false;
+  bool _guideSelectDown = false, _contextSelectDown = false;
+  DateTime? _guideAnchor;
   bool _dialogBusy = false;
   bool _menuSelectDown = false, _settingsSelectDown = false;
   static const _bannerChoices = [2, 3, 4, 5, 7, 10, 15, 0];
@@ -624,7 +625,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   bool get _onCurrentProgramme {
     final p = _selectedProgramme;
     final now = DateTime.now();
-    return p == null ? _timeShift == 0 : !now.isBefore(p.start) && now.isBefore(p.stop);
+    return p == null ? _timeShift == 0 && _guideAnchor == null : !now.isBefore(p.start) && now.isBefore(p.stop);
   }
   void _resetGuideToNow() {
     setState(() {
@@ -657,11 +658,19 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   }
   void _stepProgramme(int delta) {
     final entries = _guide[widget.epgId(widget.channels[_highlightIndex])] ?? const <_Programme>[];
-    if (entries.isEmpty) return;
+    if (entries.isEmpty) { _programmeIndex = -1; if (delta == 0) _guideAnchor = null; return; }
     final visible = _programmes(_highlightIndex);
     final selected = _programmeIndex >= 0 && _programmeIndex < visible.length ? visible[_programmeIndex] : null;
-    var index = selected == null ? entries.indexWhere((p) => p.stop.isAfter(DateTime.now())) : entries.indexOf(selected) + delta;
+    final now = DateTime.now();
+    if (delta == 0) {
+      _guideAnchor = null;
+      _programmeIndex = visible.indexWhere((p) => !now.isBefore(p.start) && now.isBefore(p.stop));
+      return;
+    }
+    final anchor = _guideAnchor ?? now;
+    var index = selected == null ? entries.indexWhere((p) => p.stop.isAfter(anchor)) : entries.indexOf(selected) + delta;
     if (selected == null && delta < 0) index--;
+    if (selected == null && index < 0 && delta < 0) index = entries.length - 1;
     if (index < 0 || index >= entries.length) return;
     final target = entries[index];
     final start = _windowStart;
@@ -671,6 +680,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
       _timeShift = (target.start.difference(base).inSeconds / 1800).floor();
     }
     _programmeIndex = _programmes(_highlightIndex).indexOf(target);
+    _guideAnchor = !now.isBefore(target.start) && now.isBefore(target.stop) ? null : target.start;
   }
   Map<String, List<_Programme>> get _guide => widget.guideSource.value;
   List<String> get _groups => ['Todos', 'Favoritos', ...widget.channels.map((c) => c.group).toSet()];
@@ -692,7 +702,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_groupScroll.hasClients) return;
       final p = _groupScroll.position;
-      _groupScroll.jumpTo((_groupIndex * 48.0 - p.viewportDimension / 2 + 24).clamp(0.0, p.maxScrollExtent).toDouble());
+      _groupScroll.jumpTo((_groupIndex * 38.0 - p.viewportDimension / 2 + 19).clamp(0.0, p.maxScrollExtent).toDouble());
     });
   }
 
@@ -968,21 +978,23 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   }
   void _guideChanged() { if (mounted) setState(() { if (_preview && _programmeIndex < 0 && !_groupFocus) _stepProgramme(0); }); }
   void _selectGroup(int index) {
-    setState(() { _recentOnly = false; _groupIndex = index.clamp(0, _groups.length - 1).toInt(); final rows = _visibleIndices; if (rows.isNotEmpty) _highlightIndex = rows.first; _programmeIndex = -1; });
+    setState(() { _recentOnly = false; _groupIndex = index.clamp(0, _groups.length - 1).toInt(); final rows = _visibleIndices; if (rows.isNotEmpty) _highlightIndex = rows.first; _programmeIndex = -1; _guideAnchor = null; });
     _scrollPreview();
-    WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted && _groupScroll.hasClients) { final p = _groupScroll.position; _groupScroll.jumpTo((_groupIndex * 48.0 - p.viewportDimension / 2 + 24).clamp(0.0, p.maxScrollExtent).toDouble()); } });
+    WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted && _groupScroll.hasClients) { final p = _groupScroll.position; _groupScroll.jumpTo((_groupIndex * 38.0 - p.viewportDimension / 2 + 19).clamp(0.0, p.maxScrollExtent).toDouble()); } });
   }
   void _moveRow(int delta) {
     final rows = _visibleIndices;
     if (rows.isEmpty) return;
-    final previous = _programmes(_highlightIndex);
-    final selectedTime = _programmeIndex >= 0 && _programmeIndex < previous.length ? previous[_programmeIndex].start : null;
+    final now = DateTime.now();
+    final selected = _selectedProgramme;
+    final current = selected != null ? !now.isBefore(selected.start) && now.isBefore(selected.stop) : _guideAnchor == null && _timeShift == 0;
+    final selectedTime = current ? now : (_guideAnchor ?? selected?.start ?? _windowStart);
     setState(() {
       final row = (rows.indexOf(_highlightIndex) + delta).clamp(0, rows.length - 1).toInt();
       _highlightIndex = rows[row];
       final programmes = _programmes(_highlightIndex);
-      if (selectedTime == null || programmes.isEmpty) { _programmeIndex = -1; }
-      else { final match = programmes.indexWhere((p) => !selectedTime.isBefore(p.start) && selectedTime.isBefore(p.stop)); _programmeIndex = match < 0 ? 0 : match; }
+      _guideAnchor = current ? null : selectedTime;
+      _programmeIndex = programmes.indexWhere((p) => !selectedTime.isBefore(p.start) && selectedTime.isBefore(p.stop));
     });
     _scrollPreview();
   }
@@ -1073,7 +1085,6 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     if (_dialogBusy) return;
     _dialogBusy = true;
     _backHold?.cancel(); _backHold = null;
-    _okHold?.cancel(); _okHold = null;
     try { await action(); }
     finally {
       await Future<void>.delayed(const Duration(milliseconds: 300));
@@ -1086,15 +1097,17 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     if (_visibleIndices.isEmpty) return;
     final c = widget.channels[_highlightIndex];
     final action = await showDialog<String>(context: context, barrierColor: Colors.black26, builder: (ctx) => AlertDialog(
-      backgroundColor: const Color(0xFF242A36), title: Text(c.name),
-      content: Column(mainAxisSize: MainAxisSize.min, children: [
-        ListTile(autofocus: true, leading: const Icon(Icons.calendar_today), title: const Text('Asignar EPG'), onTap: () => Navigator.pop(ctx, 'epg')),
-        ListTile(leading: const Icon(Icons.star_border), title: Text(widget.isFavorite(c) ? 'Quitar de favoritos' : 'Añadir a favoritos'), onTap: () => Navigator.pop(ctx, 'favorite')),
-      ]),
+      backgroundColor: const Color(0xFF1B202A), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), title: Text(c.name, style: const TextStyle(color: Colors.white, fontSize: 18)),
+      content: SizedBox(width: 300, child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        TextButton.icon(autofocus: true, style: _iptvDialogButtonStyle, icon: const Icon(Icons.calendar_today, size: 19), label: const Text('Asignar EPG'), onPressed: () => Navigator.pop(ctx, 'epg')),
+        TextButton.icon(style: _iptvDialogButtonStyle, icon: const Icon(Icons.star_border, size: 19), label: Text(widget.isFavorite(c) ? 'Quitar de favoritos' : 'Añadir a favoritos'), onPressed: () => Navigator.pop(ctx, 'favorite')),
+        TextButton.icon(style: _iptvDialogButtonStyle, icon: const Icon(Icons.info_outline, size: 19), label: const Text('Información técnica'), onPressed: () => Navigator.pop(ctx, 'technical')),
+      ])),
     ));
     if (!mounted) return;
     if (action == 'favorite') { await widget.onFavorite(c); if (mounted) setState(() {}); }
     if (action == 'epg') { await Future<void>.delayed(const Duration(milliseconds: 200)); if (mounted) await _assignEpg(c); }
+    if (action == 'technical' && mounted) { await _readStats(); if (mounted) { setState(() { _technicalVisible = true; _showName = true; }); _hideLater(); } }
     if (mounted) { _playerFocus.requestFocus(); _scheduleResize(); }
   }
 
@@ -1105,7 +1118,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
       builder: (_) => _EpgChannelPicker(title: c.name, ids: ids, names: names, selectedId: widget.epgId(c)));
     if (!mounted || selected == null) return;
     await widget.onAssignEpg(c, selected.isEmpty ? null : selected);
-    if (mounted) setState(() { _programmeIndex = _programmeIndex.clamp(-1, _programmes(_highlightIndex).length - 1).toInt(); });
+    if (mounted) setState(() { final at = _guideAnchor ?? DateTime.now(); _programmeIndex = _programmes(_highlightIndex).indexWhere((p) => !at.isBefore(p.start) && at.isBefore(p.stop)); });
   }
 
   Future<void> _options() async {
@@ -1382,7 +1395,6 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     _clockTimer?.cancel();
     _groupScroll.dispose();
     _settingsScroll.dispose();
-    _okHold?.cancel();
     _previewScroll.dispose();
     _playerFocus.dispose();
     unawaited(_close());
@@ -1447,7 +1459,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     return Row(children: [
       if (_groupFocus) SizedBox(width: 150, child: ListView.builder(controller: _groupScroll, itemCount: _groups.length, itemBuilder: (_, i) {
         final selected = i == _groupIndex;
-        return Container(height: 44, margin: const EdgeInsets.all(2), padding: const EdgeInsets.symmetric(horizontal: 9),
+        return Container(height: 36, margin: const EdgeInsets.only(bottom: 2), padding: const EdgeInsets.symmetric(horizontal: 9),
           decoration: BoxDecoration(color: selected && _groupFocus ? focus : selected ? const Color(0xFF344D70) : surface,
             borderRadius: BorderRadius.circular(7)),
           alignment: Alignment.centerLeft, child: Text(_groups[i], maxLines: 2, overflow: TextOverflow.ellipsis,
@@ -1487,7 +1499,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
                   ])),
                 SizedBox(width: width, child: Stack(fit: StackFit.expand, children: [
                   if (programmes.isEmpty) Container(margin: const EdgeInsets.all(2), alignment: Alignment.centerLeft, padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(color: surface, borderRadius: BorderRadius.circular(6)), child: const Text('Sin programación', style: TextStyle(color: Colors.white70))),
+                    decoration: BoxDecoration(color: focused ? focus : surface, borderRadius: BorderRadius.circular(6)), child: Text('Sin programación', style: TextStyle(color: focused ? Colors.black : Colors.white70))),
                   for (var j = 0; j < programmes.length; j++)
                     if (x(programmes[j].stop) - x(programmes[j].start) > 3) Positioned(left: x(programmes[j].start), width: x(programmes[j].stop) - x(programmes[j].start), top: 2, bottom: 2,
                       child: Container(margin: const EdgeInsets.symmetric(horizontal: 2), padding: const EdgeInsets.all(4),
@@ -1495,6 +1507,22 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
                           border: Border.all(color: const Color(0xFF485467)), borderRadius: BorderRadius.circular(6)),
                         child: Align(alignment: Alignment.centerLeft, child: Text(programmes[j].title, maxLines: 2, overflow: TextOverflow.ellipsis,
                           style: TextStyle(color: focused && _programmeIndex == j ? Colors.black : Colors.white, fontSize: 12))))),
+                  if (focused && _programmeIndex < 0 && programmes.isNotEmpty)
+                    Builder(builder: (_) {
+                      final at = _guideAnchor ?? now;
+                      var left = start;
+                      var right = end;
+                      for (final p in programmes) {
+                        if (!p.stop.isAfter(at) && p.stop.isAfter(left)) left = p.stop;
+                        if (p.start.isAfter(at) && p.start.isBefore(right)) right = p.start;
+                      }
+                      final w = x(right) - x(left);
+                      if (w <= 3) return const SizedBox.shrink();
+                      return Positioned(left: x(left), width: w, top: 2, bottom: 2,
+                        child: Container(margin: const EdgeInsets.symmetric(horizontal: 2), padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(color: focus, borderRadius: BorderRadius.circular(6)),
+                          alignment: Alignment.centerLeft, child: const Text('Sin programación', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.black, fontSize: 12))));
+                    }),
                   if (!now.isBefore(start) && now.isBefore(end)) Positioned(left: x(now), top: 0, bottom: 0, child: IgnorePointer(child: Container(width: 2, color: focus.withAlpha(160)))),
                 ])),
               ]);
@@ -1520,13 +1548,18 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     final now = DateTime.now();
     final progress = current == null ? 0.0 : (now.difference(current.start).inSeconds / current.stop.difference(current.start).inSeconds.clamp(1, 9999999)).clamp(0.0, 1.0).toDouble();
     final number = widget.allChannels.indexOf(_channel) + 1;
+    final poster = current?.poster ?? '';
     return Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: const Color(0xED10151D), borderRadius: BorderRadius.circular(14)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
       Row(children: [
         SizedBox(width: 87, height: 72, child: _channel.logo.isEmpty ? const Icon(Icons.tv, color: Colors.white) : Image.network(_channel.logo, cacheWidth: 192, fit: BoxFit.contain, errorBuilder: (_, _, _) => const Icon(Icons.tv, color: Colors.white))),
         const SizedBox(width: 12),
+        if (poster.startsWith('http')) ...[
+          ClipRRect(borderRadius: BorderRadius.circular(7), child: Image.network(poster, width: 64, height: 96, cacheHeight: 192, fit: BoxFit.contain, errorBuilder: (_, _, _) => const SizedBox.shrink())),
+          const SizedBox(width: 12),
+        ],
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('${number.toString().padLeft(3, '0')} · ${_channel.name}', style: const TextStyle(color: Colors.white, fontSize: 18)),
-          if (current != null) Text(current.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 23, fontWeight: FontWeight.bold)),
+          if (current != null) Text(current.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold)),
         ])),
         if (widget.isFavorite(_channel)) const Icon(Icons.star, color: Colors.amber),
         const SizedBox(width: 12),
@@ -1590,8 +1623,16 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
           return KeyEventResult.handled;
         }
         if (_preview && !_groupFocus && (key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter)) {
-          if (event is KeyDownEvent) { _okLong = false; _okHold?.cancel(); _okHold = Timer(const Duration(milliseconds: 600), () { if (mounted) { _okLong = true; } }); }
-          if (event is KeyUpEvent) { _okHold?.cancel(); _okHold = null; if (_okLong) { WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted && _preview) unawaited(_withDialog(_channelContext)); }); WidgetsBinding.instance.scheduleFrame(); } else { unawaited(_confirmGuide()); } }
+          if (event is KeyDownEvent) _guideSelectDown = true;
+          if (event is KeyUpEvent && _guideSelectDown) { _guideSelectDown = false; unawaited(_confirmGuide()); }
+          return KeyEventResult.handled;
+        }
+        if (key == LogicalKeyboardKey.contextMenu) {
+          if (event is KeyDownEvent) _contextSelectDown = true;
+          if (event is KeyUpEvent && _contextSelectDown) {
+            _contextSelectDown = false;
+            unawaited(_withDialog(_preview ? _channelContext : _options));
+          }
           return KeyEventResult.handled;
         }
         if (_preview && !_groupFocus && (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown)) {
@@ -1600,7 +1641,6 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
           return KeyEventResult.handled;
         }
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        if (key == LogicalKeyboardKey.contextMenu) { unawaited(_options()); return KeyEventResult.handled; }
         if (_preview) {
           if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown) {
             final delta = key == LogicalKeyboardKey.arrowDown ? 1 : -1;
@@ -1751,9 +1791,20 @@ class _EpgChannelPickerState extends State<_EpgChannelPicker> {
   int _index = 0;
   late final Map<String, String> _searchKeys = {for (final id in widget.ids) id: '${widget.names[id]} $id'.toLowerCase()};
   late List<String> _filtered = widget.ids;
+  late final TextEditingController _queryController;
+  @override
+  void initState() {
+    super.initState();
+    final initial = widget.title.trim().split(RegExp(r'\s+')).take(3).join(' ');
+    _queryController = TextEditingController(text: initial);
+    _filtered = _matches(initial);
+  }
+  List<String> _matches(String query) {
+    final terms = query.toLowerCase().trim().split(RegExp(r'\s+')).where((t) => t.isNotEmpty).toList();
+    return terms.isEmpty ? widget.ids : widget.ids.where((id) => terms.every((term) => _searchKeys[id]!.contains(term))).toList();
+  }
   void _filter(String query) {
-    final needle = query.toLowerCase().trim();
-    setState(() { _filtered = needle.isEmpty ? widget.ids : widget.ids.where((id) => _searchKeys[id]!.contains(needle)).toList(); _index = 0; });
+    setState(() { _filtered = _matches(query); _index = 0; });
     if (_scroll.hasClients) _scroll.jumpTo(0);
   }
   void _move(int delta) {
@@ -1762,21 +1813,27 @@ class _EpgChannelPickerState extends State<_EpgChannelPicker> {
     setState(() => _index = (_index + delta).clamp(0, rows.length - 1).toInt());
     if (_scroll.hasClients) {
       final p = _scroll.position;
-      _scroll.jumpTo((_index * 56.0 - p.viewportDimension / 2 + 28).clamp(0.0, p.maxScrollExtent).toDouble());
+      _scroll.jumpTo((_index * 44.0 - p.viewportDimension / 2 + 22).clamp(0.0, p.maxScrollExtent).toDouble());
     }
   }
   @override
-  void dispose() { _search.dispose(); _results.dispose(); _scroll.dispose(); super.dispose(); }
+  void dispose() { _queryController.dispose(); _search.dispose(); _results.dispose(); _scroll.dispose(); super.dispose(); }
   @override
   Widget build(BuildContext context) {
     final rows = _filtered;
     return AlertDialog(
-      backgroundColor: const Color(0xFF242A36), title: Text('Asignar EPG · ${widget.title}'),
-      content: SizedBox(width: 480, height: 280, child: Column(children: [
+      backgroundColor: const Color(0xFF1B202A), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), title: Text('Asignar EPG · ${widget.title}', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+      content: SizedBox(width: 500, height: (MediaQuery.sizeOf(context).height - 150).clamp(180.0, 420.0).toDouble(), child: Column(children: [
         Focus(onKeyEvent: (_, e) {
           if (e is KeyDownEvent && e.logicalKey == LogicalKeyboardKey.arrowDown) { _results.requestFocus(); return KeyEventResult.handled; }
           return KeyEventResult.ignored;
-        }, child: TextField(focusNode: _search, decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Buscar canal EPG'),
+        }, child: TextField(controller: _queryController, focusNode: _search, style: const TextStyle(color: Colors.white, fontSize: 14),
+          decoration: InputDecoration(prefixIcon: const Icon(Icons.search, color: Color(0xFF90CAF9)), hintText: 'Buscar canal EPG',
+            filled: true, fillColor: const Color(0xFF242A36), isDense: true,
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(7), borderSide: BorderSide.none),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(7), borderSide: const BorderSide(color: Color(0xFF90CAF9))),
+            suffixIcon: IconButton(onPressed: () { _queryController.clear(); _filter(''); }, icon: const Icon(Icons.clear, size: 18))),
+
           onSubmitted: (_) => _results.requestFocus(),
           onChanged: _filter)),
         Expanded(child: Focus(focusNode: _results, autofocus: true, onFocusChange: (_) => setState(() {}), onKeyEvent: (_, e) {
@@ -1791,17 +1848,30 @@ class _EpgChannelPickerState extends State<_EpgChannelPicker> {
           }
           return KeyEventResult.ignored;
         }, child: ExcludeFocus(child: rows.isEmpty ? const Center(child: Text('No hay canales EPG disponibles')) : ListView.builder(
-          controller: _scroll, itemExtent: 56, itemCount: rows.length, itemBuilder: (_, i) {
+          controller: _scroll, itemExtent: 44, itemCount: rows.length, itemBuilder: (_, i) {
             final id = rows[i];
-            return ListTile(selected: _results.hasFocus && i == _index, selectedTileColor: const Color(0xFF1565C0),
-              title: Text(widget.names[id] ?? id, maxLines: 1, overflow: TextOverflow.ellipsis),
-              subtitle: Text(id, maxLines: 1, overflow: TextOverflow.ellipsis),
-              trailing: id == widget.selectedId ? const Icon(Icons.check) : null,
-              onTap: () => Navigator.pop(context, id));
+            final focused = _results.hasFocus && i == _index;
+            final color = focused ? Colors.black : Colors.white;
+            return GestureDetector(onTap: () => Navigator.pop(context, id), child: Container(
+              margin: const EdgeInsets.only(bottom: 2), padding: const EdgeInsets.symmetric(horizontal: 9),
+              decoration: BoxDecoration(color: focused ? const Color(0xFF90CAF9) : Colors.transparent, borderRadius: BorderRadius.circular(7)),
+              child: Row(children: [
+                Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(widget.names[id] ?? id, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: color, fontSize: 13)),
+                  Text(id, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: focused ? Colors.black87 : Colors.white70, fontSize: 11)),
+                ])),
+                if (id == widget.selectedId) Icon(Icons.check, color: color, size: 17),
+              ])));
           })))),
       ])),
-      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
-        TextButton(onPressed: () => Navigator.pop(context, ''), child: const Text('Restablecer automática'))],
+      actions: [TextButton(style: _iptvDialogButtonStyle, onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+        TextButton(style: _iptvDialogButtonStyle, onPressed: () => Navigator.pop(context, ''), child: const Text('Restablecer automática'))],
     );
   }
 }
+
+final _iptvDialogButtonStyle = ButtonStyle(
+  backgroundColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.focused) ? const Color(0xFF90CAF9) : Colors.transparent),
+  foregroundColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.focused) ? Colors.black : Colors.white),
+  shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: BorderRadius.circular(7))),
+);
