@@ -2017,31 +2017,51 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     final progress = current == null ? 0.0 : (now.difference(current.start).inSeconds / current.stop.difference(current.start).inSeconds.clamp(1, 9999999)).clamp(0.0, 1.0).toDouble();
     final number = _channelNumber(_channelIndex);
     final poster = current?.poster ?? '';
-    return Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: const Color(0xED10151D), borderRadius: BorderRadius.circular(14)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-      Row(children: [
-        SizedBox(width: 87, height: 72, child: _logo(_channel).isEmpty ? const Icon(Icons.tv, color: Colors.white) : Image.network(_logo(_channel), cacheWidth: 192, fit: BoxFit.contain, errorBuilder: (_, _, _) => const Icon(Icons.tv, color: Colors.white))),
-        const SizedBox(width: 12),
-        if (poster.startsWith('http')) ...[
-          ClipRRect(borderRadius: BorderRadius.circular(7), child: Image.network(poster, width: 96, height: 144, cacheHeight: 288, fit: BoxFit.contain, errorBuilder: (_, _, _) => const SizedBox.shrink())),
-          const SizedBox(width: 12),
+    final logo = _logo(_channel);
+    final remaining = current == null ? 0 : current.stop.difference(now).inMinutes.clamp(0, 999999);
+    final live = current != null && !now.isBefore(current.start) && now.isBefore(current.stop);
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: const Color(0xED10151D), borderRadius: BorderRadius.circular(14)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+        Row(children: [
+          SizedBox(width: 120, height: 64, child: logo.isEmpty ? const Icon(Icons.tv, color: Colors.white, size: 36) : Image.network(logo, cacheWidth: 240, fit: BoxFit.contain, errorBuilder: (_, _, _) => const Icon(Icons.tv, color: Colors.white, size: 36))),
+          const SizedBox(width: 16),
+          Expanded(child: Text('${number.toString().padLeft(3, '0')} · ${_name(_channel)}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.bold))),
+          if (widget.isFavorite(_channel)) ...[
+            const Icon(Icons.star, color: Colors.amber, size: 25),
+            const SizedBox(width: 12),
+          ],
+          Text(_clock(now), style: const TextStyle(color: Colors.white, fontSize: 18)),
+        ]),
+        if (current != null) ...[
+          const SizedBox(height: 8),
+          ClipRRect(borderRadius: BorderRadius.circular(4), child: LinearProgressIndicator(value: progress, minHeight: 6, color: const Color(0xFF90CAF9), backgroundColor: Colors.white24)),
+          const SizedBox(height: 12),
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            if (poster.startsWith('http')) ...[
+              ClipRRect(borderRadius: BorderRadius.circular(7), child: Image.network(poster, width: 96, height: 144, cacheHeight: 288, fit: BoxFit.contain, errorBuilder: (_, _, _) => const SizedBox.shrink())),
+              const SizedBox(width: 16),
+            ],
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+              Text(current.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 5),
+              Text('${_clock(current.start)} – ${_clock(current.stop)}${live ? '  ·  Quedan $remaining min' : ''}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 14)),
+              if (current.description.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(current.description, maxLines: 4, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 14)),
+              ],
+              if (next != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text('A continuación · ${_clock(next.start)} · ${next.title}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 13))),
+            ])),
+          ]),
+        ] else ...[
+          const SizedBox(height: 6),
+          const Text('Sin programación', style: TextStyle(color: Colors.white70, fontSize: 14)),
+          if (next != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text('A continuación · ${_clock(next.start)} · ${next.title}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70))),
         ],
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('${number.toString().padLeft(3, '0')} · ${_name(_channel)}', style: const TextStyle(color: Colors.white, fontSize: 18)),
-          if (current != null) Text(current.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.bold)),
-        ])),
-        if (widget.isFavorite(_channel)) const Icon(Icons.star, color: Colors.amber),
-        const SizedBox(width: 12),
-        Text(_clock(now), style: const TextStyle(color: Colors.white, fontSize: 20)),
+        if (_technicalVisible && _technical.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 6), child: Text(_technical, style: const TextStyle(color: Colors.white70, fontSize: 12))),
       ]),
-      if (current != null) ...[
-        const SizedBox(height: 8),
-        Row(children: [Text(_clock(current.start), style: const TextStyle(color: Colors.white70)), const Spacer(), Text(_clock(current.stop), style: const TextStyle(color: Colors.white70))]),
-        LinearProgressIndicator(value: progress, color: Colors.orange, backgroundColor: Colors.white24),
-      ],
-      if (current != null && current.description.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 8), child: Text(current.description, maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 14))),
-      if (next != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text('A continuación · ${_clock(next.start)} · ${next.title}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70))),
-      if (_technicalVisible && _technical.isNotEmpty) Text(_technical, style: const TextStyle(color: Colors.white70, fontSize: 12)),
-    ]));
+    );
   }
 
   @override
