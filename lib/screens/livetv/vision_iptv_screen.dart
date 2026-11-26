@@ -1024,7 +1024,9 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   int _verticalColumn = 0, _verticalProgrammeIndex = -1;
   int? _verticalChannelIndex;
   DateTime? _verticalProgrammeStart;
-  final _verticalChannelsScroll = ScrollController(), _verticalProgrammesScroll = ScrollController();
+  final _verticalChannelsScroll = ScrollController(), _verticalProgrammesScroll = ScrollController(), _verticalSynopsisScroll = ScrollController();
+  double _verticalChannelExtent = 46, _verticalProgrammeExtent = 42;
+  String? _verticalGroupKey;
   int _groupIndex = 0, _programmeIndex = -1, _timeShift = 0;
   bool _groupFocus = false;
   bool _menuOpen = false, _recentOnly = false, _refreshingGuide = false;
@@ -1110,7 +1112,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
         _programmeIndex = -1;
         if (_preview) _stepProgramme(0);
         _preparingCatalog = false;
-        if (_verticalGuide) { _verticalChannelIndex = _channelIndex; _syncVerticalProgramme(reset:true); }
+        if (_verticalGuide) { _verticalChannelIndex = _channelIndex; if (_verticalGroupKey != 'Favoritos') _verticalGroupKey = _groupKey(_channel.source,_channel.group); _syncVerticalProgramme(reset:true); }
       });
       _scrollPreview();
       if (_verticalGuide) _scrollVerticalBoth();
@@ -1822,7 +1824,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
       final pos = rows.indexOf(selected);
       final start = (pos - 12).clamp(0, rows.length).toInt();
       final end = (start + 28).clamp(0, rows.length).toInt();
-      final indices = _verticalGuide ? <int>{_channelIndex,selected} : <int>{_channelIndex,_highlightIndex, for (var i = start; i < end; i++) rows[i]};
+      final indices = _verticalGuide ? <int>{_channelIndex,selected, for (var i = start; i < end; i++) rows[i]} : <int>{_channelIndex,_highlightIndex, for (var i = start; i < end; i++) rows[i]};
       unawaited(widget.onGuidePage([for (final i in indices) if (i >= 0 && i < widget.channels.length) widget.channels[i]]));
     });
   }
@@ -1841,7 +1843,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
         _bannerProgramme = i < 0 ? null : entries[i];
       }
     });
-    if (_verticalGuide) _scrollVertical(_verticalProgrammesScroll,_verticalProgrammeIndex,42);
+    if (_verticalGuide) _scrollVertical(_verticalProgrammesScroll,_verticalProgrammeIndex,_verticalProgrammeExtent);
   }
   void _selectGroup(int index) {
     final visual = [1,0, for (var i = 2; i < _groups.length; i++) i];
@@ -2383,7 +2385,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     _channelScroll.dispose();
     _leftHold?.cancel(); _backHold?.cancel(); _favoriteHold?.cancel(); _statusTimer?.cancel();
     _clockTimer?.cancel(); _guidePageTimer?.cancel(); _catalogFallback?.cancel();
-    _verticalChannelsScroll.dispose(); _verticalProgrammesScroll.dispose();
+    _verticalChannelsScroll.dispose(); _verticalProgrammesScroll.dispose(); _verticalSynopsisScroll.dispose();
     _groupScroll.dispose();
     _settingsScroll.dispose();
     _previewScroll.dispose();
@@ -2402,12 +2404,13 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
 
   Rect _verticalVideoRect(Size size) {
     final usable = (size.width - 40).clamp(1.0, 10000.0).toDouble();
-    final width = (usable * .34 - 8).clamp(1.0, 10000.0).toDouble();
+    final width = (usable * .41 - 8).clamp(1.0, 10000.0).toDouble();
     final height = (width * 9 / 16).clamp(1.0, (size.height * .48).clamp(1.0,10000.0).toDouble()).toDouble();
-    return Rect.fromLTWH(size.width - 20 - width, 54, width, height);
+    return Rect.fromLTWH(size.width - 20 - width, 44, width, height);
   }
   List<int> get _verticalRows {
-    final rows = _groupRows[_groupKey(_channel.source,_channel.group)] ?? const <int>[];
+    final key = _verticalGroupKey ?? _groupKey(_channel.source,_channel.group);
+    final rows = key == 'Favoritos' ? [for (final id in widget.favoriteOrder()) if (_channelIndices.containsKey(id)) _channelIndices[id]!] : (_groupRows[key] ?? const <int>[]);
     return rows.contains(_channelIndex) ? rows : [...rows,_channelIndex];
   }
   int get _verticalSelected => (_verticalChannelIndex ?? _channelIndex).clamp(0,widget.channels.length-1).toInt();
@@ -2436,8 +2439,8 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     });
   }
   void _scrollVerticalBoth() {
-    _scrollVertical(_verticalChannelsScroll,_verticalRows.indexOf(_verticalSelected),46);
-    _scrollVertical(_verticalProgrammesScroll,_verticalProgrammeIndex,42);
+    _scrollVertical(_verticalChannelsScroll,_verticalRows.indexOf(_verticalSelected),_verticalChannelExtent);
+    _scrollVertical(_verticalProgrammesScroll,_verticalProgrammeIndex,_verticalProgrammeExtent);
   }
   void _openVerticalGuide() {
     if (_verticalGuide || _preview || _zooming) return;
@@ -2446,6 +2449,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     setState(() {
       _verticalGuide = true; _showName = false; _showChannels = false;
       _verticalColumn = 1; _verticalChannelIndex = _channelIndex;
+      _verticalGroupKey = _selectedGroup == 'Favoritos' && widget.isFavorite(_channel) ? 'Favoritos' : _groupKey(_channel.source,_channel.group);
       _verticalProgrammeStart = null; _syncVerticalProgramme(reset:true);
     });
     if (_preparingCatalog) _beginCatalog();
@@ -2454,11 +2458,16 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   void _closeVerticalGuide() {
     if (!_verticalGuide) return;
     _pendingChannelWrap = null; _fastScroll = false;
-    setState(() { _verticalGuide = false; _showName = false; _bannerProgramme = null; _verticalChannelIndex = null; });
+    setState(() { _verticalGuide = false; _showName = false; _bannerProgramme = null; _verticalChannelIndex = null; _verticalGroupKey = null; });
     _scheduleResize(); _scheduleGuidePage(); _playerFocus.requestFocus();
   }
   void _moveVertical(int delta, {bool wrap = true}) {
     if (_preparingCatalog) return;
+    if (_verticalColumn == 2) {
+      if (_verticalSynopsisScroll.hasClients) { final p = _verticalSynopsisScroll.position; _verticalSynopsisScroll.jumpTo((p.pixels + delta * 42).clamp(0.0,p.maxScrollExtent).toDouble()); }
+      return;
+    }
+    if (_verticalSynopsisScroll.hasClients) _verticalSynopsisScroll.jumpTo(0);
     if (_verticalColumn == 0) {
       final rows = _verticalRows;
       if (rows.isEmpty) return;
@@ -2474,7 +2483,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
         _verticalProgrammeIndex = (_verticalProgrammeIndex + delta).clamp(0,entries.length-1).toInt();
         _verticalProgrammeStart = entries[_verticalProgrammeIndex].start;
       });
-      _scrollVertical(_verticalProgrammesScroll,_verticalProgrammeIndex,42);
+      _scrollVertical(_verticalProgrammesScroll,_verticalProgrammeIndex,_verticalProgrammeExtent);
     }
   }
   Future<void> _confirmVertical() async {
@@ -2504,72 +2513,130 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     final selected = _verticalProgramme;
     final now = DateTime.now();
     final focusedChannel = widget.channels[_verticalSelected];
-    const blue = Color(0xFF90CAF9), surface = Color(0xFF242A36);
-    const headerStyle = TextStyle(color:Colors.white70,fontSize:12,fontWeight:FontWeight.bold);
-    return Padding(padding:const EdgeInsets.fromLTRB(20,12,20,12),child:Column(children:[
-      SizedBox(height:34,child:Row(children:[
-        Expanded(child:Text('${_channel.sourceName} / ${_channel.group}',maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(color:blue,fontSize:16,fontWeight:FontWeight.bold))),
-        Text(_clock(now),style:const TextStyle(color:Colors.white,fontSize:16)),
+    const blue = Color(0xFF90CAF9), surface = Color(0xFF242A36), header = Color(0xFF303847);
+    const muted = Colors.white70;
+    final key = _verticalGroupKey ?? _groupKey(_channel.source,_channel.group);
+    final groupLabel = key == 'Favoritos' ? 'Todas las listas • Favoritos' : '${_channel.sourceName} • ${_channel.group}';
+    final date = now.toLocal();
+    const days = ['lun.','mar.','mié.','jue.','vie.','sáb.','dom.'];
+    const months = ['ene.','feb.','mar.','abr.','may.','jun.','jul.','ago.','sep.','oct.','nov.','dic.'];
+    String dayLabel(DateTime d) {
+      final local = d.toLocal();
+      final today = DateTime(date.year,date.month,date.day);
+      final day = DateTime(local.year,local.month,local.day);
+      if (day == today) return 'Hoy';
+      if (day == DateTime(date.year,date.month,date.day+1)) return 'Mañana';
+      if (day == DateTime(date.year,date.month,date.day-1)) return 'Ayer';
+      return '${days[local.weekday-1]} ${local.day} ${months[local.month-1]}';
+    }
+    _Programme? currentFor(_Channel c) {
+      for (final p in _guide[widget.epgId(c)] ?? const <_Programme>[]) {
+        if (!now.isBefore(p.start) && now.isBefore(p.stop)) return p;
+      }
+      return null;
+    }
+    double progress(_Programme p) => (now.difference(p.start).inSeconds / p.stop.difference(p.start).inSeconds.clamp(1,9999999)).clamp(0.0,1.0).toDouble();
+    Widget logoFor(_Channel c,double width,double height,Color fg) {
+      final logo = _logo(c);
+      return SizedBox(width:width,height:height,child:logo.isEmpty?Icon(Icons.tv,color:fg,size:height*.6):Image.network(logo,cacheWidth:128,fit:BoxFit.contain,errorBuilder:(_,__,___)=>Icon(Icons.tv,color:fg,size:height*.6)));
+    }
+    Widget panel(Widget child) => DecoratedBox(decoration:BoxDecoration(color:surface,borderRadius:BorderRadius.circular(9)),child:ClipRRect(borderRadius:BorderRadius.circular(9),child:child));
+    return Padding(padding:const EdgeInsets.fromLTRB(20,8,20,10),child:Column(children:[
+      SizedBox(height:28,child:Row(children:[
+        const Expanded(child:Text('Plezy Vision  |  IPTV · Guía de programación',maxLines:1,overflow:TextOverflow.ellipsis,style:TextStyle(color:muted,fontSize:15,fontWeight:FontWeight.w600))),
+        Text('${days[date.weekday-1]}, ${date.day} ${months[date.month-1]} ${_clock(now)}',style:const TextStyle(color:blue,fontSize:15,fontWeight:FontWeight.bold)),
       ])),
       const SizedBox(height:8),
       Expanded(child:LayoutBuilder(builder:(_,constraints) {
         final rightWidth = video.width;
-        final leftWidth = (constraints.maxWidth * .25).clamp(1.0,10000.0).toDouble();
+        final leftWidth = (constraints.maxWidth * .28).clamp(1.0,10000.0).toDouble();
+        final headerHeight = (constraints.maxHeight * .10).clamp(35.0,52.0).toDouble();
+        _verticalChannelExtent = ((constraints.maxHeight-headerHeight-8)/8).clamp(1.0,10000.0).toDouble();
+        _verticalProgrammeExtent = ((constraints.maxHeight-headerHeight-8)/13).clamp(24.0,55.0).toDouble();
         return Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
-          SizedBox(width:leftWidth,child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-            const Text('CANALES',style:headerStyle),const SizedBox(height:6),
-            Expanded(child:_preparingCatalog ? const Center(child:Text('Preparando guía…',style:TextStyle(color:Colors.white70))) :
-              ListView.builder(controller:_verticalChannelsScroll,itemExtent:46,itemCount:rows.length,cacheExtent:92,addAutomaticKeepAlives:false,itemBuilder:(_,i) {
+          SizedBox(width:leftWidth,child:panel(Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            Container(height:headerHeight,color:header,padding:const EdgeInsets.symmetric(horizontal:10),alignment:Alignment.centerLeft,child:Text(groupLabel,maxLines:2,overflow:TextOverflow.ellipsis,style:const TextStyle(color:Colors.white,fontSize:15,fontWeight:FontWeight.bold))),
+            const SizedBox(height:4),
+            Expanded(child:_preparingCatalog ? const Center(child:Text('Preparando guía…',style:TextStyle(color:muted))) :
+              ListView.builder(padding:const EdgeInsets.symmetric(horizontal:5),controller:_verticalChannelsScroll,itemExtent:_verticalChannelExtent,itemCount:rows.length,cacheExtent:_verticalChannelExtent*2,addAutomaticKeepAlives:false,itemBuilder:(_,i) {
                 final index = rows[i], c = widget.channels[index];
                 final chosen = index == _verticalSelected, focused = chosen && _verticalColumn == 0;
-                final fg = focused ? Colors.black : Colors.white;
-                final logo = _logo(c);
-                return Container(margin:const EdgeInsets.only(bottom:3),padding:const EdgeInsets.symmetric(horizontal:7),
-                  decoration:BoxDecoration(color:focused?blue:chosen?const Color(0xFF39485B):surface,borderRadius:BorderRadius.circular(5)),
+                final fg = focused ? const Color(0xFF10151D) : Colors.white;
+                final live = currentFor(c);
+                final h = _verticalChannelExtent;
+                return Container(margin:const EdgeInsets.only(bottom:2),padding:const EdgeInsets.symmetric(horizontal:7),
+                  decoration:BoxDecoration(color:focused?const Color(0xFFE3EEFF):chosen?const Color(0xFF39485B):Colors.transparent,borderRadius:BorderRadius.circular(7)),
                   child:Row(children:[
-                    SizedBox(width:30,child:Text('${index+1}',maxLines:1,style:TextStyle(color:fg,fontSize:12))),
-                    SizedBox(width:36,height:28,child:logo.isEmpty?Icon(Icons.tv,color:fg,size:22):Image.network(logo,cacheWidth:96,fit:BoxFit.contain,errorBuilder:(_,__,___)=>Icon(Icons.tv,color:fg,size:22))),
-                    const SizedBox(width:6),Expanded(child:Text(_name(c),maxLines:2,overflow:TextOverflow.ellipsis,style:TextStyle(color:fg,fontSize:13))),
-                    if (widget.isFavorite(c)) const Icon(Icons.star,color:Colors.amber,size:13),
-                    if (index == _channelIndex) Icon(Icons.play_arrow,color:fg,size:16),
+                    logoFor(c,(h*.82).clamp(24.0,54.0).toDouble(),(h*.64).clamp(20.0,42.0).toDouble(),fg),
+                    const SizedBox(width:7),Expanded(child:Column(mainAxisAlignment:MainAxisAlignment.center,crossAxisAlignment:CrossAxisAlignment.start,children:[
+                      Text('${key == 'Favoritos' ? i+1 : index+1}  ${_name(c)}',maxLines:1,overflow:TextOverflow.ellipsis,style:TextStyle(color:fg,fontSize:14,fontWeight:FontWeight.w600)),
+                      if (live != null) ...[
+                        Text(live.title,maxLines:1,overflow:TextOverflow.ellipsis,style:TextStyle(color:focused?const Color(0xFF34485E):blue,fontSize:12)),
+                        const SizedBox(height:3),
+                        LinearProgressIndicator(value:progress(live),minHeight:2,color:focused?const Color(0xFF307BD6):blue,backgroundColor:focused?Colors.black26:Colors.white24),
+                      ],
+                    ])),
+                    if (widget.isFavorite(c)) const Padding(padding:EdgeInsets.only(left:3),child:Icon(Icons.star,color:Colors.amber,size:12)),
+                    if (index == _channelIndex) Icon(Icons.play_arrow,color:fg,size:15),
                   ]));
               })),
-          ])),
+            const SizedBox(height:4),
+          ]))),
           const SizedBox(width:10),
-          Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-            Text('PROGRAMACIÓN · ${_name(focusedChannel)}',maxLines:1,overflow:TextOverflow.ellipsis,style:headerStyle),const SizedBox(height:6),
-            Expanded(child:programmes.isEmpty?const Center(child:Text('Sin programación',style:TextStyle(color:Colors.white70))):
-              ListView.builder(controller:_verticalProgrammesScroll,itemExtent:42,itemCount:programmes.length,cacheExtent:84,addAutomaticKeepAlives:false,itemBuilder:(_,i) {
+          Expanded(child:panel(Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            Container(height:headerHeight,color:header,padding:const EdgeInsets.symmetric(horizontal:9),child:Row(children:[
+              logoFor(focusedChannel,headerHeight*.85,headerHeight*.75,Colors.white),
+              const SizedBox(width:8),Expanded(child:Column(mainAxisAlignment:MainAxisAlignment.center,crossAxisAlignment:CrossAxisAlignment.start,children:[
+                Text(_name(focusedChannel),maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(color:Colors.white,fontSize:16,fontWeight:FontWeight.bold)),
+                Text([focusedChannel.sourceName,focusedChannel.group].where((v)=>v.isNotEmpty).join(' • '),maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(color:muted,fontSize:12)),
+              ])),
+            ])),
+            const SizedBox(height:4),
+            Expanded(child:programmes.isEmpty?const Center(child:Text('Sin programación',style:TextStyle(color:muted))):
+              ListView.builder(padding:const EdgeInsets.symmetric(horizontal:5),controller:_verticalProgrammesScroll,itemExtent:_verticalProgrammeExtent,itemCount:programmes.length,cacheExtent:_verticalProgrammeExtent*2,addAutomaticKeepAlives:false,itemBuilder:(_,i) {
                 final p = programmes[i], chosen = i == _verticalProgrammeIndex, focused = chosen && _verticalColumn == 1;
                 final live = !now.isBefore(p.start) && now.isBefore(p.stop);
-                final fg = focused?Colors.black:Colors.white;
-                return Container(margin:const EdgeInsets.only(bottom:3),padding:const EdgeInsets.symmetric(horizontal:8),
-                  decoration:BoxDecoration(color:focused?blue:live?const Color(0xFF656565):surface,border:chosen&&!focused?Border.all(color:blue):null,borderRadius:BorderRadius.circular(5)),
-                  child:Row(children:[SizedBox(width:48,child:Text(_clock(p.start),style:TextStyle(color:focused?Colors.black:blue,fontSize:13))),
-                    Expanded(child:Text(p.title,maxLines:2,overflow:TextOverflow.ellipsis,style:TextStyle(color:fg,fontSize:13)))]));
+                final fg = focused?const Color(0xFF10151D):live?blue:Colors.white;
+                final newDay = i==0 || dayLabel(programmes[i-1].start)!=dayLabel(p.start);
+                return Container(margin:const EdgeInsets.only(bottom:2),padding:const EdgeInsets.symmetric(horizontal:7),
+                  decoration:BoxDecoration(color:focused?const Color(0xFFE3EEFF):chosen?const Color(0xFF39485B):Colors.transparent,borderRadius:BorderRadius.circular(6)),
+                  child:Row(children:[
+                    SizedBox(width:50,child:Column(mainAxisAlignment:MainAxisAlignment.center,crossAxisAlignment:CrossAxisAlignment.start,children:[
+                      if (newDay) Text(dayLabel(p.start),maxLines:1,overflow:TextOverflow.ellipsis,style:TextStyle(color:focused?const Color(0xFF34485E):blue,fontSize:9)),
+                      Text(_clock(p.start),style:TextStyle(color:fg,fontSize:13)),
+                    ])),
+                    Expanded(child:Text(p.title,maxLines:1,overflow:TextOverflow.ellipsis,style:TextStyle(color:fg,fontSize:14,fontWeight:focused?FontWeight.w600:FontWeight.normal))),
+                    if (live) Icon(Icons.play_arrow,color:fg,size:13),
+                  ]));
               })),
-          ])),
+            const SizedBox(height:4),
+          ]))),
           const SizedBox(width:12),
           SizedBox(width:rightWidth,child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
             SizedBox(height:video.height),
-            const SizedBox(height:8),
-            Row(children:[const Icon(Icons.play_circle_outline,color:blue,size:16),const SizedBox(width:5),Expanded(child:Text(_name(_channel),maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(color:Colors.white,fontSize:14))),const Text('EN DIRECTO',style:TextStyle(color:blue,fontSize:10))]),
-            const Divider(color:Colors.white24),
-            if (selected != null) ...[
-              Text(selected.title,maxLines:2,overflow:TextOverflow.ellipsis,style:const TextStyle(color:Colors.white,fontSize:16,fontWeight:FontWeight.bold)),
-              const SizedBox(height:4),Text('${_clock(selected.start)} – ${_clock(selected.stop)}',style:const TextStyle(color:Colors.white70,fontSize:12)),
-              const SizedBox(height:7),
-              Expanded(child:LayoutBuilder(builder:(_,c) => Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
-                if (selected.poster.startsWith('http') && c.maxWidth >= 170 && c.maxHeight >= 95 && !_fastScroll) ...[
-                  SizedBox(width: (c.maxWidth*.28).clamp(50.0,90.0).toDouble(),height:(c.maxHeight).clamp(1.0,135.0).toDouble(),child:Image.network(selected.poster,cacheHeight:240,fit:BoxFit.contain,alignment:Alignment.topCenter,errorBuilder:(_,__,___)=>const SizedBox.shrink())),const SizedBox(width:8),
+            const SizedBox(height:10),
+            Expanded(child:DecoratedBox(decoration:BoxDecoration(color:surface,borderRadius:BorderRadius.circular(9),border:Border.all(color:_verticalColumn==2?blue:Colors.transparent,width:2)),child:Padding(padding:const EdgeInsets.all(10),child:selected==null?const Center(child:Text('Sin programación',style:TextStyle(color:muted))):Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+              Text(selected.title,maxLines:2,overflow:TextOverflow.ellipsis,style:const TextStyle(color:Colors.white,fontSize:17,fontWeight:FontWeight.bold)),
+              const SizedBox(height:5),
+              Row(children:[
+                Text('${_clock(selected.start)} – ${_clock(selected.stop)}',style:const TextStyle(color:muted,fontSize:12)),
+                if (!now.isBefore(selected.start)&&now.isBefore(selected.stop)) ...[
+                  const SizedBox(width:7),Expanded(child:LinearProgressIndicator(value:progress(selected),minHeight:3,color:blue,backgroundColor:Colors.white24)),
+                  const SizedBox(width:7),Text('${selected.stop.difference(now).inMinutes} min',style:const TextStyle(color:muted,fontSize:12)),
                 ],
-                Expanded(child:Text(selected.description,maxLines:12,overflow:TextOverflow.ellipsis,style:const TextStyle(color:Colors.white70,fontSize:13))),
+              ]),
+              const SizedBox(height:8),
+              Expanded(child:LayoutBuilder(builder:(_,c) => Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                if (selected.poster.startsWith('http') && c.maxWidth>=170 && c.maxHeight>=65 && !_fastScroll) ...[
+                  SizedBox(width:(c.maxWidth*.29).clamp(40.0,112.0).toDouble(),height:c.maxHeight,child:ClipRRect(borderRadius:BorderRadius.circular(6),child:Image.network(selected.poster,cacheHeight:256,fit:BoxFit.contain,alignment:Alignment.topCenter,errorBuilder:(_,__,___)=>const SizedBox.shrink()))),
+                  const SizedBox(width:9),
+                ],
+                Expanded(child:Scrollbar(controller:_verticalSynopsisScroll,thumbVisibility:_verticalColumn==2,child:SingleChildScrollView(controller:_verticalSynopsisScroll,padding:const EdgeInsets.only(right:8),child:Text(selected.description,style:const TextStyle(color:Colors.white,fontSize:14,height:1.22))))),
               ]))),
-            ] else const Expanded(child:Text('Sin programación',style:TextStyle(color:Colors.white70))),
+            ])))),
           ])),
         ]);
       })),
-      const SizedBox(height:5),const Text('↑ ↓ Navegar   ·   ← → Cambiar columna   ·   OK Sintonizar   ·   Atrás Pantalla completa',maxLines:1,overflow:TextOverflow.ellipsis,style:TextStyle(color:Colors.white54,fontSize:11)),
     ]));
   }
 
@@ -2814,8 +2881,8 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
               if (event is KeyRepeatEvent && !_fastScroll) setState(() => _fastScroll = true);
               _moveVertical(key == LogicalKeyboardKey.arrowDown ? 1 : -1);
             } else if (event is KeyDownEvent) {
-              if (key == LogicalKeyboardKey.arrowRight) { setState(() => _verticalColumn = 1); _scrollVerticalBoth(); }
-              if (key == LogicalKeyboardKey.arrowLeft) { if (_verticalColumn == 1) { setState(() => _verticalColumn = 0); _scrollVerticalBoth(); } else { _closeVerticalGuide(); } }
+              if (key == LogicalKeyboardKey.arrowRight) { setState(() => _verticalColumn = (_verticalColumn + 1).clamp(0,2).toInt()); if (_verticalColumn == 1) _scrollVerticalBoth(); }
+              if (key == LogicalKeyboardKey.arrowLeft) { if (_verticalColumn > 0) { setState(() => _verticalColumn--); if (_verticalColumn != 2) _scrollVerticalBoth(); } else { _closeVerticalGuide(); } }
               if (key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter) unawaited(_confirmVertical());
             }
           }
