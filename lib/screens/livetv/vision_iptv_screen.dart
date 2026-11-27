@@ -22,7 +22,6 @@ import '../video_player/player_output_format.dart';
 import 'package:provider/provider.dart';
 import 'live_tv_screen.dart';
 import '../../widgets/plex_trailer_preview.dart';
-import '../../services/settings_service.dart';
 import '../video_player/wakelock_controller.dart';
 
 Future<void> _showIptvRemoteHelp(BuildContext context) async {
@@ -572,9 +571,24 @@ class VisionDiscoverChannel {
 }
 
 final visionDiscoverIptvChanged = ValueNotifier<int>(0);
-const _discoverIptvPref = 'vision_iptv_discover_row';
+const _discoverIptvPref = 'vision_iptv_discover_favorites';
+const _discoverAutoPref = 'vision_iptv_discover_auto';
+Future<bool> visionDiscoverAuto() async => (await SharedPreferences.getInstance()).getBool(_discoverAutoPref) ?? true;
+Future<void> setVisionDiscoverAuto(bool value) async { await (await SharedPreferences.getInstance()).setBool(_discoverAutoPref, value); visionDiscoverIptvChanged.value++; }
+Future<bool> visionDiscoverAvailable() async {
+  final prefs = await SharedPreferences.getInstance();
+  final dir = await getApplicationSupportDirectory();
+  for (final list in _iptvLists(prefs).where((l) => l['active'] == 'true')) {
+    final file = File('${dir.path}/vision_playlist_${_playlistKey(list)}.sqlite');
+    if (!await file.exists()) continue;
+    try { final db = sqlite3.open(file.path, mode: OpenMode.readOnly); try { if (db.select('SELECT 1 FROM channels LIMIT 1').isNotEmpty) return true; } finally { db.dispose(); } } catch (_) {}
+  }
+  if (prefs.getBool(_discoverIptvPref) == true) await prefs.setBool(_discoverIptvPref, false);
+  return false;
+}
+Future<void> setVisionDiscoverEnabled(bool value) async { final prefs = await SharedPreferences.getInstance(); await prefs.setBool(_discoverIptvPref, value && await visionDiscoverAvailable()); visionDiscoverIptvChanged.value++; }
 Future<bool> visionDiscoverIptvEnabled() async =>
-    (await SharedPreferences.getInstance()).getBool(_discoverIptvPref) ?? true;
+    (await SharedPreferences.getInstance()).getBool(_discoverIptvPref) ?? false;
 
 List<_Channel> _readDiscoverRecent((String, String, String, String, List<String>) input) {
   final db = sqlite3.open(input.$1, mode: OpenMode.readOnly);
@@ -600,10 +614,9 @@ List<_Channel> _readDiscoverRecent((String, String, String, String, List<String>
 
 Future<List<VisionDiscoverChannel>> loadVisionDiscoverChannels() async {
   final prefs = await SharedPreferences.getInstance();
-  if (!(prefs.getBool(_discoverIptvPref) ?? true)) return [];
-  final ids = (prefs.getStringList('vision_iptv_recent') ?? []).take(5).toList();
+  if (!(prefs.getBool(_discoverIptvPref) ?? false) || !await visionDiscoverAvailable()) return [];
+  final ids = prefs.getStringList('vision_iptv_favorites') ?? <String>[];
   final resume = _Channel.fromResumeJson(prefs.getString('vision_iptv_resume_channel'));
-  if (ids.isEmpty && resume != null) ids.add(resume.favoriteId);
   if (ids.isEmpty) return [];
   final support = await getApplicationSupportDirectory();
   final cache = await getApplicationCacheDirectory();
@@ -619,11 +632,11 @@ Future<List<VisionDiscoverChannel>> loadVisionDiscoverChannels() async {
       if (epg.isEmpty && resume?.source == id) epg = resume!.epgSource;
       final channels = await compute(_readDiscoverRecent, (disk.path, id, list['name'] ?? 'Lista IPTV', epg, ids));
       for (final c in channels) {
-        if (!_hiddenGroups(list).contains(c.group)) found[c.favoriteId] = c;
+        found[c.favoriteId] = c;
       }
     } catch (_) {}
   }
-  if (resume != null && active.any((l) => l['id'] == resume.source && !_hiddenGroups(l).contains(resume.group))) {
+  if (resume != null && active.any((l) => l['id'] == resume.source)) {
     found.putIfAbsent(resume.favoriteId, () => resume);
   }
   final custom = _readIptvMap(prefs.getString('vision_iptv_custom_multi_v1'));
@@ -726,23 +739,10 @@ class _VisionDiscoverPreviewState extends State<VisionDiscoverPreview> {
   StreamSubscription<void>? _frames;
   StreamSubscription<dynamic>? _previewErrors;
   bool _ready = false, _failed = false, _cancelled = false;
-  Timer? _delay;
   @override
   void initState() {
     super.initState();
-    final seconds = switch (SettingsService.instance.read(SettingsService.plexTrailerPreviewDelay)) {
-      TrailerPreviewDelay.s1 => 1,
-      TrailerPreviewDelay.s2 => 2,
-      TrailerPreviewDelay.s3 => 3,
-      TrailerPreviewDelay.s4 => 4,
-      TrailerPreviewDelay.s5 => 5,
-      TrailerPreviewDelay.s7 => 7,
-      TrailerPreviewDelay.s10 => 10,
-      TrailerPreviewDelay.s15 => 15,
-    };
-    _delay = Timer(Duration(seconds: seconds), () {
-      _queue = _queue.then((_) => _start()).catchError((Object _) {});
-    });
+    _queue = _queue.then((_) => _start()).catchError((Object _) {});
   }
   Future<void> _start() async {
     if (_cancelled || !mounted) return;
@@ -784,7 +784,6 @@ class _VisionDiscoverPreviewState extends State<VisionDiscoverPreview> {
   @override
   void dispose() {
     _cancelled = true;
-    _delay?.cancel();
     _queue = _queue.then((_) async {
       await _frames?.cancel();
       await _previewErrors?.cancel();
@@ -798,18 +797,25 @@ class _VisionDiscoverPreviewState extends State<VisionDiscoverPreview> {
   Widget build(BuildContext context) {
     _resize();
     final channel = widget.channel;
+    return ClipRRect(borderRadius: BorderRadius.circular(12), child: Stack(fit: StackFit.expand, children: [
+      if (_ready && !_failed) const CustomPaint(painter: _DiscoverVideoHole()),
+      if (_player != null) SizedBox(key: _video, child: Video(player: _player!, backgroundColor: Colors.transparent)),
+      if (!_ready || _failed) VisionDiscoverPoster(channel: channel),
+    ]));
+  }
+}
+class VisionDiscoverPoster extends StatelessWidget {
+  const VisionDiscoverPoster({super.key, required this.channel});
+  final VisionDiscoverChannel channel;
+  @override
+  Widget build(BuildContext context) {
     Widget fallback() => Center(child: channel.logo.startsWith('http')
       ? Padding(padding: const EdgeInsets.all(24), child: Image.network(channel.logo, fit: BoxFit.contain,
           errorBuilder: (_, __, ___) => const Icon(Icons.tv, color: Colors.white70, size: 42)))
       : const Icon(Icons.tv, color: Colors.white70, size: 42));
-    return ClipRRect(borderRadius: BorderRadius.circular(12), child: Stack(fit: StackFit.expand, children: [
-      if (_ready && !_failed) const CustomPaint(painter: _DiscoverVideoHole()),
-      if (_player != null) SizedBox(key: _video, child: Video(player: _player!)),
-      if (!_ready || _failed) ColoredBox(color: const Color(0xFF242A36),
-        child: channel.poster.startsWith('http')
-          ? Image.network(channel.poster, fit: BoxFit.contain, errorBuilder: (_, __, ___) => fallback())
-          : fallback()),
-    ]));
+    return LayoutBuilder(builder: (context, bounds) => Center(child: channel.poster.startsWith('http')
+      ? ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.network(channel.poster, height: bounds.maxHeight, fit: BoxFit.contain, errorBuilder: (_, __, ___) => fallback()))
+      : fallback()));
   }
 }
 class _DiscoverVideoHole extends CustomPainter {
@@ -939,7 +945,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
       if (!_favorites.remove(channel.favoriteId)) _favorites.add(channel.favoriteId);
     });
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList('vision_iptv_favorites', _favorites.toList());
+    await prefs.setStringList('vision_iptv_favorites', _favorites.toList()); visionDiscoverIptvChanged.value++;
   }
 
   String? _lastChannel;
@@ -1032,7 +1038,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
     final pending = visibleOrder.toList();
     _favorites = [for (final id in _favorites) if (visibleOrder.contains(id)) pending.removeAt(0) else id].toSet();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList('vision_iptv_favorites', _favorites.toList());
+    await prefs.setStringList('vision_iptv_favorites', _favorites.toList()); visionDiscoverIptvChanged.value++;
   }
 
   Future<List<_Channel>?> _reloadListsInPlayer(Set<String> refreshIds) async {
@@ -1456,7 +1462,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
     custom['names'] = names; custom['logos'] = logos; custom['order'] = order;
     await prefs.setString(_customKey, jsonEncode(custom));
     await prefs.setStringList('vision_iptv_migrated_sources', migrated.toList());
-    await prefs.setStringList('vision_iptv_favorites', _favorites.toList());
+    await prefs.setStringList('vision_iptv_favorites', _favorites.toList()); visionDiscoverIptvChanged.value++;
     await prefs.setStringList('vision_iptv_recent', _recent);
     if (_lastChannel != null) await prefs.setString('vision_iptv_last_fullscreen', _lastChannel!);
     await prefs.setString('vision_iptv_epg_overrides', jsonEncode(_epgOverrides));
@@ -1697,7 +1703,6 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   String _settingsUrl = '', _settingsEpg = '', _settingsBuffer = 'minimum';
   bool _settingsExo = true, _settingsHls = false, _settingsTunnel = false;
   bool _settingsPassthrough = false, _settingsAfr = false;
-  bool _discoverRow = true;
   late String _logoSource = widget.logoSource;
   late bool _useEpgNames = widget.useEpgNames;
   late bool _quickStartSetting = widget.quickStart;
@@ -2111,7 +2116,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
       case 'section_guide': return ['epg','epg_refresh_entry','epg_refresh_hours','epg_updated','refresh','back'];
       case 'section_appearance': return ['logos','epg_names','banner','loading_indicator','back'];
       case 'section_playback': return ['player',if (_settingsExo) ...['format','tunnel'] else 'buffer','passthrough','afr','back'];
-      case 'section_behavior': return ['quick_start','discover_row','back'];
+      case 'section_behavior': return ['quick_start','back'];
       case 'section_backup': return ['backup','restore','back'];
       default: return [..._settingsSections,'back'];
     }
@@ -2359,7 +2364,6 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     if (key == 'section_remote_help') { await _showIptvRemoteHelp(context); return; }
     if (_settingsSections.contains(key)) { setState(() { _settingsSection = key; _settingsIndex = 0; }); _resetSettingsScroll(); return; }
     if (key == 'back') { _closeSettings(); return; }
-    if (key == 'discover_row') { final prefs = await SharedPreferences.getInstance(); if (!mounted) return; setState(() => _discoverRow = !(prefs.getBool(_discoverIptvPref) ?? true)); await prefs.setBool(_discoverIptvPref, _discoverRow); visionDiscoverIptvChanged.value++; return; }
     if (key == 'lists') { await _manageLists(); return; }
     if (key == 'epg_updated') return;
     if (key == 'backup' || key == 'restore') { await _configurationBackup(key == 'restore'); return; }
@@ -2490,9 +2494,9 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   }
 
   Widget _iptvSettingsPanel() {
-    final labels = <String, String>{..._settingsSectionLabels, 'discover_row':'Mostrar TV en vivo en Discover', 'loading_indicator':'Mostrar indicador de carga', 'list_refresh_entry':'Actualizar al iniciar TV en vivo','epg_refresh_entry':'Actualizar al iniciar TV en vivo','list_refresh_hours':'Intervalo de actualización','epg_refresh_hours':'Intervalo de actualización','epg_updated':'Última actualización EPG', 'm3u': 'Lista M3U activa', 'epg': 'EPG predeterminada', 'lists': 'Listas IPTV', 'quick_start': 'Inicio rápido en último canal', 'banner': 'Duración barra de información', 'player': 'Reproductor IPTV', 'format': 'Formato', 'tunnel': 'Tunneling', 'buffer': 'Búfer MPV', 'passthrough': 'Audio passthrough', 'afr': 'AFR', 'logos': 'Origen de logotipos', 'epg_names': 'Renombrar canales según EPG', 'backup': 'Copia de seguridad', 'restore': 'Restaurar configuración', 'refresh': 'Actualizar programación', 'back': 'Volver al menú'};
-    final values = <String, String>{'discover_row':_discoverRow ? 'Sí' : 'No', 'section_lists':'Listas y grupos', 'section_guide':'EPG y actualización', 'section_appearance':'Aspecto e información', 'section_playback':'Motor y opciones de vídeo/audio', 'section_behavior':'Arranque', 'section_backup':'Guardar y restaurar', 'section_remote_help':'Tutorial', 'loading_indicator':_showLoadingIndicator ? 'Sí' : 'No', 'list_refresh_entry':_listRefreshEntry?'Sí':'No','epg_refresh_entry':_epgRefreshEntry?'Sí':'No','list_refresh_hours':_refreshLabel(_listRefreshHours),'epg_refresh_hours':_refreshLabel(_epgRefreshHours),'epg_updated':widget.epgUpdatedLabel(), 'm3u': _settingsUrl.isEmpty ? 'Sin configurar' : 'Configurada', 'epg': _settingsEpg.isEmpty ? 'Automática desde M3U' : 'Manual', 'lists': 'Gestionar', 'quick_start': _quickStartSetting ? 'Sí' : 'No', 'banner': _bannerSeconds == 0 ? 'Permanente' : '${_bannerSeconds} s', 'player': _settingsExo ? 'ExoPlayer' : 'MPV', 'format': _settingsHls ? 'HLS' : 'Auto', 'tunnel': _settingsTunnel ? 'Sí' : 'No', 'buffer': _settingsBuffer == 'minimum' ? 'Mínimo (0)' : _settingsBuffer == 'small' ? 'Pequeño' : 'Normal', 'passthrough': _settingsPassthrough ? 'Sí' : 'No', 'afr': _settingsAfr ? 'Sí' : 'No', 'logos': _logoSource == 'epg' ? 'EPG' : 'M3U', 'epg_names': _useEpgNames ? 'Sí' : 'No', 'backup': '', 'restore': '', 'refresh': widget.guideStatus(), 'back': ''};
-    final icons = <String, IconData>{'discover_row':Icons.tv, 'section_lists':Icons.list, 'section_guide':Icons.calendar_today, 'section_appearance':Icons.monitor, 'section_playback':Icons.play_circle_outline, 'section_behavior':Icons.flash_on, 'section_backup':Icons.save, 'section_remote_help':Icons.help_outline, 'loading_indicator':Icons.hourglass_empty, 'list_refresh_entry':Icons.flash_on,'epg_refresh_entry':Icons.flash_on,'list_refresh_hours':Icons.timer,'epg_refresh_hours':Icons.timer,'epg_updated':Icons.calendar_today, 'm3u': Icons.list, 'epg': Icons.calendar_today, 'lists': Icons.playlist_add, 'quick_start': Icons.flash_on, 'banner': Icons.timer, 'player': Icons.play_circle_outline, 'format': Icons.video_settings, 'tunnel': Icons.settings_ethernet, 'buffer': Icons.memory, 'passthrough': Icons.volume_up, 'afr': Icons.monitor, 'logos': Icons.image, 'epg_names': Icons.edit, 'backup': Icons.save, 'restore': Icons.folder_open, 'refresh': Icons.refresh, 'back': Icons.arrow_back};
+    final labels = <String, String>{..._settingsSectionLabels, 'loading_indicator':'Mostrar indicador de carga', 'list_refresh_entry':'Actualizar al iniciar TV en vivo','epg_refresh_entry':'Actualizar al iniciar TV en vivo','list_refresh_hours':'Intervalo de actualización','epg_refresh_hours':'Intervalo de actualización','epg_updated':'Última actualización EPG', 'm3u': 'Lista M3U activa', 'epg': 'EPG predeterminada', 'lists': 'Listas IPTV', 'quick_start': 'Inicio rápido en último canal', 'banner': 'Duración barra de información', 'player': 'Reproductor IPTV', 'format': 'Formato', 'tunnel': 'Tunneling', 'buffer': 'Búfer MPV', 'passthrough': 'Audio passthrough', 'afr': 'AFR', 'logos': 'Origen de logotipos', 'epg_names': 'Renombrar canales según EPG', 'backup': 'Copia de seguridad', 'restore': 'Restaurar configuración', 'refresh': 'Actualizar programación', 'back': 'Volver al menú'};
+    final values = <String, String>{'section_lists':'Listas y grupos', 'section_guide':'EPG y actualización', 'section_appearance':'Aspecto e información', 'section_playback':'Motor y opciones de vídeo/audio', 'section_behavior':'Arranque', 'section_backup':'Guardar y restaurar', 'section_remote_help':'Tutorial', 'loading_indicator':_showLoadingIndicator ? 'Sí' : 'No', 'list_refresh_entry':_listRefreshEntry?'Sí':'No','epg_refresh_entry':_epgRefreshEntry?'Sí':'No','list_refresh_hours':_refreshLabel(_listRefreshHours),'epg_refresh_hours':_refreshLabel(_epgRefreshHours),'epg_updated':widget.epgUpdatedLabel(), 'm3u': _settingsUrl.isEmpty ? 'Sin configurar' : 'Configurada', 'epg': _settingsEpg.isEmpty ? 'Automática desde M3U' : 'Manual', 'lists': 'Gestionar', 'quick_start': _quickStartSetting ? 'Sí' : 'No', 'banner': _bannerSeconds == 0 ? 'Permanente' : '${_bannerSeconds} s', 'player': _settingsExo ? 'ExoPlayer' : 'MPV', 'format': _settingsHls ? 'HLS' : 'Auto', 'tunnel': _settingsTunnel ? 'Sí' : 'No', 'buffer': _settingsBuffer == 'minimum' ? 'Mínimo (0)' : _settingsBuffer == 'small' ? 'Pequeño' : 'Normal', 'passthrough': _settingsPassthrough ? 'Sí' : 'No', 'afr': _settingsAfr ? 'Sí' : 'No', 'logos': _logoSource == 'epg' ? 'EPG' : 'M3U', 'epg_names': _useEpgNames ? 'Sí' : 'No', 'backup': '', 'restore': '', 'refresh': widget.guideStatus(), 'back': ''};
+    final icons = <String, IconData>{'section_lists':Icons.list, 'section_guide':Icons.calendar_today, 'section_appearance':Icons.monitor, 'section_playback':Icons.play_circle_outline, 'section_behavior':Icons.flash_on, 'section_backup':Icons.save, 'section_remote_help':Icons.help_outline, 'loading_indicator':Icons.hourglass_empty, 'list_refresh_entry':Icons.flash_on,'epg_refresh_entry':Icons.flash_on,'list_refresh_hours':Icons.timer,'epg_refresh_hours':Icons.timer,'epg_updated':Icons.calendar_today, 'm3u': Icons.list, 'epg': Icons.calendar_today, 'lists': Icons.playlist_add, 'quick_start': Icons.flash_on, 'banner': Icons.timer, 'player': Icons.play_circle_outline, 'format': Icons.video_settings, 'tunnel': Icons.settings_ethernet, 'buffer': Icons.memory, 'passthrough': Icons.volume_up, 'afr': Icons.monitor, 'logos': Icons.image, 'epg_names': Icons.edit, 'backup': Icons.save, 'restore': Icons.folder_open, 'refresh': Icons.refresh, 'back': Icons.arrow_back};
     final keys = _settingKeys;
     return Container(
       padding: const EdgeInsets.all(12),
@@ -2926,7 +2930,6 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     super.initState();
     FocusManager.instance.addEarlyKeyEventHandler(_iptvEarlyKey);
     _consultationIdle = Timer.periodic(const Duration(seconds: 1), (_) => _checkConsultationIdle());
-    unawaited(visionDiscoverIptvEnabled().then((enabled) { if (mounted) setState(() => _discoverRow = enabled); }));
     _rebuildChannelIndices();
     if (_preparingCatalog) _catalogFallback = Timer(const Duration(seconds: 4), _beginCatalog);
     _channelIndex = widget.channels.indexOf(widget.channel);
