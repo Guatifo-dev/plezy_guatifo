@@ -515,11 +515,16 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     final artwork = channel.poster.isNotEmpty ? channel.poster : channel.logo;
     return AmbientSpotlightTint(item: MediaItem.plex(id: 'iptv-art:${channel.id}:$artwork', kind: MediaKind.episode, thumbPath: artwork, artPath: artwork), client: null, allowNetwork: true, localArtworkPathResolver: null, childBuilder: (context) => LayoutBuilder(builder: (context, constraints) {
       final width = constraints.maxWidth, height = constraints.maxHeight;
-      final videoWidth = math.min(width * .43, height * .38 * 16 / 9);
+      final videoWidth = math.min(width * .40, height * .345 * 16 / 9);
       final videoHeight = videoWidth * 9 / 16;
-      final top = height * .055;
+      final sidebar = MainScreenFocusScope.foregroundLeftOf(context);
+      final infoLeft = sidebar + width * .022;
+      final videoRight = width * .025;
+      final infoWidth = (width - videoRight - videoWidth - infoLeft - width * .025).clamp(0.0, double.infinity).toDouble();
+      final videoTop = height * .105;
+      final infoTop = height * .035;
       return Stack(children: [
-        Positioned(top: top, left: width * .045, width: width * .43, height: height * .36,
+        Positioned(top: infoTop, left: infoLeft, width: infoWidth, height: height * .415,
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             SizedBox(height: math.min(65.0, height * .12), child: channel.logo.startsWith('http')
               ? Image.network(channel.logo, fit: BoxFit.contain, errorBuilder: (_, __, ___) => Text(channel.name, style: const TextStyle(color: Colors.white, fontSize: 24)))
@@ -528,9 +533,12 @@ class _DiscoverScreenState extends State<DiscoverScreen>
             Text(channel.programme, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
             if (channel.schedule.isNotEmpty) Text(channel.schedule, style: const TextStyle(color: Color(0xFF90CAF9), fontSize: 13)),
             const SizedBox(height: 8),
-            Expanded(child: Text(channel.description, maxLines: 5, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 14))),
+            Flexible(child: LayoutBuilder(builder: (context, bounds) {
+              final lines = (bounds.maxHeight / 19.0).floor().clamp(1, 5).toInt();
+              return Text(channel.description, maxLines: lines, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 14, height: 19 / 14));
+            })),
           ])),
-        Positioned(top: top, right: width * .025, width: videoWidth, height: videoHeight,
+        Positioned(top: videoTop, right: videoRight, width: videoWidth, height: videoHeight,
           child: _livePlaying ? VisionDiscoverPreview(key: ValueKey(channel.id), channel: channel) : VisionDiscoverPoster(channel: channel)),
       ]);
     }));
