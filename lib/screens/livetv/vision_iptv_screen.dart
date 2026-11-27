@@ -23,6 +23,192 @@ import 'package:provider/provider.dart';
 import 'live_tv_screen.dart';
 import '../video_player/wakelock_controller.dart';
 
+Future<void> _showIptvRemoteHelp(BuildContext context) async {
+  await showDialog<void>(
+    context: context,
+    useRootNavigator: false,
+    builder: (_) => const _IptvRemoteHelp(),
+  );
+}
+
+class _IptvRemoteHelp extends StatefulWidget {
+  const _IptvRemoteHelp();
+  @override
+  State<_IptvRemoteHelp> createState() => _IptvRemoteHelpState();
+}
+
+class _IptvRemoteHelpState extends State<_IptvRemoteHelp> {
+  static const _pages = <(String, IconData, List<(String, String)>)>[
+    ('Pantalla completa', Icons.tv, [
+      ('↑ / ↓', 'Siguiente / anterior canal del grupo actual.'),
+      ('OK', 'Mostrar la barra de información del canal.'),
+      ('←', 'Abrir la EPG por columnas si la barra está oculta.'),
+      ('→', 'Volver al último canal si la barra está oculta.'),
+      ('← / →', 'Con la barra visible: programa anterior / siguiente.'),
+      ('MENU', 'Abrir opciones del canal.'),
+      ('Atrás', 'Ocultar la barra; con la barra oculta, abrir la EPG clásica.'),
+      ('Atrás largo', 'Salir de TV en vivo (650 ms).'),
+    ]),
+    ('EPG clásica', Icons.calendar_today, [
+      ('↑ / ↓', 'Recorrer canales o grupos, según el foco. Mantener para avanzar rápidamente.'),
+      ('← / →', 'Recorrer programas; desde el programa actual, izquierda vuelve al canal, grupos y menú.'),
+      ('← largo', 'Retroceder al programa anterior (600 ms).'),
+      ('OK', 'Sintonizar en vista previa; si ya está sintonizado, ampliar a pantalla completa.'),
+      ('OK / programa', 'Si está en emisión, sintonizar o ampliar; si es pasado o futuro, abrir su menú.'),
+      ('MENU / OK largo', 'Abrir el menú del canal o programa (OK largo: 600 ms).'),
+      ('Atrás', 'Regresar a la hora actual si se consultan otros programas o grupos; después, pantalla completa.'),
+    ]),
+    ('EPG por columnas', Icons.view_column, [
+      ('← / →', 'Mover el foco entre menú, grupos, canales, programas y sinopsis.'),
+      ('↑ / ↓', 'Recorrer los elementos de la columna activa; en sinopsis, desplazar el texto.'),
+      ('OK', 'Abrir menú o grupo; sintonizar canal en vista previa o ampliar si ya está sintonizado.'),
+      ('OK / programa', 'En emisión: sintonizar o ampliar. Pasado o futuro: abrir menú del programa.'),
+      ('MENU / OK largo', 'Abrir menú contextual del canal o programa (600 ms).'),
+      ('Atrás', 'Volver a pantalla completa.'),
+    ]),
+    ('Información del programa', Icons.info_outline, [
+      ('← / →', 'Consultar el programa anterior o siguiente.'),
+      ('↑ / ↓', 'Desplazar la sinopsis.'),
+      ('Atrás / OK', 'Volver a la guía en el último programa consultado.'),
+    ]),
+    ('Menús contextuales', Icons.list, [
+      ('↑ / ↓', 'Seleccionar una opción.'),
+      ('OK', 'Confirmar la opción seleccionada.'),
+      ('Atrás', 'Cerrar el menú sin elegir una opción.'),
+      ('OK largo', 'Al abrir un menú, soltar OK antes de volver a pulsarlo.'),
+    ]),
+    ('Menú principal IPTV', Icons.menu, [
+      ('↑ / ↓', 'Recorrer guía, favoritos, últimos canales, actualización, ajustes y salida.'),
+      ('OK', 'Abrir la opción seleccionada.'),
+      ('→', 'Regresar a la guía o pasar a la columna de grupos.'),
+      ('Atrás', 'Cerrar el menú en la EPG clásica; en columnas, volver al vídeo.'),
+    ]),
+    ('Ajustes IPTV', Icons.settings, [
+      ('↑ / ↓', 'Recorrer secciones y opciones.'),
+      ('OK', 'Abrir una sección o cambiar la opción seleccionada.'),
+      ('← / Atrás', 'Volver al nivel anterior de ajustes.'),
+      ('Inactividad', 'Los ajustes y formularios no se cierran automáticamente.'),
+    ]),
+  ];
+  int _page = -1;
+  int _selected = 0;
+  final _scroll = ScrollController();
+  final _focus = FocusNode();
+  void _changePage(int page) {
+    setState(() => _page = page);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _scroll.hasClients) _scroll.jumpTo(0);
+    });
+  }
+  @override
+  void dispose() {
+    _scroll.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+  @override
+  Widget build(BuildContext context) {
+    const blue = Color(0xFF90CAF9);
+    final detail = _page >= 0;
+    return Dialog(
+      backgroundColor: const Color(0xFF1B202A),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 30, vertical: 24),
+      child: Focus(
+        focusNode: _focus,
+        autofocus: true,
+        onKeyEvent: (_, event) {
+          final key = event.logicalKey;
+          if (event is KeyUpEvent) return KeyEventResult.handled;
+          if (key == LogicalKeyboardKey.goBack || key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.browserBack) {
+            if (event is KeyDownEvent) {
+              if (detail) { _changePage(-1); } else { Navigator.of(context).pop(); }
+            }
+            return KeyEventResult.handled;
+          }
+          if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown) {
+            final delta = key == LogicalKeyboardKey.arrowDown ? 1 : -1;
+            if (detail) {
+              if (_scroll.hasClients) {
+                _scroll.jumpTo((_scroll.offset + delta * 55).clamp(0.0, _scroll.position.maxScrollExtent).toDouble());
+              }
+            } else {
+              setState(() => _selected = (_selected + delta).clamp(0, _pages.length - 1).toInt());
+              if (_scroll.hasClients) {
+                _scroll.jumpTo((_selected * 46.0 - _scroll.position.viewportDimension / 2 + 23).clamp(0.0, _scroll.position.maxScrollExtent).toDouble());
+              }
+            }
+            return KeyEventResult.handled;
+          }
+          if (event is KeyDownEvent) {
+            if (key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.arrowRight) {
+              if (!detail) _changePage(_selected);
+              return KeyEventResult.handled;
+            }
+            if (key == LogicalKeyboardKey.arrowLeft && detail) {
+              _changePage(-1);
+              return KeyEventResult.handled;
+            }
+          }
+          return KeyEventResult.handled;
+        },
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 760, maxHeight: 470),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              const Text('Guía de uso del mando', style: TextStyle(color: Colors.white, fontSize: 23, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              Text(detail ? _pages[_page].$1 : 'Selecciona una pantalla para consultar sus controles.', style: const TextStyle(color: blue, fontSize: 16)),
+              const Divider(color: Colors.white24),
+              Expanded(child: detail
+                ? ListView.separated(
+                    controller: _scroll,
+                    itemCount: _pages[_page].$3.length,
+                    separatorBuilder: (_, __) => const Divider(color: Colors.white12, height: 12),
+                    itemBuilder: (_, i) {
+                      final item = _pages[_page].$3[i];
+                      return Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+                        Container(
+                          width: 124,
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                          decoration: BoxDecoration(color: const Color(0xFF303B4D), borderRadius: BorderRadius.circular(6)),
+                          child: Text(item.$1, textAlign: TextAlign.center, style: const TextStyle(color: blue, fontSize: 14, fontWeight: FontWeight.bold)),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(child: Text(item.$2, style: const TextStyle(color: Colors.white, fontSize: 15))),
+                      ]);
+                    })
+                : ListView.builder(
+                    controller: _scroll,
+                    itemExtent: 46,
+                    itemCount: _pages.length,
+                    itemBuilder: (_, i) {
+                      final focused = i == _selected;
+                      final fg = focused ? Colors.black : Colors.white;
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(color: focused ? blue : const Color(0xFF242A36), borderRadius: BorderRadius.circular(7)),
+                        child: Row(children: [
+                          Icon(_pages[i].$2, color: fg, size: 20),
+                          const SizedBox(width: 12),
+                          Expanded(child: Text(_pages[i].$1, style: TextStyle(color: fg, fontSize: 15))),
+                          Icon(Icons.chevron_right, color: fg),
+                        ]),
+                      );
+                    })),
+              const Divider(color: Colors.white24),
+              const Text('Tras 60 s sin usar el mando, las pantallas de consulta vuelven al vídeo si hay un canal sintonizado. Los ajustes están excluidos.', style: TextStyle(color: blue, fontSize: 12)),
+              const SizedBox(height: 8),
+              Text(detail ? '↑ / ↓: desplazar · ← / Atrás: volver al tutorial' : '↑ / ↓: seleccionar · OK: abrir · Atrás: cerrar', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _Channel {
   _Channel(this.name, this.group, this.url, this.logo, {this.drmType, this.drmLicense, this.manifestType, this.tvgId = '', this.source = '', this.sourceName = '', this.epgSource = ''});
   final String name, group, url, logo;
@@ -1030,6 +1216,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
         if (!_useExoPlayer) ListTile(title: const Text('Búfer'), subtitle: Text(_bufferLabel), onTap: _selectBuffer),
         if (_useExoPlayer) ListTile(title: const Text('Formato'), subtitle: Text(_forceHls ? 'HLS' : 'Auto'), onTap: _toggleFormat),
         if (_useExoPlayer) ListTile(title: const Text('Tunneling'), subtitle: Text(_tunneling ? 'Sí' : 'No'), onTap: _toggleTunneling),
+        ListTile(title: const Text('Guía de uso del mando'), leading: const Icon(Icons.help_outline), onTap: () => _showIptvRemoteHelp(context)),
         ListTile(title: const Text('Actualizar lista y guía'), subtitle: Text(_epgStatus), onTap: () async { await _load(); if (mounted) await _loadGuide(force: true); }),
         if (_loading) const LinearProgressIndicator(),
         if (_error != null) ListTile(title: Text(_error!)),
@@ -1235,8 +1422,8 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   static const _bannerChoices = [2, 3, 4, 5, 7, 10, 15, 0];
   int _settingsIndex = 0;
   String? _settingsSection;
-  static const _settingsSections = ['section_lists','section_guide','section_appearance','section_playback','section_behavior','section_backup'];
-  static const _settingsSectionLabels = <String,String>{'section_lists':'Listas IPTV','section_guide':'Guía de programación','section_appearance':'Interfaz y apariencia','section_playback':'Reproducción','section_behavior':'Comportamiento','section_backup':'Copia de seguridad'};
+  static const _settingsSections = ['section_lists','section_guide','section_appearance','section_playback','section_behavior','section_backup','section_remote_help'];
+  static const _settingsSectionLabels = <String,String>{'section_lists':'Listas IPTV','section_guide':'Guía de programación','section_appearance':'Interfaz y apariencia','section_playback':'Reproducción','section_behavior':'Comportamiento','section_backup':'Copia de seguridad','section_remote_help':'Guía de uso del mando'};
   void _resetSettingsScroll() { if (_settingsScroll.hasClients) _settingsScroll.jumpTo(0); }
   void _leaveSettingsSection() { final section = _settingsSection; setState(() { _settingsSection = null; _settingsIndex = _settingsSections.indexOf(section ?? '').clamp(0,_settingsSections.length-1).toInt(); }); WidgetsBinding.instance.addPostFrameCallback((_) { if (!mounted || !_settingsOpen || !_settingsScroll.hasClients) return; final p = _settingsScroll.position; _settingsScroll.jumpTo((_settingsIndex*44.0-p.viewportDimension/2+22).clamp(0.0,p.maxScrollExtent).toDouble()); }); }
   String _settingsUrl = '', _settingsEpg = '', _settingsBuffer = 'minimum';
@@ -1900,6 +2087,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
 
   Future<void> _activateSetting() async {
     final key = _settingKeys[_settingsIndex];
+    if (key == 'section_remote_help') { await _showIptvRemoteHelp(context); return; }
     if (_settingsSections.contains(key)) { setState(() { _settingsSection = key; _settingsIndex = 0; }); _resetSettingsScroll(); return; }
     if (key == 'back') { _closeSettings(); return; }
     if (key == 'lists') { await _manageLists(); return; }
@@ -2033,8 +2221,8 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
 
   Widget _iptvSettingsPanel() {
     final labels = <String, String>{..._settingsSectionLabels, 'loading_indicator':'Mostrar indicador de carga', 'list_refresh_entry':'Actualizar al iniciar TV en vivo','epg_refresh_entry':'Actualizar al iniciar TV en vivo','list_refresh_hours':'Intervalo de actualización','epg_refresh_hours':'Intervalo de actualización','epg_updated':'Última actualización EPG', 'm3u': 'Lista M3U activa', 'epg': 'EPG predeterminada', 'lists': 'Listas IPTV', 'quick_start': 'Inicio rápido en último canal', 'banner': 'Duración barra de información', 'player': 'Reproductor IPTV', 'format': 'Formato', 'tunnel': 'Tunneling', 'buffer': 'Búfer MPV', 'passthrough': 'Audio passthrough', 'afr': 'AFR', 'logos': 'Origen de logotipos', 'epg_names': 'Renombrar canales según EPG', 'backup': 'Copia de seguridad', 'restore': 'Restaurar configuración', 'refresh': 'Actualizar programación', 'back': 'Volver al menú'};
-    final values = <String, String>{'section_lists':'Listas y grupos', 'section_guide':'EPG y actualización', 'section_appearance':'Aspecto e información', 'section_playback':'Motor y opciones de vídeo/audio', 'section_behavior':'Arranque', 'section_backup':'Guardar y restaurar', 'loading_indicator':_showLoadingIndicator ? 'Sí' : 'No', 'list_refresh_entry':_listRefreshEntry?'Sí':'No','epg_refresh_entry':_epgRefreshEntry?'Sí':'No','list_refresh_hours':_refreshLabel(_listRefreshHours),'epg_refresh_hours':_refreshLabel(_epgRefreshHours),'epg_updated':widget.epgUpdatedLabel(), 'm3u': _settingsUrl.isEmpty ? 'Sin configurar' : 'Configurada', 'epg': _settingsEpg.isEmpty ? 'Automática desde M3U' : 'Manual', 'lists': 'Gestionar', 'quick_start': _quickStartSetting ? 'Sí' : 'No', 'banner': _bannerSeconds == 0 ? 'Permanente' : '${_bannerSeconds} s', 'player': _settingsExo ? 'ExoPlayer' : 'MPV', 'format': _settingsHls ? 'HLS' : 'Auto', 'tunnel': _settingsTunnel ? 'Sí' : 'No', 'buffer': _settingsBuffer == 'minimum' ? 'Mínimo (0)' : _settingsBuffer == 'small' ? 'Pequeño' : 'Normal', 'passthrough': _settingsPassthrough ? 'Sí' : 'No', 'afr': _settingsAfr ? 'Sí' : 'No', 'logos': _logoSource == 'epg' ? 'EPG' : 'M3U', 'epg_names': _useEpgNames ? 'Sí' : 'No', 'backup': '', 'restore': '', 'refresh': widget.guideStatus(), 'back': ''};
-    final icons = <String, IconData>{'section_lists':Icons.list, 'section_guide':Icons.calendar_today, 'section_appearance':Icons.monitor, 'section_playback':Icons.play_circle_outline, 'section_behavior':Icons.flash_on, 'section_backup':Icons.save, 'loading_indicator':Icons.hourglass_empty, 'list_refresh_entry':Icons.flash_on,'epg_refresh_entry':Icons.flash_on,'list_refresh_hours':Icons.timer,'epg_refresh_hours':Icons.timer,'epg_updated':Icons.calendar_today, 'm3u': Icons.list, 'epg': Icons.calendar_today, 'lists': Icons.playlist_add, 'quick_start': Icons.flash_on, 'banner': Icons.timer, 'player': Icons.play_circle_outline, 'format': Icons.video_settings, 'tunnel': Icons.settings_ethernet, 'buffer': Icons.memory, 'passthrough': Icons.volume_up, 'afr': Icons.monitor, 'logos': Icons.image, 'epg_names': Icons.edit, 'backup': Icons.save, 'restore': Icons.folder_open, 'refresh': Icons.refresh, 'back': Icons.arrow_back};
+    final values = <String, String>{'section_lists':'Listas y grupos', 'section_guide':'EPG y actualización', 'section_appearance':'Aspecto e información', 'section_playback':'Motor y opciones de vídeo/audio', 'section_behavior':'Arranque', 'section_backup':'Guardar y restaurar', 'section_remote_help':'Tutorial', 'loading_indicator':_showLoadingIndicator ? 'Sí' : 'No', 'list_refresh_entry':_listRefreshEntry?'Sí':'No','epg_refresh_entry':_epgRefreshEntry?'Sí':'No','list_refresh_hours':_refreshLabel(_listRefreshHours),'epg_refresh_hours':_refreshLabel(_epgRefreshHours),'epg_updated':widget.epgUpdatedLabel(), 'm3u': _settingsUrl.isEmpty ? 'Sin configurar' : 'Configurada', 'epg': _settingsEpg.isEmpty ? 'Automática desde M3U' : 'Manual', 'lists': 'Gestionar', 'quick_start': _quickStartSetting ? 'Sí' : 'No', 'banner': _bannerSeconds == 0 ? 'Permanente' : '${_bannerSeconds} s', 'player': _settingsExo ? 'ExoPlayer' : 'MPV', 'format': _settingsHls ? 'HLS' : 'Auto', 'tunnel': _settingsTunnel ? 'Sí' : 'No', 'buffer': _settingsBuffer == 'minimum' ? 'Mínimo (0)' : _settingsBuffer == 'small' ? 'Pequeño' : 'Normal', 'passthrough': _settingsPassthrough ? 'Sí' : 'No', 'afr': _settingsAfr ? 'Sí' : 'No', 'logos': _logoSource == 'epg' ? 'EPG' : 'M3U', 'epg_names': _useEpgNames ? 'Sí' : 'No', 'backup': '', 'restore': '', 'refresh': widget.guideStatus(), 'back': ''};
+    final icons = <String, IconData>{'section_lists':Icons.list, 'section_guide':Icons.calendar_today, 'section_appearance':Icons.monitor, 'section_playback':Icons.play_circle_outline, 'section_behavior':Icons.flash_on, 'section_backup':Icons.save, 'section_remote_help':Icons.help_outline, 'loading_indicator':Icons.hourglass_empty, 'list_refresh_entry':Icons.flash_on,'epg_refresh_entry':Icons.flash_on,'list_refresh_hours':Icons.timer,'epg_refresh_hours':Icons.timer,'epg_updated':Icons.calendar_today, 'm3u': Icons.list, 'epg': Icons.calendar_today, 'lists': Icons.playlist_add, 'quick_start': Icons.flash_on, 'banner': Icons.timer, 'player': Icons.play_circle_outline, 'format': Icons.video_settings, 'tunnel': Icons.settings_ethernet, 'buffer': Icons.memory, 'passthrough': Icons.volume_up, 'afr': Icons.monitor, 'logos': Icons.image, 'epg_names': Icons.edit, 'backup': Icons.save, 'restore': Icons.folder_open, 'refresh': Icons.refresh, 'back': Icons.arrow_back};
     final keys = _settingKeys;
     return Container(
       padding: const EdgeInsets.all(12),
