@@ -210,7 +210,7 @@ class TvBrowseRailLayout {
             (compactDetailRail && useWideLayout ? 3.5 : 0.0);
     // In the compact episode rail, reserve less unused space below
     // the caption so the artwork can grow within the same rail height.
-    final labelHeight = fullCardLayout ? 0.0 : ((isPersonHub ? 52 : 36) * scale);
+    final labelHeight = fullCardLayout || hub.id == 'discover.iptv' ? 0.0 : ((isPersonHub ? 52 : 36) * scale);
     final containerHeight = (posterHeight + labelHeight).ceilToDouble();
     final height = containerHeight + focusExtra + ((compactDetailRail ? 2 : 22) * scale);
 
@@ -2000,7 +2000,6 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(color: const Color(0xFF242A36), borderRadius: BorderRadius.circular(8)),
             child: logo.startsWith('http') ? Image.network(logo, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const Icon(Icons.tv, color: Colors.white70)) : const Icon(Icons.tv, color: Colors.white70)),
-          if (!fullCardLayout) Expanded(child: Center(child: Text(item.title ?? '', maxLines: 1, overflow: TextOverflow.ellipsis))),
         ]));
     }
     return metrics.isPersonHub
