@@ -459,7 +459,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       final channels = await loadVisionDiscoverChannels();
       if (!mounted || _liveDisposed || generation != _liveLoadGeneration) return;
       final old = _liveChannels;
-      if (old.length == channels.length && List.generate(old.length, (i) => old[i].id == channels[i].id && old[i].name == channels[i].name && old[i].logo == channels[i].logo && old[i].programme == channels[i].programme && old[i].description == channels[i].description && old[i].schedule == channels[i].schedule).every((v) => v)) return;
+      if (old.length == channels.length && List.generate(old.length, (i) => old[i].id == channels[i].id && old[i].name == channels[i].name && old[i].logo == channels[i].logo && old[i].programme == channels[i].programme && old[i].description == channels[i].description && old[i].schedule == channels[i].schedule && old[i].poster == channels[i].poster).every((v) => v)) return;
       if (_liveSelected != null && !channels.any((c) => c.id == _liveSelected!.id)) _leaveLiveRow();
       setState(() {
         _liveChannels = channels;
@@ -506,7 +506,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   Widget _liveSpotlight(VisionDiscoverChannel channel) {
     return LayoutBuilder(builder: (context, constraints) {
       final width = constraints.maxWidth, height = constraints.maxHeight;
-      final videoWidth = math.min(width * .49, height * .43 * 16 / 9);
+      final videoWidth = math.min(width * .43, height * .38 * 16 / 9);
       final videoHeight = videoWidth * 9 / 16;
       final top = height * .10;
       return Stack(children: [
@@ -537,8 +537,8 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     if (_onDeck.isNotEmpty) {
       hubs.add(_continueWatchingHub);
     }
-    if (_liveItems.isNotEmpty) hubs.add(MediaHub(id: 'discover.iptv', title: 'TV en vivo', type: 'episode', size: _liveItems.length, more: false, items: _liveItems));
     hubs.addAll(_hubs.where((hub) => hub.items.isNotEmpty));
+    if (_liveItems.isNotEmpty) hubs.add(MediaHub(id: 'discover.iptv', title: 'TV en vivo (Canales Recientes)', type: 'episode', size: _liveItems.length, more: false, items: _liveItems));
     _tvBrowseHubsCache = hubs;
     _tvBrowseHubsCacheKey = key;
     return hubs;
