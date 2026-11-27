@@ -35,7 +35,25 @@ permissions:
   contents: write
 
 jobs:
+  rename-release-asset:
+    if: ${{ github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[rename-v2.0.0-apk]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Rename existing APK without rebuilding
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          assets=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/v2.0.0" --jq '.assets')
+          if jq -e 'any(.[]; .name == "PlezyVision-2.0.0.apk")' <<< "$assets" >/dev/null; then
+            echo "APK already correctly named"
+            exit 0
+          fi
+          asset_id=$(jq -er '[.[] | select(.name == "app-release.apk" or .name == "PlezyVision.apk")] | if length == 1 then .[0].id else error("Expected exactly one APK") end' <<< "$assets")
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" -f name=PlezyVision-2.0.0.apk -f label=PlezyVision-2.0.0.apk --jq '.name'
+
   build-android:
+    if: ${{ github.event_name != 'push' || !contains(github.event.head_commit.message, '[rename-v2.0.0-apk]') }}
     name: Build Android ARM32 APK
     runs-on: ubuntu-latest
     steps:
@@ -202,7 +220,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh release create v2.0.0 build/app/outputs/flutter-apk/app-release.apk#PlezyVision.apk \
+          cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/PlezyVision-2.0.0.apk
+          gh release create v2.0.0 build/app/outputs/flutter-apk/PlezyVision-2.0.0.apk \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "Plezy Vision 2.0.0" \
