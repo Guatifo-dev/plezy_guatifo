@@ -22,6 +22,7 @@ import '../video_player/player_output_format.dart';
 import 'package:provider/provider.dart';
 import 'live_tv_screen.dart';
 import '../../widgets/plex_trailer_preview.dart';
+import '../../services/settings_service.dart';
 import '../video_player/wakelock_controller.dart';
 
 Future<void> _showIptvRemoteHelp(BuildContext context) async {
@@ -564,9 +565,9 @@ String _programmeLine(Map<String, List<_Programme>> guide, _Channel channel) {
 
 // Discover reads only the five recent channel IDs from the local indexed lists.
 class VisionDiscoverChannel {
-  const VisionDiscoverChannel(this._channel, this.name, this.logo, this.programme, this.description, this.schedule);
+  const VisionDiscoverChannel(this._channel, this.name, this.logo, this.programme, this.description, this.schedule, this.poster);
   final _Channel _channel;
-  final String name, logo, programme, description, schedule;
+  final String name, logo, programme, description, schedule, poster;
   String get id => _channel.favoriteId;
 }
 
@@ -651,7 +652,7 @@ Future<List<VisionDiscoverChannel>> loadVisionDiscoverChannels() async {
         } catch (_) {}
       }
     }
-    result.add(VisionDiscoverChannel(c, name, logo, programme?.title ?? 'Sin información EPG', programme?.description ?? '', programme == null ? '' : '${clock(programme.start)} – ${clock(programme.stop)} · En emisión'));
+    result.add(VisionDiscoverChannel(c, name, logo, programme?.title ?? 'Sin información EPG', programme?.description ?? '', programme == null ? '' : '${clock(programme.start)} – ${clock(programme.stop)} · En emisión', programme?.poster ?? ''));
   }
   return result;
 }
@@ -729,7 +730,17 @@ class _VisionDiscoverPreviewState extends State<VisionDiscoverPreview> {
   @override
   void initState() {
     super.initState();
-    _delay = Timer(const Duration(seconds: 1), () {
+    final seconds = switch (SettingsService.instance.read(SettingsService.plexTrailerPreviewDelay)) {
+      TrailerPreviewDelay.s1 => 1,
+      TrailerPreviewDelay.s2 => 2,
+      TrailerPreviewDelay.s3 => 3,
+      TrailerPreviewDelay.s4 => 4,
+      TrailerPreviewDelay.s5 => 5,
+      TrailerPreviewDelay.s7 => 7,
+      TrailerPreviewDelay.s10 => 10,
+      TrailerPreviewDelay.s15 => 15,
+    };
+    _delay = Timer(Duration(seconds: seconds), () {
       _queue = _queue.then((_) => _start()).catchError((Object _) {});
     });
   }
@@ -786,19 +797,31 @@ class _VisionDiscoverPreviewState extends State<VisionDiscoverPreview> {
   @override
   Widget build(BuildContext context) {
     _resize();
-    return Stack(fit: StackFit.expand, children: [
+    final channel = widget.channel;
+    Widget fallback() => Center(child: channel.logo.startsWith('http')
+      ? Padding(padding: const EdgeInsets.all(24), child: Image.network(channel.logo, fit: BoxFit.contain,
+          errorBuilder: (_, __, ___) => const Icon(Icons.tv, color: Colors.white70, size: 42)))
+      : const Icon(Icons.tv, color: Colors.white70, size: 42));
+    return ClipRRect(borderRadius: BorderRadius.circular(12), child: Stack(fit: StackFit.expand, children: [
       if (_ready && !_failed) const CustomPaint(painter: _DiscoverVideoHole()),
       if (_player != null) SizedBox(key: _video, child: Video(player: _player!)),
-      if (!_ready || _failed) ColoredBox(color: const Color(0xFF242A36), child: Center(child: _failed
-        ? const Text('Vista previa no disponible', style: TextStyle(color: Colors.white70))
-        : const CircularProgressIndicator())),
-    ]);
+      if (!_ready || _failed) ColoredBox(color: const Color(0xFF242A36),
+        child: channel.poster.startsWith('http')
+          ? Image.network(channel.poster, fit: BoxFit.contain, errorBuilder: (_, __, ___) => fallback())
+          : fallback()),
+    ]));
   }
 }
 class _DiscoverVideoHole extends CustomPainter {
   const _DiscoverVideoHole();
   @override
-  void paint(Canvas canvas, Size size) => canvas.drawRect(Offset.zero & size, Paint()..blendMode = BlendMode.clear);
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final rounded = RRect.fromRectAndRadius(rect, const Radius.circular(12));
+    canvas.drawRRect(rounded, Paint()..blendMode = BlendMode.clear);
+    final outside = Path.combine(PathOperation.difference, Path()..addRect(rect), Path()..addRRect(rounded));
+    canvas.drawPath(outside, Paint()..color = const Color(0xFF10151D));
+  }
   @override
   bool shouldRepaint(covariant _DiscoverVideoHole oldDelegate) => false;
 }
