@@ -449,7 +449,6 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   VisionDiscoverChannel? _liveSelected;
   bool _liveTransition = false;
   bool _liveAuto = true, _livePlaying = false;
-  GlobalKey<VisionDiscoverPreviewState> _livePreviewKey = GlobalKey<VisionDiscoverPreviewState>();
   bool _openingLive = false;
   int _liveLoadGeneration = 0;
   int _liveFocusGeneration = 0;
@@ -491,7 +490,6 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     final channel = _liveChannels[index];
     if (_liveSelected?.id == channel.id) return;
     ++_liveFocusGeneration;
-    _livePreviewKey = GlobalKey<VisionDiscoverPreviewState>();
     setState(() { _liveSelected = channel; _livePlaying = _liveAuto; _liveTransition = false; });
     unawaited(PlexTrailerPreview.stop());
   }
@@ -501,16 +499,14 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     if (_openingLive) return true;
     final channel = _liveChannels[index];
     if (!_liveAuto && (!_livePlaying || _liveSelected?.id != channel.id)) {
-      if (_liveSelected?.id != channel.id) _livePreviewKey = GlobalKey<VisionDiscoverPreviewState>();
       setState(() { _liveSelected = channel; _livePlaying = true; });
       return true;
     }
     _openingLive = true;
-    final handoff = _livePreviewKey.currentState?.takeReadyPlayer();
     _leaveLiveRow();
     await WidgetsBinding.instance.endOfFrame;
     await waitVisionDiscoverPreviewClosed();
-    if (mounted) { await openVisionDiscoverChannel(context, channel, handoff: handoff); } else { await handoff?.dispose(); }
+    if (mounted) await openVisionDiscoverChannel(context, channel);
     _openingLive = false;
     if (mounted && !_liveDisposed) { await _loadLiveRow(); if (mounted) { _tvBrowseRailKey.currentState?.requestFocus(); WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted && !_liveDisposed) _tvBrowseRailKey.currentState?.requestFocus(); }); } }
     return true;
@@ -535,7 +531,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
             Expanded(child: Text(channel.description, maxLines: 5, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 14))),
           ])),
         Positioned(top: top, right: width * .025, width: videoWidth, height: videoHeight,
-          child: _livePlaying ? KeyedSubtree(key: ValueKey(channel.id), child: VisionDiscoverPreview(key: _livePreviewKey, channel: channel)) : VisionDiscoverPoster(channel: channel)),
+          child: _livePlaying ? VisionDiscoverPreview(key: ValueKey(channel.id), channel: channel) : VisionDiscoverPoster(channel: channel)),
       ]);
     }));
   }
