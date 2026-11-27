@@ -187,7 +187,7 @@ class TvBrowseRailLayout {
         (emptyEpisodeThumbnailHub || hub.items.any((item) => item.usesWideAspectRatio(episodePosterMode)));
     final hasTall = !isPersonHub && hub.items.any((item) => !item.usesWideAspectRatio(episodePosterMode));
     final isMixedHub = hasWide && hasTall;
-    final useWideLayout = hasWide && (!hasTall || episodePosterMode == EpisodePosterMode.episodeThumbnail);
+    final useWideLayout = hub.id == 'discover.iptv' || (hasWide && (!hasTall || episodePosterMode == EpisodePosterMode.episodeThumbnail));
     // Music hubs render square album/artist artwork (person hubs are already square).
     final isSquareHub =
         !isPersonHub &&
@@ -360,6 +360,7 @@ class TvBrowseRail extends StatefulWidget {
   /// clear, mirroring the mobile [HubSection] behavior.
   final bool showServerName;
   final ValueChanged<MediaItem>? onFocusedItemChanged;
+  final VoidCallback? onRailFocusLost;
   final ValueChanged<MediaItem>? onLongPressItem;
   final void Function(MediaHub hub, MediaItem item)? onFocusedHubItemChanged;
   final void Function(MediaItem source)? onRefresh;
@@ -423,6 +424,7 @@ class TvBrowseRail extends StatefulWidget {
     required this.iconForHub,
     this.showServerName = false,
     this.onFocusedItemChanged,
+    this.onRailFocusLost,
     this.onLongPressItem,
     this.onFocusedHubItemChanged,
     this.onRefresh,
@@ -767,7 +769,7 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
   }
 
   void _handleFocusChange() {
-    if (!_focusNode.hasFocus) _resetLongPressState();
+    if (!_focusNode.hasFocus) { _resetLongPressState(); widget.onRailFocusLost?.call(); }
     if (_focusNode.hasFocus) _notifyFocusedItem();
     // No setState: rail focus is observed through _focusModel selectors
     // (per-card focus wrappers, headers and artwork dim), so a focus flip
@@ -1239,7 +1241,7 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
       return;
     }
     if (_itemAtSlot(hub, _itemIndex) == null) return;
-    if (_isPersonHub(hub)) return;
+    if (_isPersonHub(hub) || hub.id == 'discover.iptv') return;
     _cardKeyFor(hub, _itemIndex).currentState?.showContextMenu();
   }
 
@@ -1907,7 +1909,7 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
         showGlow: focus.$2,
         // The card draws the border itself (poster rect for
         // standard cards, whole card when full-bleed).
-        delegateFocusBorder: true,
+        delegateFocusBorder: hub.id != 'discover.iptv',
         glowSize: fullCardLayout ? Size(metrics.cardWidth, metrics.posterHeight) : null,
         onTap: () {
           _selectHubItem(_liveHub(hub, hubIndex), hubIndex, itemIndex);
@@ -1988,6 +1990,17 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
     required bool fullCardLayout,
   }) {
     final artworkDim = _artworkDimForHub(context, hubIndex);
+    if (hub.id == 'discover.iptv') {
+      final logo = item.thumbPath ?? '';
+      return SizedBox(width: metrics.cardWidth, height: metrics.containerHeight,
+        child: Column(children: [
+          Container(width: metrics.posterWidth, height: metrics.posterHeight,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: const Color(0xFF242A36), borderRadius: BorderRadius.circular(8)),
+            child: logo.startsWith('http') ? Image.network(logo, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const Icon(Icons.tv, color: Colors.white70)) : const Icon(Icons.tv, color: Colors.white70)),
+          if (!fullCardLayout) Expanded(child: Center(child: Text(item.title ?? '', maxLines: 1, overflow: TextOverflow.ellipsis))),
+        ]));
+    }
     return metrics.isPersonHub
         ? MergeSemantics(
             child: _buildPersonCard(
