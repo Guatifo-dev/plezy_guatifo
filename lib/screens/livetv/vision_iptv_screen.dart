@@ -1038,7 +1038,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
     return Scaffold(body: SafeArea(child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
       if (_channels.isEmpty && !_restoring && !_openWhenLoaded && !_loading && _error != null) Text('TV en directo · IPTV', style: Theme.of(context).textTheme.headlineSmall),
       const SizedBox(height: 14),
-      if (_loading || _restoring || _openWhenLoaded) const CircularProgressIndicator(),
+      if (_loading || _restoring || _openWhenLoaded) const Text('Cargando TV en vivo…',style:TextStyle(color:Colors.white,fontSize:22,fontWeight:FontWeight.w600)),
       if (_error != null) Text(_error!),
       if (_channels.isNotEmpty || (_quickStart && _resumeChannel != null))
         Focus(focusNode: _entry, autofocus: true, onFocusChange: (focused) { if (focused && !_guideOpen && _openWhenLoaded) WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) unawaited(_openUnifiedGuide()); }); }, onKeyEvent: (_, event) { if (event is KeyDownEvent && (event.logicalKey == LogicalKeyboardKey.select || event.logicalKey == LogicalKeyboardKey.enter)) { unawaited(_openUnifiedGuide()); return KeyEventResult.handled; } return KeyEventResult.ignored; }, child: const SizedBox.shrink())
@@ -2262,6 +2262,47 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     if (vertical) { _scrollVerticalBoth(); _scheduleGuidePage(); } else { _scrollPreview(); }
   }
 
+  bool get _programmeHasFocus => _verticalGuide ? _verticalColumn==1 && _verticalProgramme!=null : _preview && !_groupFocus && _inProgrammes && _selectedProgramme!=null;
+  Future<void> _programmeContext() async {
+    if (!_programmeHasFocus) return;
+    final vertical = _verticalGuide;
+    final c = widget.channels[vertical?_verticalSelected:_highlightIndex];
+    final p = vertical?_verticalProgramme:_selectedProgramme;
+    if (p==null) return;
+    final entries = List<_Programme>.of(_guide[widget.epgId(c)] ?? const <_Programme>[]);
+    final initial=entries.indexWhere((e)=>e.start==p.start&&e.stop==p.stop);
+    if(initial<0)return;
+    final action=await showDialog<String>(context:context,barrierColor:Colors.black26,builder:(ctx)=>AlertDialog(
+      backgroundColor:const Color(0xFF1B202A),title:Text(p.title,maxLines:2,overflow:TextOverflow.ellipsis),
+      content:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+        Text('${_name(c)} · ${_clock(p.start)} – ${_clock(p.stop)}',style:const TextStyle(color:Colors.white70,fontSize:13)),
+        const SizedBox(height:12),TextButton.icon(autofocus:true,style:_iptvDialogButtonStyle,icon:const Icon(Icons.info_outline),label:const Text('Información'),onPressed:()=>Navigator.pop(ctx,'info')),
+      ]),
+    ));
+    if(!mounted||action!='info')return;
+    await Future<void>.delayed(const Duration(milliseconds:200));
+    if(!mounted)return;
+    var last=initial;
+    await showDialog<void>(context:context,barrierColor:Colors.black54,builder:(_)=>_ProgrammeInfoDialog(entries:entries,initial:initial,channelName:_name(c),channelLogo:_logo(c),onSelected:(i)=>last=i));
+    if(!mounted)return;
+    final target=entries[last];
+    final index=_channelIndices[c.favoriteId];
+    if(index==null)return;
+    setState((){
+      if(vertical){
+        _verticalChannelIndex=index;_verticalColumn=1;_verticalProgrammeStart=target.start;_syncVerticalProgramme();
+      }else{
+        _highlightIndex=index;_groupFocus=false;_inProgrammes=true;
+        final now=DateTime.now(),base=DateTime(now.year,now.month,now.day,now.hour,now.minute<30?0:30);
+        _timeShift=(target.start.difference(base).inSeconds/1800).floor();
+        _guideAnchor=target.start;
+        _programmeIndex=_programmes(index).indexWhere((e)=>e.start==target.start&&e.stop==target.stop);
+      }
+    });
+    if(vertical)_scrollVerticalBoth();else _scrollPreview();
+    _scheduleGuidePage();
+  }
+
   Future<void> _channelContext() async {
     final vertical = _verticalGuide;
     if (vertical ? _verticalRows.isEmpty : _visibleIndices.isEmpty) return;
@@ -3015,7 +3056,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
               final i = rows[row], channel = widget.channels[i];
               final focused = !_menuOpen && !_groupFocus && i == _highlightIndex;
               final programmes = _programmes(i);
-              final channelFocused = focused;
+              final channelFocused = focused && !_inProgrammes;
               return Row(children: [
                 Container(width: channelWidth, margin: const EdgeInsets.symmetric(vertical: 2), padding: const EdgeInsets.all(6),
                   
@@ -3029,15 +3070,15 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
                   ])),
                 SizedBox(width: width, child: Stack(fit: StackFit.expand, children: [
                   if (programmes.isEmpty) Container(margin: const EdgeInsets.all(2), alignment: Alignment.centerLeft, padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(color: focused ? focus : surface, borderRadius: BorderRadius.circular(6)), child: Text('Sin programación', style: TextStyle(color: focused ? Colors.black : Colors.white70))),
+                    decoration: BoxDecoration(color: focused && _inProgrammes ? focus : surface, borderRadius: BorderRadius.circular(6)), child: Text('Sin programación', style: TextStyle(color: focused ? Colors.black : Colors.white70))),
                   for (var j = 0; j < programmes.length; j++)
                     if (x(programmes[j].stop) - x(programmes[j].start) > 3) Positioned(left: x(programmes[j].start), width: x(programmes[j].stop) - x(programmes[j].start), top: 2, bottom: 2,
                       child: Container(margin: const EdgeInsets.symmetric(horizontal: 2), padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(color: focused && _programmeIndex == j ? focus : (!now.isBefore(programmes[j].start) && now.isBefore(programmes[j].stop) ? const Color(0xFF656565) : surface),
+                        decoration: BoxDecoration(color: focused && _inProgrammes && _programmeIndex == j ? focus : (!now.isBefore(programmes[j].start) && now.isBefore(programmes[j].stop) ? const Color(0xFF656565) : surface),
                           border: Border.all(color: const Color(0xFF485467)), borderRadius: BorderRadius.horizontal(left: programmes[j].start.isBefore(start) ? Radius.zero : const Radius.circular(6), right: programmes[j].stop.isAfter(end) ? Radius.zero : const Radius.circular(6))),
                         child: Align(alignment: Alignment.centerLeft, child: Text(programmes[j].title, maxLines: 2, overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: focused && _programmeIndex == j ? Colors.black : Colors.white, fontSize: 12))))),
-                  if (focused && _programmeIndex < 0 && programmes.isNotEmpty)
+                          style: TextStyle(color: focused && _inProgrammes && _programmeIndex == j ? Colors.black : Colors.white, fontSize: 12))))),
+                  if (focused && _inProgrammes && _programmeIndex < 0 && programmes.isNotEmpty)
                     Builder(builder: (_) {
                       final at = _guideAnchor ?? now;
                       var left = start;
@@ -3160,7 +3201,8 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
           return KeyEventResult.handled;
         }
         if (_verticalGuide && !_settingsOpen) {
-          if (key == LogicalKeyboardKey.contextMenu) { if (event is KeyDownEvent) _contextSelectDown = _verticalColumn==0 && _verticalRows.isNotEmpty; if (event is KeyUpEvent && _contextSelectDown) { _contextSelectDown=false; unawaited(_withDialog(_channelContext)); } return KeyEventResult.handled; }
+          if (key == LogicalKeyboardKey.contextMenu) { if (event is KeyDownEvent) _contextSelectDown = (_verticalColumn==0 && _verticalRows.isNotEmpty)||_programmeHasFocus; if (event is KeyUpEvent && _contextSelectDown) { _contextSelectDown=false; unawaited(_withDialog(_programmeHasFocus?_programmeContext:_channelContext)); } return KeyEventResult.handled; }
+          if (_verticalColumn==1 && (key==LogicalKeyboardKey.select||key==LogicalKeyboardKey.enter)) { if(event is KeyDownEvent){_guideSelectDown=true;_favoriteLong=false;_favoriteHold?.cancel();if(_programmeHasFocus)_favoriteHold=Timer(const Duration(milliseconds:600),(){if(mounted&&_guideSelectDown&&_programmeHasFocus&&!_dialogBusy){_favoriteLong=true;unawaited(_withDialog(_programmeContext));}});} if(event is KeyUpEvent){_favoriteHold?.cancel();_guideSelectDown=false;_favoriteLong=false;} return KeyEventResult.handled; }
           if (_verticalColumn == 0 && (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown)) { _guideChannelArrow(event,vertical:true); return KeyEventResult.handled; }
           if (event is KeyUpEvent) { if (_fastScroll) setState(() => _fastScroll = false); return KeyEventResult.handled; }
           if (event is KeyDownEvent || event is KeyRepeatEvent) {
@@ -3207,7 +3249,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
         }
         if (_preview && key == LogicalKeyboardKey.arrowLeft) {
           if (event is KeyDownEvent) { _leftLong = false; _leftHold?.cancel(); _leftHold = Timer(const Duration(milliseconds: 600), () { if (mounted) setState(() { _leftLong = true; if (!_groupFocus) { _inProgrammes = true; _stepProgramme(-1); } }); }); }
-          if (event is KeyUpEvent) { _leftHold?.cancel(); _leftHold = null; if (!_leftLong) { if (_groupFocus) { setState(() { _menuOpen = true; _menuStatus = ''; }); } else if (_onCurrentProgramme) { setState(() => _groupFocus = true); _scrollGroup(); } else { setState(() => _stepProgramme(-1)); } } }
+          if (event is KeyUpEvent) { _leftHold?.cancel(); _leftHold = null; if (!_leftLong) { if (_groupFocus) { setState(() { _menuOpen = true; _menuStatus = ''; }); } else if (!_inProgrammes) { setState(() => _groupFocus = true); _scrollGroup(); } else if (_onCurrentProgramme) { setState(() => _inProgrammes = false); } else { setState(() => _stepProgramme(-1)); } } }
           return KeyEventResult.handled;
         }
         if (_preview && !_groupFocus && (key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter)) {
@@ -3219,7 +3261,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
               _favoriteHold = Timer(const Duration(milliseconds: 600), () {
                 if (!mounted || !_guideSelectDown || !_preview || _groupFocus || _dialogBusy) return;
                 _favoriteLong = true;
-                unawaited(_toggleGuideFavorite(c));
+                if (_programmeHasFocus) { unawaited(_withDialog(_programmeContext)); } else { unawaited(_toggleGuideFavorite(c)); }
               });
             }
           }
@@ -3234,7 +3276,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
           if (event is KeyDownEvent) _contextSelectDown = true;
           if (event is KeyUpEvent && _contextSelectDown) {
             _contextSelectDown = false;
-            unawaited(_withDialog(_preview ? _channelContext : _options));
+            unawaited(_withDialog(_preview ? (_programmeHasFocus ? _programmeContext : _channelContext) : _options));
           }
           return KeyEventResult.handled;
         }
@@ -3258,7 +3300,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
           if (key == LogicalKeyboardKey.arrowRight) {
             setState(() {
               if (_groupFocus) { if (_visibleIndices.isNotEmpty) { _groupFocus = false; _inProgrammes = true; _programmeIndex = -1; _stepProgramme(0); } }
-              else { _inProgrammes = true; _stepProgramme(1); }
+              else { if (!_inProgrammes) { _inProgrammes=true; _stepProgramme(0); } else { _stepProgramme(1); } }
             });
             return KeyEventResult.handled;
           }
@@ -3311,7 +3353,8 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
           child: SizedBox(key: _videoKey, child: Video(player: _player!))),
         if (_preview && !_zooming) const Positioned(left: 20, top: 16, width: 288, height: 162, child: IgnorePointer(child: CustomPaint(painter: _PreviewCornerMask()))),
         if (_verticalGuide) Positioned.fromRect(rect:verticalVideo,child:const IgnorePointer(child:CustomPaint(painter:_PreviewCornerMask()))),
-        if (_showLoadingIndicator && _tuned && !_ready && !_failed) Positioned(
+        if (!_smallVideo && _tuned && !_ready && !_failed && _autoFirstReady==null) const Positioned.fill(child:IgnorePointer(child:Center(child:Text('Cargando TV en vivo…',style:TextStyle(color:Colors.white,fontSize:22,fontWeight:FontWeight.w600))))),
+        if (_showLoadingIndicator && _tuned && !_ready && !_failed && (_smallVideo || _autoFirstReady!=null)) Positioned(
           top: _verticalGuide ? verticalVideo.top + verticalVideo.height/2-14 : _preview ? 70 : 0, right: _smallVideo ? null : 0,
           left: _verticalGuide ? verticalVideo.left + verticalVideo.width/2-14 : _preview ? 140 : 0, bottom: _smallVideo ? null : 0,
           child: const Center(child: CircularProgressIndicator())),
@@ -3489,6 +3532,68 @@ final _iptvDialogButtonStyle = ButtonStyle(
 
 Map<String, dynamic> _readIptvMap(String? value) {
   try { return Map<String, dynamic>.from(jsonDecode(value ?? '{}') as Map); } catch (_) { return {}; }
+}
+
+class _ProgrammeInfoDialog extends StatefulWidget {
+  const _ProgrammeInfoDialog({required this.entries,required this.initial,required this.channelName,required this.channelLogo,required this.onSelected});
+  final List<_Programme> entries;
+  final int initial;
+  final String channelName,channelLogo;
+  final ValueChanged<int> onSelected;
+  @override State<_ProgrammeInfoDialog> createState()=>_ProgrammeInfoDialogState();
+}
+class _ProgrammeInfoDialogState extends State<_ProgrammeInfoDialog>{
+  late int _index=widget.initial;
+  final _scroll=ScrollController();
+  final _focus=FocusNode();
+  String _time(DateTime d){final t=d.toLocal();return '${t.hour.toString().padLeft(2,'0')}:${t.minute.toString().padLeft(2,'0')}';}
+  String _date(DateTime d){final t=d.toLocal();const days=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];const months=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];return '${days[t.weekday-1]}, ${t.day} de ${months[t.month-1]}';}
+  void _move(int delta){final next=(_index+delta).clamp(0,widget.entries.length-1).toInt();if(next==_index)return;setState(()=>_index=next);widget.onSelected(next);if(_scroll.hasClients)_scroll.jumpTo(0);}
+  @override void dispose(){_scroll.dispose();_focus.dispose();super.dispose();}
+  @override Widget build(BuildContext context){
+    final p=widget.entries[_index],now=DateTime.now();
+    final live=!now.isBefore(p.start)&&now.isBefore(p.stop);
+    final minutes=p.stop.difference(p.start).inMinutes;
+    const blue=Color(0xFF90CAF9);
+    return Dialog(backgroundColor:const Color(0xFF1B202A),insetPadding:const EdgeInsets.symmetric(horizontal:28,vertical:24),shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(14)),child:Focus(focusNode:_focus,autofocus:true,onKeyEvent:(_,event){
+      final k=event.logicalKey;
+      if(event is KeyDownEvent||event is KeyRepeatEvent){
+        if(k==LogicalKeyboardKey.arrowLeft){_move(-1);return KeyEventResult.handled;}
+        if(k==LogicalKeyboardKey.arrowRight){_move(1);return KeyEventResult.handled;}
+        if(k==LogicalKeyboardKey.arrowUp||k==LogicalKeyboardKey.arrowDown){if(_scroll.hasClients){final pos=_scroll.position;_scroll.jumpTo((pos.pixels+(k==LogicalKeyboardKey.arrowDown?48:-48)).clamp(0.0,pos.maxScrollExtent).toDouble());}return KeyEventResult.handled;}
+        if(event is KeyDownEvent&&(k==LogicalKeyboardKey.goBack||k==LogicalKeyboardKey.escape||k==LogicalKeyboardKey.browserBack||k==LogicalKeyboardKey.select||k==LogicalKeyboardKey.enter)){Navigator.pop(context);return KeyEventResult.handled;}
+      }return KeyEventResult.ignored;
+    },child:ConstrainedBox(constraints:const BoxConstraints(maxWidth:900,maxHeight:490),child:Padding(padding:const EdgeInsets.all(20),child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+      Row(children:[const Expanded(child:Text('TV EN VIVO · Información del programa',style:TextStyle(color:Colors.white70,fontSize:14))),Text(_time(now),style:const TextStyle(color:blue,fontSize:15))]),
+      const Divider(color:Colors.white24),
+      Expanded(child:Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
+        Align(alignment:Alignment.centerLeft,child:Icon(Icons.chevron_left,size:30,color:_index>0?blue:Colors.white24)),
+        if(p.poster.startsWith('http'))...[
+          Flexible(flex:3,child:Column(children:[
+            Expanded(child:ClipRRect(borderRadius:BorderRadius.circular(8),child:Image.network(p.poster,key:ValueKey(p.poster),fit:BoxFit.contain,cacheHeight:480,errorBuilder:(_,__,___)=>const Icon(Icons.image_not_supported_outlined,color:Colors.white38,size:42)))),
+            const SizedBox(height:7),
+            if(widget.channelLogo.isNotEmpty)SizedBox(height:28,child:Image.network(widget.channelLogo,fit:BoxFit.contain,cacheWidth:128,errorBuilder:(_,__,___)=>const SizedBox.shrink())),
+          ])),const SizedBox(width:18),
+        ],
+        Expanded(flex:8,child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          Text(p.title,maxLines:2,overflow:TextOverflow.ellipsis,style:const TextStyle(color:Colors.white,fontSize:25,fontWeight:FontWeight.bold)),
+          const SizedBox(height:5),Text('${widget.channelName} · ${_date(p.start)}',style:const TextStyle(color:blue,fontSize:14)),
+          const SizedBox(height:5),Text('${_time(p.start)} – ${_time(p.stop)} · $minutes min',style:const TextStyle(color:Colors.white70,fontSize:14)),
+          if(live)...[const SizedBox(height:6),Row(children:[const Text('En emisión',style:TextStyle(color:blue)),const Spacer(),Text('${p.stop.difference(now).inMinutes} min restantes',style:const TextStyle(color:Colors.white70,fontSize:12))]),const SizedBox(height:4),LinearProgressIndicator(value:(now.difference(p.start).inSeconds/p.stop.difference(p.start).inSeconds.clamp(1,99999999)).clamp(0.0,1.0).toDouble(),color:blue,backgroundColor:Colors.white24,minHeight:3)],
+          const Divider(color:Colors.white24),const Text('Sinopsis',style:TextStyle(color:Colors.white,fontSize:15,fontWeight:FontWeight.bold)),const SizedBox(height:5),
+          Expanded(child:Scrollbar(controller:_scroll,thumbVisibility:true,child:SingleChildScrollView(controller:_scroll,padding:const EdgeInsets.only(right:12),child:Text(p.description.isEmpty?'Sin información adicional.':p.description,style:const TextStyle(color:Colors.white,fontSize:15,height:1.35))))),
+        ])),
+        Align(alignment:Alignment.centerRight,child:Icon(Icons.chevron_right,size:30,color:_index<widget.entries.length-1?blue:Colors.white24)),
+      ])),
+      const Divider(color:Colors.white24),
+      Row(children:[
+        Expanded(child:Text(_index>0?widget.entries[_index-1].title:'',maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(color:Colors.white70,fontSize:12))),
+        Text('${_index+1} / ${widget.entries.length}',style:const TextStyle(color:blue,fontWeight:FontWeight.bold)),
+        Expanded(child:Text(_index+1<widget.entries.length?widget.entries[_index+1].title:'',textAlign:TextAlign.right,maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(color:Colors.white70,fontSize:12))),
+      ]),
+      const SizedBox(height:7),const Center(child:Text('← Anterior   ·   Siguiente →   ·   Atrás: volver a la guía',style:TextStyle(color:Colors.white54,fontSize:11))),
+    ]))))); 
+  }
 }
 
 class _ChannelOrderDialog extends StatefulWidget {
