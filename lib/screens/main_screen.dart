@@ -651,6 +651,15 @@ class _MainScreenState extends State<MainScreen>
         CoveredRouteFocusBoundary.requestInitialFocus(context, _contentFocusScope);
       }
 
+      // A cold start directly on IPTV never passes through _selectTab.
+      // Use the same entry hook once the profile and first route are ready.
+      if (_currentTab == NavigationTabId.liveTv && !_isShowingProfileSelection) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || _currentTab != NavigationTabId.liveTv || _isShowingProfileSelection) return;
+          _onScreen<FocusableTab>(NavigationTabId.liveTv, (screen) => screen.focusActiveTabIfReady());
+        });
+        WidgetsBinding.instance.ensureVisualUpdate();
+      }
       _updateTvosMenuPassthrough();
 
       // Check for updates on startup

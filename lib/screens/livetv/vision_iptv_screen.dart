@@ -531,7 +531,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
   Future<void> _openUnifiedGuide() async {
     if (!mounted || _guideOpen) return;
     if (_restoring) { _openWhenLoaded = true; return; }
-    if (_channels.isEmpty && !(_quickStart && _resumeChannel != null)) { _openWhenLoaded = true; unawaited(_ensureCatalog()); return; }
+    if (_channels.isEmpty && !(_quickStart && _resumeChannel != null)) { _openWhenLoaded = true; await _ensureCatalog(); if (mounted && _channels.isEmpty) { _openWhenLoaded = false; _entry.requestFocus(); } return; }
     _guideOpen = true;
     _openWhenLoaded = false;
     try {
@@ -544,7 +544,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
       final first = ordered.indexWhere((c) => !_hidden(c) || _favorites.contains(c.favoriteId));
       final index = fast ? 0 : ordered.indexWhere((c) => c.favoriteId == _lastChannel && (!_hidden(c) || _favorites.contains(c.favoriteId)));
       await Navigator.of(context).push(MaterialPageRoute<void>(
-        builder: (_) => _IptvPlayer(startFullscreen: index >= 0, quickStart: _quickStart, showLoadingIndicator: prefs.getBool('vision_iptv_show_loading_indicator') ?? false, onAutomaticRefresh:_automaticRefresh, hasManualRefresh:()=>_hasManualRefresh, queueManualList:_queueManualList, queueManualGuide:_queueManualGuide, epgUpdatedLabel:()=>_epgUpdatedLabel, prepareCatalog: resume != null ? () => _prepareResumeCatalog(resume,custom) : null, channel: index >= 0 ? ordered[index] : ordered[first < 0 ? 0 : first], channels: ordered,
+        builder: (_) => _IptvPlayer(startFullscreen: _quickStart && index >= 0, quickStart: _quickStart, showLoadingIndicator: prefs.getBool('vision_iptv_show_loading_indicator') ?? false, onAutomaticRefresh:_automaticRefresh, hasManualRefresh:()=>_hasManualRefresh, queueManualList:_queueManualList, queueManualGuide:_queueManualGuide, epgUpdatedLabel:()=>_epgUpdatedLabel, prepareCatalog: resume != null ? () => _prepareResumeCatalog(resume,custom) : null, channel: index >= 0 ? ordered[index] : ordered[first < 0 ? 0 : first], channels: ordered,
           guide: _guide, guideSource: _guideNotifier, allChannels: ordered,
           favoriteOrder: () => _favorites.toList(), onFavoriteOrder: _reorderFavorites, onReloadLists: _reloadListsInPlayer,
           listStatuses: _listStatuses, listGroups: _listGroups, isHidden: _hidden, listError: () => _error,
@@ -2121,12 +2121,13 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   }
 
   void _finishPreview(bool value) {
-    setState(() { _zooming = false; _zoomRect = null; _bannerProgramme = null; _preview = value; _menuOpen = false; _showChannels = false; _highlightIndex = _channelIndex; _programmeIndex = -1; _inProgrammes = true; _timeShift = 0; _groupFocus = false; _showName = true; if (!_visibleIndices.contains(_channelIndex)) { _recentOnly = false; _groupIndex = 0; } if (value) _stepProgramme(0); });
+    _timer?.cancel();
+    setState(() { _zooming = false; _zoomRect = null; _bannerProgramme = null; _preview = value; _menuOpen = false; _showChannels = false; _highlightIndex = _channelIndex; _programmeIndex = -1; _inProgrammes = true; _timeShift = 0; _groupFocus = false; _showName = false; if (!_visibleIndices.contains(_channelIndex)) { _recentOnly = false; _groupIndex = 0; } if (value) _stepProgramme(0); });
     _scheduleResize();
     if (value) {
       _timer?.cancel();
       _scrollPreview();
-    } else { _scheduleGuidePage(); if (_ready) unawaited(widget.onFullscreen(_channel)); _hideLater(); }
+    } else { _scheduleGuidePage(); if (_ready) unawaited(widget.onFullscreen(_channel)); }
     _playerFocus.requestFocus();
   }
   Future<void> _animatePreview(bool value) async {
