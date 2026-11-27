@@ -129,7 +129,11 @@ class TvSpotlightScaffold extends StatelessWidget {
           fit: StackFit.expand,
           clipBehavior: Clip.none,
           children: [
-            if (customSpotlight != null) Positioned.fill(child: customSpotlight!) else Builder(
+            if (customSpotlight != null) SideNavigationBleedBuilder(
+              targetBleed: MainScreenFocusScope.foregroundLeftOf(context),
+              child: customSpotlight!,
+              builder: (context, animatedBleed, child) => Positioned(top: 0, bottom: 0, left: -animatedBleed, width: fullBleedWidth, child: child!),
+            ) else Builder(
               builder: (context) {
                 final foregroundLeft = MainScreenFocusScope.foregroundLeftOf(context);
                 return SideNavigationBleedBuilder(
