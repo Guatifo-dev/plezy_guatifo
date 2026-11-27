@@ -449,7 +449,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   VisionDiscoverChannel? _liveSelected;
   bool _liveTransition = false;
   bool _liveAuto = true, _livePlaying = false;
-  final _livePreviewKey = GlobalKey<VisionDiscoverPreviewState>();
+  GlobalKey<VisionDiscoverPreviewState> _livePreviewKey = GlobalKey<VisionDiscoverPreviewState>();
   bool _openingLive = false;
   int _liveLoadGeneration = 0;
   int _liveFocusGeneration = 0;
@@ -491,6 +491,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     final channel = _liveChannels[index];
     if (_liveSelected?.id == channel.id) return;
     ++_liveFocusGeneration;
+    _livePreviewKey = GlobalKey<VisionDiscoverPreviewState>();
     setState(() { _liveSelected = channel; _livePlaying = _liveAuto; _liveTransition = false; });
     unawaited(PlexTrailerPreview.stop());
   }
@@ -500,6 +501,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     if (_openingLive) return true;
     final channel = _liveChannels[index];
     if (!_liveAuto && (!_livePlaying || _liveSelected?.id != channel.id)) {
+      if (_liveSelected?.id != channel.id) _livePreviewKey = GlobalKey<VisionDiscoverPreviewState>();
       setState(() { _liveSelected = channel; _livePlaying = true; });
       return true;
     }
