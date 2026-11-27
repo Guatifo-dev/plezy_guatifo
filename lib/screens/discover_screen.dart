@@ -463,6 +463,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       if (_liveSelected != null && !channels.any((c) => c.id == _liveSelected!.id)) _leaveLiveRow();
       setState(() {
         _liveChannels = channels;
+        if (_liveSelected != null) { for (final c in channels) { if (c.id == _liveSelected!.id) { _liveSelected = c; break; } } }
         _liveItems = [for (final c in channels) MediaItem.plex(id: 'iptv:${c.id}', kind: MediaKind.episode, title: c.name, thumbPath: c.logo, summary: c.description)];
         _tvBrowseHubsCache = null;
       });
@@ -481,7 +482,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   void _focusLiveOrMedia(MediaItem item) {
     final index = _liveItems.indexWhere((i) => i.id == item.id);
     if (index < 0) { _leaveLiveRow(); _setSpotlightItem(item); return; }
-    if (_openingLive || !_isTabVisible || _liveDisposed) return;
+    if (_openingLive || !_isTabVisible || _liveDisposed || _tvBrowseRailKey.currentState?.hasRailFocus != true || ModalRoute.of(context)?.isCurrent != true) return;
     final channel = _liveChannels[index];
     if (_liveSelected?.id == channel.id) return;
     ++_liveFocusGeneration;
@@ -499,7 +500,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     await waitVisionDiscoverPreviewClosed();
     if (mounted) await openVisionDiscoverChannel(context, channel);
     _openingLive = false;
-    if (mounted && !_liveDisposed) { await _loadLiveRow(); if (mounted) _tvBrowseRailKey.currentState?.requestFocus(); }
+    if (mounted && !_liveDisposed) { await _loadLiveRow(); if (mounted) { _tvBrowseRailKey.currentState?.requestFocus(); WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted && !_liveDisposed) _tvBrowseRailKey.currentState?.requestFocus(); }); } }
     return true;
   }
   Widget _liveSpotlight(VisionDiscoverChannel channel) {
