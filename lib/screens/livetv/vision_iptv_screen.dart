@@ -401,7 +401,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
   Map<String,Set<String>> _hiddenBySource = {};
   bool _hidden(_Channel c) => _hiddenBySource[c.source]?.contains(c.group) ?? false;
   void _setListStatus(String id, _ListStatus status) {
-    if (mounted) _listStatuses.value = {..._listStatuses.value, id: status};
+    if (mounted) _listStatuses.value = {..._listStatuses.value, id: _manualRefreshQueue.contains(id) ? _ListStatus('Pendiente',detail:'Actualización en segundo plano',channels:status.channels,groups:status.groups,vod:status.vod,updated:status.updated ?? _listStatuses.value[id]?.updated) : status};
   }
   List<String> _listGroups(Map<String,String> list) => _playlistGroups[_playlistKey(list)] ?? const <String>[];
   final Map<String, Map<String, String>> _epgCatalogues = {};
@@ -413,6 +413,11 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
   Timer? _guideTimer;
   bool _guideLoading = false;
   bool _autoRefreshing = false;
+  final Set<String> _manualRefreshQueue = {};
+  bool _manualGuideQueued = false;
+  bool get _hasManualRefresh => _manualRefreshQueue.isNotEmpty || _manualGuideQueued;
+  void _queueManualList(String id) { _manualRefreshQueue.add(id); final previous = _listStatuses.value[id]; _setListStatus(id,_ListStatus('Pendiente',detail:'Actualización en segundo plano',channels:previous?.channels??0,groups:previous?.groups??0,vod:previous?.vod??0,updated:previous?.updated)); }
+  void _queueManualGuide() { _manualGuideQueued = true; if (mounted) setState(()=>_epgStatus='Actualización en segundo plano pendiente'); }
   final Map<String,DateTime> _autoAttempts = {};
   final Map<String,DateTime> _epgAttempts = {};
   String _epgUpdatedLabel = 'Sin actualizar';
@@ -539,7 +544,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
       final first = ordered.indexWhere((c) => !_hidden(c) || _favorites.contains(c.favoriteId));
       final index = fast ? 0 : ordered.indexWhere((c) => c.favoriteId == _lastChannel && (!_hidden(c) || _favorites.contains(c.favoriteId)));
       await Navigator.of(context).push(MaterialPageRoute<void>(
-        builder: (_) => _IptvPlayer(startFullscreen: index >= 0, quickStart: _quickStart, showLoadingIndicator: prefs.getBool('vision_iptv_show_loading_indicator') ?? false, onAutomaticRefresh:_automaticRefresh, epgUpdatedLabel:()=>_epgUpdatedLabel, prepareCatalog: resume != null ? () => _prepareResumeCatalog(resume,custom) : null, channel: index >= 0 ? ordered[index] : ordered[first < 0 ? 0 : first], channels: ordered,
+        builder: (_) => _IptvPlayer(startFullscreen: index >= 0, quickStart: _quickStart, showLoadingIndicator: prefs.getBool('vision_iptv_show_loading_indicator') ?? false, onAutomaticRefresh:_automaticRefresh, hasManualRefresh:()=>_hasManualRefresh, queueManualList:_queueManualList, queueManualGuide:_queueManualGuide, epgUpdatedLabel:()=>_epgUpdatedLabel, prepareCatalog: resume != null ? () => _prepareResumeCatalog(resume,custom) : null, channel: index >= 0 ? ordered[index] : ordered[first < 0 ? 0 : first], channels: ordered,
           guide: _guide, guideSource: _guideNotifier, allChannels: ordered,
           favoriteOrder: () => _favorites.toList(), onFavoriteOrder: _reorderFavorites, onReloadLists: _reloadListsInPlayer,
           listStatuses: _listStatuses, listGroups: _listGroups, isHidden: _hidden, listError: () => _error,
@@ -592,6 +597,23 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
       final prefs = await SharedPreferences.getInstance();
       final currentLists = _iptvLists(prefs);
       if (jsonEncode(currentLists.where((v)=>v['active']=='true').toList()) != jsonEncode(_lists.where((v)=>v['active']=='true').toList())) return null;
+      _manualRefreshQueue.removeWhere((id)=>!_lists.any((l)=>l['id']==id && l['active']=='true'));
+      if (!quiet() || !mounted || !_guideOpen || _loading || _guideLoading) return null;
+      if (_manualRefreshQueue.isNotEmpty) {
+        final id = _manualRefreshQueue.first;
+        _manualRefreshQueue.remove(id);
+        _autoAttempts[id] = DateTime.now();
+        await _load(reuse:true,refreshIds:{id},background:true);
+        // Reading another cached list must not erase its queued status.
+        for (final queued in _manualRefreshQueue.toList()) { _queueManualList(queued); }
+        if (!mounted || _loadedPlaylist != _listSignature) return null;
+        return _orderedChannels(_readIptvMap(prefs.getString(_customKey)));
+      }
+      if (_manualGuideQueued) {
+        _manualGuideQueued = false;
+        await _loadGuide(force:true);
+        return null;
+      }
       final listHours = _refreshHours(prefs,false), epgHours = _refreshHours(prefs,true);
       final listOnEntry = prefs.getBool('vision_iptv_list_refresh_entry') ?? true;
       final epgOnEntry = prefs.getBool('vision_iptv_epg_refresh_entry') ?? true;
@@ -892,7 +914,8 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
         if (data == null) {
           File? temp;
           try {
-            _setListStatus(id, const _ListStatus('Descargando…'));
+            final previous = _listStatuses.value[id];
+            _setListStatus(id, _ListStatus('Descargando…',channels:previous?.channels??0,groups:previous?.groups??0,vod:previous?.vod??0,updated:previous?.updated));
             final cacheDir = await getApplicationCacheDirectory();
             temp = File('${cacheDir.path}/vision_m3u_$key.tmp');
             if (await pending.exists()) await pending.delete();
@@ -1030,7 +1053,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
 }
 
 class _IptvPlayer extends StatefulWidget {
-  const _IptvPlayer({required this.startFullscreen, required this.quickStart, required this.showLoadingIndicator, required this.onAutomaticRefresh, required this.epgUpdatedLabel, this.prepareCatalog, required this.favoriteOrder, required this.onFavoriteOrder, required this.onReloadLists, required this.listStatuses, required this.listGroups, required this.isHidden, required this.listError, required this.onFullscreen, required this.bannerSeconds, required this.epgNames, required this.rawEpgId, required this.epgId, required this.onAssignEpg, required this.recent, required this.onTuned, required this.onRefreshGuide, required this.onGuidePage, required this.guideStatus, required this.channel, required this.channels, required this.guide, required this.guideSource, required this.allChannels, required this.onFavorite, required this.isFavorite, required this.useExoPlayer, required this.tunneling, required this.buffer, required this.forceHls, required this.custom, required this.customKey, required this.epgLogos, required this.logoSource, required this.useEpgNames, required this.passthrough, required this.afr});
+  const _IptvPlayer({required this.startFullscreen, required this.quickStart, required this.showLoadingIndicator, required this.onAutomaticRefresh, required this.hasManualRefresh, required this.queueManualList, required this.queueManualGuide, required this.epgUpdatedLabel, this.prepareCatalog, required this.favoriteOrder, required this.onFavoriteOrder, required this.onReloadLists, required this.listStatuses, required this.listGroups, required this.isHidden, required this.listError, required this.onFullscreen, required this.bannerSeconds, required this.epgNames, required this.rawEpgId, required this.epgId, required this.onAssignEpg, required this.recent, required this.onTuned, required this.onRefreshGuide, required this.onGuidePage, required this.guideStatus, required this.channel, required this.channels, required this.guide, required this.guideSource, required this.allChannels, required this.onFavorite, required this.isFavorite, required this.useExoPlayer, required this.tunneling, required this.buffer, required this.forceHls, required this.custom, required this.customKey, required this.epgLogos, required this.logoSource, required this.useEpgNames, required this.passthrough, required this.afr});
   final Map<String, dynamic> custom;
   final String customKey, logoSource;
   final bool useEpgNames;
@@ -1039,6 +1062,9 @@ class _IptvPlayer extends StatefulWidget {
   final bool startFullscreen, quickStart, showLoadingIndicator;
   final Future<List<_Channel>> Function()? prepareCatalog;
   final Future<List<_Channel>?> Function(bool,bool,bool Function()) onAutomaticRefresh;
+  final bool Function() hasManualRefresh;
+  final void Function(String) queueManualList;
+  final VoidCallback queueManualGuide;
   final String Function() epgUpdatedLabel;
   final List<String> Function() favoriteOrder;
   final Future<void> Function(List<String>) onFavoriteOrder;
@@ -1096,7 +1122,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   String? _verticalGroupKey;
   int _groupIndex = 0, _programmeIndex = -1, _timeShift = 0;
   bool _groupFocus = false;
-  bool _menuOpen = false, _recentOnly = false, _refreshingGuide = false;
+  bool _menuOpen = false, _recentOnly = false;
   bool _settingsOpen = false, _settingsDirty = false, _listsDirty = false, _applyingLists = false;
   final Set<String> _refreshListIds = {};
   late int _bannerSeconds = widget.bannerSeconds;
@@ -1161,7 +1187,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     _autoRunning = true;
     final entering = _autoEntryPending;
     final periodic = _autoFirstReady != null && DateTime.now().difference(_autoFirstReady!) >= const Duration(minutes:2);
-    if (!entering && (!periodic || (_lastAutoCheck != null && DateTime.now().difference(_lastAutoCheck!)<const Duration(minutes:1)))) { _autoRunning = false; return; }
+    if (!widget.hasManualRefresh() && !entering && (!periodic || (_lastAutoCheck != null && DateTime.now().difference(_lastAutoCheck!)<const Duration(minutes:1)))) { _autoRunning = false; return; }
     _lastAutoCheck = DateTime.now();
     try {
       final next = await widget.onAutomaticRefresh(entering,periodic,()=>_autoQuiet);
@@ -1463,16 +1489,8 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
         _scrollPreview();
         break;
       case 3:
-        if (_refreshingGuide) return;
-        setState(() { _refreshingGuide = true; _menuStatus = 'Actualizando…'; });
-        try {
-          await widget.onRefreshGuide();
-          if (mounted) setState(() => _menuStatus = widget.guideStatus());
-        } catch (_) {
-          if (mounted) setState(() => _menuStatus = 'No se pudo actualizar la guía');
-        } finally {
-          if (mounted) setState(() => _refreshingGuide = false);
-        }
+        widget.queueManualGuide();
+        setState(() => _menuStatus = 'Actualización EPG en segundo plano solicitada');
         break;
       case 4:
         await _openSettings();
@@ -1648,7 +1666,8 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
           ])));
         if (!mounted || choice == null) continue;
         if (choice == 'refresh') {
-          await _refreshListNow(item);
+          widget.queueManualList(item['id']!);
+          if (mounted) setState(()=>_menuStatus='Actualización en segundo plano solicitada');
           continue;
         }
         if (choice == 'vod') {
@@ -1779,16 +1798,8 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     if (key == 'banner') { final prefs = await SharedPreferences.getInstance(); if (!mounted) return; setState(() => _bannerSeconds = _bannerChoices[(_bannerChoices.indexOf(_bannerSeconds) + 1) % _bannerChoices.length]); await prefs.setInt('vision_iptv_banner_seconds', _bannerSeconds); return; }
     if (key == 'm3u' || key == 'epg') { await _editSettingsUrl(key == 'epg'); return; }
     if (key == 'refresh') {
-      if (_refreshingGuide) return;
-      setState(() { _refreshingGuide = true; _menuStatus = 'Actualizando…'; });
-      try {
-        await widget.onRefreshGuide();
-        if (mounted) setState(() => _menuStatus = widget.guideStatus());
-      } catch (_) {
-        if (mounted) setState(() => _menuStatus = 'No se pudo actualizar la guía');
-      } finally {
-        if (mounted) setState(() => _refreshingGuide = false);
-      }
+      widget.queueManualGuide();
+      setState(() => _menuStatus = 'Actualización EPG en segundo plano solicitada');
       return;
     }
     final prefs = await SharedPreferences.getInstance();
@@ -1912,7 +1923,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
 
   Widget _iptvSettingsPanel() {
     final labels = <String, String>{..._settingsSectionLabels, 'loading_indicator':'Mostrar indicador de carga', 'list_refresh_entry':'Actualizar al iniciar TV en vivo','epg_refresh_entry':'Actualizar al iniciar TV en vivo','list_refresh_hours':'Intervalo de actualización','epg_refresh_hours':'Intervalo de actualización','epg_updated':'Última actualización EPG', 'm3u': 'Lista M3U activa', 'epg': 'EPG predeterminada', 'lists': 'Listas IPTV', 'quick_start': 'Inicio rápido en último canal', 'banner': 'Duración barra de información', 'player': 'Reproductor IPTV', 'format': 'Formato', 'tunnel': 'Tunneling', 'buffer': 'Búfer MPV', 'passthrough': 'Audio passthrough', 'afr': 'AFR', 'logos': 'Origen de logotipos', 'epg_names': 'Renombrar canales según EPG', 'backup': 'Copia de seguridad', 'restore': 'Restaurar configuración', 'refresh': 'Actualizar programación', 'back': 'Volver al menú'};
-    final values = <String, String>{'section_lists':'Listas y grupos', 'section_guide':'EPG y actualización', 'section_appearance':'Aspecto e información', 'section_playback':'Motor y opciones de vídeo/audio', 'section_behavior':'Arranque', 'section_backup':'Guardar y restaurar', 'loading_indicator':_showLoadingIndicator ? 'Sí' : 'No', 'list_refresh_entry':_listRefreshEntry?'Sí':'No','epg_refresh_entry':_epgRefreshEntry?'Sí':'No','list_refresh_hours':_refreshLabel(_listRefreshHours),'epg_refresh_hours':_refreshLabel(_epgRefreshHours),'epg_updated':widget.epgUpdatedLabel(), 'm3u': _settingsUrl.isEmpty ? 'Sin configurar' : 'Configurada', 'epg': _settingsEpg.isEmpty ? 'Automática desde M3U' : 'Manual', 'lists': 'Gestionar', 'quick_start': _quickStartSetting ? 'Sí' : 'No', 'banner': _bannerSeconds == 0 ? 'Permanente' : '${_bannerSeconds} s', 'player': _settingsExo ? 'ExoPlayer' : 'MPV', 'format': _settingsHls ? 'HLS' : 'Auto', 'tunnel': _settingsTunnel ? 'Sí' : 'No', 'buffer': _settingsBuffer == 'minimum' ? 'Mínimo (0)' : _settingsBuffer == 'small' ? 'Pequeño' : 'Normal', 'passthrough': _settingsPassthrough ? 'Sí' : 'No', 'afr': _settingsAfr ? 'Sí' : 'No', 'logos': _logoSource == 'epg' ? 'EPG' : 'M3U', 'epg_names': _useEpgNames ? 'Sí' : 'No', 'backup': '', 'restore': '', 'refresh': _refreshingGuide ? 'Actualizando…' : '', 'back': ''};
+    final values = <String, String>{'section_lists':'Listas y grupos', 'section_guide':'EPG y actualización', 'section_appearance':'Aspecto e información', 'section_playback':'Motor y opciones de vídeo/audio', 'section_behavior':'Arranque', 'section_backup':'Guardar y restaurar', 'loading_indicator':_showLoadingIndicator ? 'Sí' : 'No', 'list_refresh_entry':_listRefreshEntry?'Sí':'No','epg_refresh_entry':_epgRefreshEntry?'Sí':'No','list_refresh_hours':_refreshLabel(_listRefreshHours),'epg_refresh_hours':_refreshLabel(_epgRefreshHours),'epg_updated':widget.epgUpdatedLabel(), 'm3u': _settingsUrl.isEmpty ? 'Sin configurar' : 'Configurada', 'epg': _settingsEpg.isEmpty ? 'Automática desde M3U' : 'Manual', 'lists': 'Gestionar', 'quick_start': _quickStartSetting ? 'Sí' : 'No', 'banner': _bannerSeconds == 0 ? 'Permanente' : '${_bannerSeconds} s', 'player': _settingsExo ? 'ExoPlayer' : 'MPV', 'format': _settingsHls ? 'HLS' : 'Auto', 'tunnel': _settingsTunnel ? 'Sí' : 'No', 'buffer': _settingsBuffer == 'minimum' ? 'Mínimo (0)' : _settingsBuffer == 'small' ? 'Pequeño' : 'Normal', 'passthrough': _settingsPassthrough ? 'Sí' : 'No', 'afr': _settingsAfr ? 'Sí' : 'No', 'logos': _logoSource == 'epg' ? 'EPG' : 'M3U', 'epg_names': _useEpgNames ? 'Sí' : 'No', 'backup': '', 'restore': '', 'refresh': widget.guideStatus(), 'back': ''};
     final icons = <String, IconData>{'section_lists':Icons.list, 'section_guide':Icons.calendar_today, 'section_appearance':Icons.monitor, 'section_playback':Icons.play_circle_outline, 'section_behavior':Icons.flash_on, 'section_backup':Icons.save, 'loading_indicator':Icons.hourglass_empty, 'list_refresh_entry':Icons.flash_on,'epg_refresh_entry':Icons.flash_on,'list_refresh_hours':Icons.timer,'epg_refresh_hours':Icons.timer,'epg_updated':Icons.calendar_today, 'm3u': Icons.list, 'epg': Icons.calendar_today, 'lists': Icons.playlist_add, 'quick_start': Icons.flash_on, 'banner': Icons.timer, 'player': Icons.play_circle_outline, 'format': Icons.video_settings, 'tunnel': Icons.settings_ethernet, 'buffer': Icons.memory, 'passthrough': Icons.volume_up, 'afr': Icons.monitor, 'logos': Icons.image, 'epg_names': Icons.edit, 'backup': Icons.save, 'restore': Icons.folder_open, 'refresh': Icons.refresh, 'back': Icons.arrow_back};
     final keys = _settingKeys;
     return Container(
