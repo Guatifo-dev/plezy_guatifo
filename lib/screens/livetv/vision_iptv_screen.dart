@@ -1593,7 +1593,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
         onSubmitted: (v) => Navigator.pop(ctx, v))),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-        FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('Siguiente')),
+        FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('Guardar')),
       ],
     ));
     unawaited(Future<void>.delayed(const Duration(milliseconds: 350), controller.dispose));
@@ -1622,110 +1622,143 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     done.dispose();
   }
 
+  ButtonStyle get _listPanelButton => ButtonStyle(
+    alignment: Alignment.centerLeft,
+    padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal:14,vertical:8)),
+    shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius:BorderRadius.circular(8))),
+    backgroundColor: WidgetStateProperty.resolveWith((states)=>states.contains(WidgetState.focused)?const Color(0xFF90CAF9):const Color(0xFF242A36)),
+    foregroundColor: WidgetStateProperty.resolveWith((states)=>states.contains(WidgetState.focused)?const Color(0xFF10151D):Colors.white),
+  );
+
+  Widget _listEditorRow(String label,String value,VoidCallback action,{IconData icon=Icons.edit,FocusNode? focusNode,bool autofocus=false}) =>
+    Padding(padding:const EdgeInsets.only(bottom:5),child:TextButton(
+      focusNode:focusNode,autofocus:autofocus,style:_listPanelButton,onPressed:action,
+      child:Row(children:[Icon(icon,size:18),const SizedBox(width:12),Expanded(child:Text(label,maxLines:1,overflow:TextOverflow.ellipsis)),Flexible(child:Text(value,maxLines:1,overflow:TextOverflow.ellipsis,textAlign:TextAlign.end,style:const TextStyle(fontSize:13))),const SizedBox(width:10),const Icon(Icons.chevron_right,size:18)])));
+
   Future<void> _manageLists() async {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     final lists = _iptvLists(prefs);
+    var last = -1;
     while (mounted) {
-      final action = await showDialog<int>(context: context, barrierColor: Colors.black26, builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1B202A), title: const Text('Listas IPTV'),
-        content: SizedBox(width: 440, height: 300, child: ListView(children: [
-          TextButton.icon(autofocus: true, style: _iptvDialogButtonStyle, icon: const Icon(Icons.add), label: const Text('Añadir nueva lista'), onPressed: () => Navigator.pop(ctx, -1)),
-          for (var i = 0; i < lists.length; i++) ValueListenableBuilder<Map<String,_ListStatus>>(valueListenable: widget.listStatuses, builder: (_, states, __) {
-            final list = lists[i];
-            final active = list['active'] == 'true';
-            final status = states[list['id']];
-            final label = !active ? 'Inactiva' : _refreshListIds.contains(list['id']) ? 'Actualización pendiente' : status?.label ?? 'Pendiente de carga';
-            final updated = status?.updated;
-            return TextButton.icon(style: _iptvDialogButtonStyle, icon: Icon(active ? Icons.check_box : Icons.check_box_outline_blank),
-              label: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('${list['name'] ?? 'Lista'} · ${_isXtream(list) ? 'Xtream Codes' : 'M3U'}', maxLines: 1, overflow: TextOverflow.ellipsis),
-                Text('${active ? 'Activa · ' : ''}$label', style: const TextStyle(fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
-                if (active && status != null && status.vod > 0) Text('${status.vod} VOD descartados', style: const TextStyle(fontSize: 11)),
-                if (active && updated != null) Text('Actualizada: ${updated.day}/${updated.month}/${updated.year} ${_clock(updated)}', style: const TextStyle(fontSize: 11)),
-              ]), onPressed: () => Navigator.pop(ctx, i));
-          }),
-        ])),
-        actions: [TextButton(style: _iptvDialogButtonStyle, onPressed: () => Navigator.pop(ctx), child: const Text('Cerrar'))],
-      ));
-      if (!mounted || action == null) break;
-      await Future<void>.delayed(const Duration(milliseconds: 200));
+      final action = await showDialog<int>(context:context,barrierColor:Colors.black26,builder:(ctx)=>Dialog(
+        backgroundColor:const Color(0xFF1B202A),shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(14)),
+        child:ConstrainedBox(constraints:const BoxConstraints(maxWidth:620),child:Padding(padding:const EdgeInsets.all(18),child:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+          Row(children:[const Icon(Icons.list_alt,color:Color(0xFF90CAF9)),const SizedBox(width:10),const Expanded(child:Text('Listas IPTV',style:TextStyle(fontSize:21,fontWeight:FontWeight.bold))),Text('${lists.where((l)=>l['active']=='true').length} activas · ${lists.length} listas',style:const TextStyle(fontSize:12,color:Colors.white70))]),
+          const SizedBox(height:12),
+          _listEditorRow('Añadir nueva lista','',()=>Navigator.pop(ctx,-1),icon:Icons.add,autofocus:last<0||last>=lists.length),
+          Flexible(child:ListView.builder(shrinkWrap:true,itemCount:lists.length,itemBuilder:(_,i)=>ValueListenableBuilder<Map<String,_ListStatus>>(valueListenable:widget.listStatuses,builder:(_,states,__){
+            final item=lists[i],active=item['active']=='true',status=states[item['id']];
+            final updated=status?.updated;
+            final info=active?status?.label??'Pendiente de carga':'Inactiva';
+            return Padding(padding:const EdgeInsets.only(bottom:6),child:TextButton(autofocus:last==i,style:_listPanelButton,onPressed:()=>Navigator.pop(ctx,i),child:Row(children:[
+              Icon(active?Icons.check_circle:Icons.pause_circle_outline,size:23),const SizedBox(width:12),
+              Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                Row(children:[Expanded(child:Text(item['name']??'Lista IPTV',maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(fontSize:16,fontWeight:FontWeight.bold))),Text(_isXtream(item)?'Xtream Codes':'M3U',style:const TextStyle(fontSize:12))]),
+                const SizedBox(height:3),Text('${active?'Activa · ':''}$info',maxLines:2,overflow:TextOverflow.ellipsis,style:const TextStyle(fontSize:13)),
+                if(active&&updated!=null) Text('Actualizada: ${updated.day}/${updated.month}/${updated.year} ${_clock(updated)}',style:const TextStyle(fontSize:11)),
+                if(active&&status!=null&&status.vod>0) Text('${status.vod} VOD descartados',style:const TextStyle(fontSize:11)),
+              ])),const SizedBox(width:12),const Icon(Icons.chevron_right,size:20)
+            ])));
+          }))),
+          const SizedBox(height:8),Align(alignment:Alignment.centerRight,child:TextButton(style:_iptvDialogButtonStyle,onPressed:()=>Navigator.pop(ctx),child:const Text('Cerrar'))),
+        ]))))));
+      if (!mounted || action==null) break;
+      last=action;
+      await Future<void>.delayed(const Duration(milliseconds:200));
       if (!mounted) return;
-      final item = <String,String>{if (action >= 0) ...lists[action]};
-      if (action >= 0) {
-        final choice = await showDialog<String>(context: context, builder: (ctx) => AlertDialog(
-          backgroundColor: const Color(0xFF1B202A), title: Text(item['name'] ?? 'Lista IPTV'),
-          content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            TextButton(autofocus: true, style: _iptvDialogButtonStyle, onPressed: () => Navigator.pop(ctx,'toggle'), child: Text(item['active'] == 'true' ? 'Desactivar lista' : 'Activar lista')),
-            TextButton(style: _iptvDialogButtonStyle, onPressed: () => Navigator.pop(ctx,'edit'), child: const Text('Editar lista y EPG')),
-            TextButton(style: _iptvDialogButtonStyle, onPressed: () => Navigator.pop(ctx,'groups'), child: const Text('Gestionar grupos')),
-            if (!_isXtream(item)) TextButton(style: _iptvDialogButtonStyle, onPressed: () => Navigator.pop(ctx,'vod'), child: Text('Excluir VOD: ${_excludeVod(item) ? 'Sí' : 'No'}')),
-            if (_isXtream(item)) const Text('Solo TV en directo · VOD no solicitado', style: TextStyle(color: Colors.white70, fontSize: 12)),
-            if (item['active'] == 'true') TextButton(style: _iptvDialogButtonStyle, onPressed: () => Navigator.pop(ctx,'refresh'), child: const Text('Actualizar lista')),
-            TextButton(style: _iptvDialogButtonStyle, onPressed: () => Navigator.pop(ctx,'delete'), child: const Text('Eliminar lista')),
-          ])));
-        if (!mounted || choice == null) continue;
-        if (choice == 'refresh') {
-          widget.queueManualList(item['id']!);
-          if (mounted) setState(()=>_menuStatus='Actualización en segundo plano solicitada');
-          continue;
-        }
-        if (choice == 'vod') {
-          lists[action]['excludeVod'] = _excludeVod(item) ? 'false' : 'true';
-          await _saveLists(prefs, lists);
-          if (lists[action]['active'] == 'true') await _refreshListNow(lists[action]);
-          continue;
-        }
-        if (choice == 'groups') {
-          await Future<void>.delayed(const Duration(milliseconds: 200));
-          if (!mounted) return;
-          final groups = widget.listGroups(item);
-          final hidden = await _manageListGroups(item, groups);
-          if (!mounted) return;
-          if (hidden != null) { lists[action]['hiddenGroups'] = jsonEncode(hidden.toList()); await _saveLists(prefs, lists); }
-          continue;
-        }
-        if (choice == 'toggle' || choice == 'delete') {
-          if (choice == 'toggle') { lists[action]['active'] = item['active'] == 'true' ? 'false' : 'true'; }
-          else { lists.removeAt(action); }
-          await _saveLists(prefs, lists);
-          continue;
-        }
-        await Future<void>.delayed(const Duration(milliseconds: 200));
-      }
-      final type = await showDialog<String>(context: context, builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1B202A), title: const Text('Tipo de lista IPTV'),
-        actions: [
-          TextButton(autofocus: !_isXtream(item), style: _iptvDialogButtonStyle, onPressed: () => Navigator.pop(ctx, 'm3u'), child: const Text('M3U')),
-          TextButton(autofocus: _isXtream(item), style: _iptvDialogButtonStyle, onPressed: () => Navigator.pop(ctx, 'xc'), child: const Text('Xtream Codes')),
-        ]));
-      if (!mounted || type == null) continue;
-      if ((item['type'] ?? 'm3u') != type) { item['url'] = ''; item.remove('user'); item.remove('password'); }
-      item['type'] = type;
-      item['excludeVod'] ??= 'true';
-      if (type == 'xc') item['excludeVod'] = 'true';
-      bool cancelled = false;
-      for (final field in ['name','url', if (type == 'xc') ...['user','password'], 'epg']) {
-        if (!mounted) return;
-        final value = await _askListField(field == 'name' ? 'Nombre de la lista' : field == 'url' ? (type == 'xc' ? 'URL del servidor Xtream' : 'URL M3U') : field == 'user' ? 'Usuario' : field == 'password' ? 'Contraseña' : 'URL EPG (vacía = predeterminada)', item[field] ?? '', isUrl: field == 'url' || field == 'epg', secret: field == 'password');
-        if (value == null) { cancelled = true; break; }
-        item[field] = field == 'password' ? value : value.trim();
-        await Future<void>.delayed(const Duration(milliseconds: 200));
-      }
-      if (!mounted || cancelled) continue;
-      final uri = Uri.tryParse(item['url'] ?? '');
-      if (uri == null || !['http','https'].contains(uri.scheme) || uri.host.isEmpty) { setState(() => _menuStatus = 'URL M3U no válida'); continue; }
-      if (type == 'xc' && ((item['user'] ?? '').isEmpty || (item['password'] ?? '').isEmpty)) { setState(() => _menuStatus = 'Faltan usuario o contraseña'); continue; }
-      if (lists.asMap().entries.any((e) => e.key != action && _playlistKey(e.value) == _playlistKey(item))) { setState(() => _menuStatus = 'La lista ya existe'); continue; }
-      if ((item['name'] ?? '').isEmpty) item['name'] = 'Lista IPTV';
-      item['id'] ??= _playlistKey(item);
-      if (action >= 0 && _playlistKey(lists[action]) != _playlistKey(item)) _refreshListIds.add(item['id']!);
-      item['active'] ??= 'true';
-      if (action < 0) { lists.add(item); } else { lists[action] = item; }
-      await _saveLists(prefs, lists);
-      if (item['active'] == 'true' && (action < 0 || _refreshListIds.contains(item['id']))) await _refreshListNow(item);
+      await _editListPanel(prefs,lists,action);
     }
-    if (mounted) { _playerFocus.requestFocus(); _scheduleResize(); }
+    if(mounted){_playerFocus.requestFocus();_scheduleResize();}
+  }
+
+  Future<void> _editListPanel(SharedPreferences prefs,List<Map<String,String>> lists,int index) async {
+    final fresh=index<0;
+    final original=fresh?<String,String>{}:Map<String,String>.of(lists[index]);
+    final draft=<String,String>{'type':'m3u','active':'true','excludeVod':'true',...original};
+    final nodes=<String,FocusNode>{};
+    FocusNode node(String key)=>nodes.putIfAbsent(key,()=>FocusNode());
+    String error='';
+    bool busy=false;
+    String configured(String key)=>(draft[key]??'').isEmpty?'Sin configurar':'••••••••';
+    String? validate(){
+      final uri=Uri.tryParse(draft['url']??'');
+      if(uri==null||!['http','https'].contains(uri.scheme)||uri.host.isEmpty)return 'Introduce una URL válida.';
+      if(_isXtream(draft)&&((draft['user']??'').isEmpty||(draft['password']??'').isEmpty))return 'Introduce el usuario y la contraseña.';
+      final epg=draft['epg']??'';
+      if(epg.isNotEmpty){final u=Uri.tryParse(epg);if(u==null||!['http','https'].contains(u.scheme)||u.host.isEmpty)return 'Introduce una URL EPG válida o déjala vacía.';}
+      if(lists.asMap().entries.any((e)=>e.key!=index&&_playlistKey(e.value)==_playlistKey(draft)))return 'La lista ya existe.';
+      return null;
+    }
+    final result=await showDialog<String>(context:context,barrierDismissible:false,builder:(ctx)=>StatefulBuilder(builder:(ctx,update){
+      Future<void> edit(String key,String label,{bool url=false,bool secret=false}) async {
+        if(busy)return;busy=true;
+        final value=await _askListField(label,draft[key]??'',isUrl:url,secret:secret);
+        busy=false;if(!ctx.mounted)return;
+        if(value!=null)update((){draft[key]=key=='password'?value:value.trim();error='';});
+        node(key).requestFocus();
+      }
+      Widget field(String key,String label,String value,VoidCallback action,{IconData icon=Icons.edit,bool autofocus=false})=>_listEditorRow(label,value,action,icon:icon,focusNode:node(key),autofocus:autofocus);
+      return Dialog(backgroundColor:const Color(0xFF1B202A),shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(14)),child:ConstrainedBox(constraints:const BoxConstraints(maxWidth:620),child:Padding(padding:const EdgeInsets.all(18),child:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+        Text(fresh?'Nueva lista IPTV':'Editar lista IPTV',style:const TextStyle(fontSize:21,fontWeight:FontWeight.bold)),
+        if(!fresh) Padding(padding:const EdgeInsets.only(top:4),child:Text(_isXtream(draft)?'Xtream Codes':'M3U',style:const TextStyle(color:Color(0xFF90CAF9),fontSize:13))),
+        const SizedBox(height:12),
+        Flexible(child:SingleChildScrollView(child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+          field('name','Nombre',(draft['name']??'').isEmpty?'Sin configurar':draft['name']!,()=>unawaited(edit('name','Nombre de la lista')),autofocus:true),
+          if(fresh)field('type','Tipo',_isXtream(draft)?'Xtream Codes':'M3U',()=>update((){draft['type']=_isXtream(draft)?'m3u':'xc';if(_isXtream(draft))draft['excludeVod']='true';error='';}),icon:Icons.swap_horiz),
+          field('url',_isXtream(draft)?'URL servidor':'URL M3U',configured('url'),()=>unawaited(edit('url',_isXtream(draft)?'URL del servidor Xtream':'URL M3U',url:true))),
+          if(_isXtream(draft))...[
+            field('user','Usuario',configured('user'),()=>unawaited(edit('user','Usuario',secret:true))),
+            field('password','Contraseña',configured('password'),()=>unawaited(edit('password','Contraseña',secret:true))),
+          ],
+          field('epg','URL EPG',(draft['epg']??'').isEmpty?'Automática / predeterminada':'Configurada',()=>unawaited(edit('epg','URL EPG (vacía = predeterminada)',url:true))),
+          field('active','Estado',draft['active']=='true'?'Activa':'Inactiva',()=>update(()=>draft['active']=draft['active']=='true'?'false':'true'),icon:Icons.power_settings_new),
+          if(!_isXtream(draft))field('excludeVod','Excluir VOD',_excludeVod(draft)?'Sí':'No',()=>update(()=>draft['excludeVod']=_excludeVod(draft)?'false':'true'),icon:Icons.video_library),
+          if(!fresh)...[
+            field('groups','Gestionar grupos','${_hiddenGroups(draft).length} ocultos',()async{
+              if(busy)return;busy=true;
+              final hidden=await _manageListGroups(draft,widget.listGroups(original));
+              busy=false;if(!ctx.mounted)return;
+              if(hidden!=null)update(()=>draft['hiddenGroups']=jsonEncode(hidden.toList()));
+              node('groups').requestFocus();
+            },icon:Icons.folder_open),
+            if(original['active']=='true')field('refresh','Actualizar lista','En segundo plano',(){
+              widget.queueManualList(original['id']!);
+              update(()=>error='Actualización en segundo plano solicitada.');
+            },icon:Icons.refresh),
+            field('delete','Eliminar lista','',()async{
+              final yes=await showDialog<bool>(context:ctx,builder:(confirm)=>AlertDialog(title:const Text('Eliminar lista IPTV'),content:Text('¿Eliminar ${original['name']??'esta lista'}?'),actions:[
+                TextButton(autofocus:true,style:_iptvDialogButtonStyle,onPressed:()=>Navigator.pop(confirm,false),child:const Text('Cancelar')),
+                TextButton(style:_iptvDialogButtonStyle,onPressed:()=>Navigator.pop(confirm,true),child:const Text('Eliminar')),
+              ]));
+              if(ctx.mounted&&yes==true)Navigator.pop(ctx,'delete');
+              else if(ctx.mounted)node('delete').requestFocus();
+            },icon:Icons.delete_outline),
+          ],
+        ]))),
+        if(error.isNotEmpty) Padding(padding:const EdgeInsets.only(top:5),child:Text(error,style:const TextStyle(color:Color(0xFF90CAF9),fontSize:12))),
+        const SizedBox(height:8),
+        Row(mainAxisAlignment:MainAxisAlignment.end,children:[
+          TextButton(style:_iptvDialogButtonStyle,onPressed:()=>Navigator.pop(ctx),child:const Text('Cancelar')),
+          const SizedBox(width:8),
+          TextButton(style:_iptvDialogButtonStyle,onPressed:(){final problem=validate();if(problem!=null){update(()=>error=problem);return;}Navigator.pop(ctx,'save');},child:Text(fresh?'Guardar lista':'Guardar cambios')),
+        ]),
+      ])))));
+    }));
+    unawaited(Future<void>.delayed(const Duration(milliseconds:350),(){for(final n in nodes.values)n.dispose();}));
+    if(!mounted||result==null)return;
+    if(result=='delete'){lists.removeAt(index);await _saveLists(prefs,lists);return;}
+    if(result!='save')return;
+    if((draft['name']??'').isEmpty)draft['name']='Lista IPTV';
+    if(!_isXtream(draft)){draft.remove('user');draft.remove('password');}
+    draft['id']??=_playlistKey(draft);
+    if(!fresh&&mapEquals(original,draft))return;
+    // Legacy lists may not store explicit defaults; saving unchanged must not reload.
+    if(!fresh&&mapEquals(<String,String>{'type':'m3u','active':'true','excludeVod':'true',...original},draft))return;
+    final needsDownload=fresh||_playlistKey(original)!=_playlistKey(draft);
+    if(fresh){lists.add(draft);}else{lists[index]=draft;}
+    await _saveLists(prefs,lists);
+    if(draft['active']=='true'&&needsDownload)await _refreshListNow(draft);
   }
 
   Future<Set<String>?> _manageListGroups(Map<String,String> item, List<String> groups) async {
