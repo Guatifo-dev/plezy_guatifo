@@ -32,6 +32,28 @@ Se ha ampliado el módulo de TV en vivo de Plezy, originalmente destinado a los 
 
 Nueva fila opcional **TV en vivo (Favoritos)** en la pantalla de inicio, con acceso directo a los canales favoritos, información del programa en emisión, fondo ambiental dinámico y vista previa en directo automática o manual.
 
+### Capturas de TV en vivo
+
+**Discover con canales favoritos IPTV**
+
+<p align="center"><img src="media/WhatsApp Image 2026-11-27 at 18.18.04.jpeg" alt="Discover con canales favoritos IPTV" width="920"></p>
+
+**EPG en cuadrícula**
+
+<p align="center"><img src="media/WhatsApp Image 2026-11-27 at 18.11.36.jpeg" alt="EPG en cuadrícula" width="920"></p>
+
+**EPG en columnas**
+
+<p align="center"><img src="media/WhatsApp Image 2026-11-27 at 18.16.02.jpeg" alt="EPG en columnas" width="920"></p>
+
+**Información durante la reproducción**
+
+<p align="center"><img src="media/WhatsApp Image 2026-11-27 at 18.13.20.jpeg" alt="Información durante la reproducción" width="920"></p>
+
+**Ficha ampliada del programa**
+
+<p align="center"><img src="media/WhatsApp Image 2026-11-27 at 18.14.48.jpeg" alt="Ficha ampliada del programa" width="920"></p>
+
 ### Agradecimientos
 
 Especial agradecimiento a [**David dobleM**](https://github.com/davidmuma) por su trabajo en el desarrollo y mantenimiento de su EPG, incorporada de forma predeterminada en Plezy Vision.
