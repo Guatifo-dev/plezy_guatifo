@@ -18,6 +18,8 @@ import '../../widgets/settings_page.dart';
 import '../../widgets/settings_builder.dart';
 import '../../widgets/settings_section.dart';
 import 'app_icon_setting.dart';
+import '../livetv/vision_iptv_screen.dart';
+import '../../widgets/focusable_list_tile.dart';
 import 'settings_utils.dart';
 import 'theme_settings_screen.dart';
 
@@ -197,6 +199,7 @@ class AppearanceSettingsScreen extends StatelessWidget {
               title: t.settings.showAllMySeriesDiscover,
               subtitle: t.settings.showAllMySeriesDiscoverDescription,
             ),
+            if (PlatformDetector.isTV()) const _DiscoverIptvSettings(),
             _discoverCatalogSortSelector(movies: true),
             _discoverCatalogSortSelector(movies: false),
             if (PlatformDetector.isTV())
@@ -478,4 +481,42 @@ class AppearanceSettingsScreen extends StatelessWidget {
       ),
     ],
   );
+}
+
+class _DiscoverIptvSettings extends StatefulWidget {
+  const _DiscoverIptvSettings();
+  @override
+  State<_DiscoverIptvSettings> createState() => _DiscoverIptvSettingsState();
+}
+class _DiscoverIptvSettingsState extends State<_DiscoverIptvSettings> {
+  bool _available = false, _enabled = false, _auto = true;
+  int _generation = 0;
+  @override
+  void initState() { super.initState(); visionDiscoverIptvChanged.addListener(_reload); _reload(); }
+  Future<void> _reload() async {
+    final generation = ++_generation;
+    final available = await visionDiscoverAvailable();
+    final enabled = await visionDiscoverIptvEnabled();
+    final auto = await visionDiscoverAuto();
+    if (mounted && generation == _generation) setState(() { _available = available; _enabled = available && enabled; _auto = auto; });
+  }
+  @override
+  void dispose() { visionDiscoverIptvChanged.removeListener(_reload); super.dispose(); }
+  @override
+  Widget build(BuildContext context) => Column(children: [
+    FocusableSwitchListTile(
+      secondary: const Icon(Icons.tv),
+      title: const Text('Mostrar TV en vivo (Favoritos)'),
+      subtitle: Text(_available ? 'Canales favoritos al final de Discover' : 'Configura primero una lista IPTV activa con canales'),
+      value: _enabled,
+      onChanged: _available ? (value) async { await setVisionDiscoverEnabled(value); await _reload(); } : null,
+    ),
+    FocusableSwitchListTile(
+      secondary: const Icon(Icons.play_circle_outline),
+      title: const Text('Reproducción automática de TV en vivo'),
+      subtitle: Text(_auto ? 'Iniciar al seleccionar un canal, sin espera' : 'Pulsar OK para iniciar la vista previa; de nuevo para ampliar'),
+      value: _auto,
+      onChanged: _enabled ? (value) async { await setVisionDiscoverAuto(value); await _reload(); } : null,
+    ),
+  ]);
 }
