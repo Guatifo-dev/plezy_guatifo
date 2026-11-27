@@ -73,6 +73,7 @@ class TvSpotlightScaffold extends StatelessWidget {
     this.hideSpoilers,
     this.allowTrailerPreview = true,
     this.metadataBelowBuilder,
+    this.customSpotlight,
   });
 
   final List<MediaHub> hubs;
@@ -80,6 +81,7 @@ class TvSpotlightScaffold extends StatelessWidget {
   final MediaItem? Function() resolveSpotlight;
   final TvSpotlightClientResolver resolveClient;
   final Widget foreground;
+  final Widget? customSpotlight;
   final bool? hideSpoilers;
   final bool allowTrailerPreview;
   final Widget? Function(MediaItem?)? metadataBelowBuilder;
@@ -127,7 +129,7 @@ class TvSpotlightScaffold extends StatelessWidget {
           fit: StackFit.expand,
           clipBehavior: Clip.none,
           children: [
-            Builder(
+            if (customSpotlight != null) Positioned.fill(child: customSpotlight!) else Builder(
               builder: (context) {
                 final foregroundLeft = MainScreenFocusScope.foregroundLeftOf(context);
                 return SideNavigationBleedBuilder(
