@@ -2085,6 +2085,31 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     });
     _scrollPreview();
   }
+  bool _isOnAir(_Programme p) { final now=DateTime.now(); return !now.isBefore(p.start)&&now.isBefore(p.stop); }
+  Future<void> _confirmGuideSelection() async {
+    final p=_programmeHasFocus?_selectedProgramme:null;
+    if(p!=null&&!_isOnAir(p)){await _withDialog(_programmeContext);return;}
+    await _confirmGuide();
+  }
+  KeyEventResult _guideOk(KeyEvent event, {required bool vertical}) {
+    if(event is KeyDownEvent){
+      _guideSelectDown=true;_favoriteLong=false;_favoriteHold?.cancel();
+      _favoriteHold=Timer(const Duration(milliseconds:600),(){if(mounted&&_guideSelectDown)_favoriteLong=true;});
+    }
+    if(event is KeyUpEvent){
+      _favoriteHold?.cancel();
+      final pressed=_guideSelectDown,long=_favoriteLong;
+      _guideSelectDown=false;_favoriteLong=false;
+      if(pressed){
+        if(long){
+          if(_programmeHasFocus){unawaited(_withDialog(_programmeContext));}
+          else if(vertical?_verticalColumn==0&&_verticalRows.isNotEmpty:!_groupFocus&&_visibleIndices.isNotEmpty){unawaited(_withDialog(_channelContext));}
+        }else if(vertical){unawaited(_confirmVertical());}
+        else{unawaited(_confirmGuideSelection());}
+      }
+    }
+    return KeyEventResult.handled;
+  }
   Future<void> _confirmGuide() async {
     if (_groupFocus) { if (_toggleGroupHeader()) return; if (_visibleIndices.isNotEmpty) setState(() { _groupFocus = false; _programmeIndex = -1; _stepProgramme(0); }); return; }
     if (_visibleIndices.isEmpty || _switching) return;
@@ -2283,7 +2308,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     await Future<void>.delayed(const Duration(milliseconds:200));
     if(!mounted)return;
     var last=initial;
-    await showDialog<void>(context:context,barrierColor:Colors.black54,builder:(_)=>_ProgrammeInfoDialog(entries:entries,initial:initial,channelName:_name(c),channelLogo:_logo(c),onSelected:(i)=>last=i));
+    await showDialog<void>(context:context,barrierColor:Colors.black54,builder:(_)=>_ProgrammeInfoDialog(entries:entries,initial:initial,channelName:_name(c),channelLogo:_logo(c),channelNumber:vertical&&_verticalGroupKey=='Favoritos'?_verticalRows.indexOf(_verticalSelected)+1:vertical?_verticalSelected+1:_channelNumber(_highlightIndex),onSelected:(i)=>last=i));
     if(!mounted)return;
     final target=entries[last];
     final index=_channelIndices[c.favoriteId];
@@ -2762,10 +2787,12 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     if (_preparingCatalog || _switching) return;
     if (_verticalColumn == -2) { await _activateVerticalMenu(); return; }
     if (_verticalColumn == -1) { _chooseVerticalGroup(); return; }
-    if (_verticalColumn == 0) {
+    if (_verticalColumn == 0 || _verticalColumn == 1) {
       if (_verticalRows.isEmpty) return;
+      if (_verticalColumn==1) { final p=_verticalProgramme; if(p==null)return; if(!_isOnAir(p)){await _withDialog(_programmeContext);return;} }
       final target = _verticalSelected;
-      if (target != _channelIndex || _failed) await _switchChannel(target);
+      if (target == _channelIndex && !_failed) { _closeVerticalGuide(); return; }
+      await _switchChannel(target);
       if (!mounted || !_verticalGuide) return;
       setState(() { _showName = false; _verticalChannelIndex = _channelIndex; _syncVerticalProgramme(reset:true); });
       _scheduleGuidePage(); _scrollVerticalBoth();
@@ -3202,7 +3229,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
         }
         if (_verticalGuide && !_settingsOpen) {
           if (key == LogicalKeyboardKey.contextMenu) { if (event is KeyDownEvent) _contextSelectDown = (_verticalColumn==0 && _verticalRows.isNotEmpty)||_programmeHasFocus; if (event is KeyUpEvent && _contextSelectDown) { _contextSelectDown=false; unawaited(_withDialog(_programmeHasFocus?_programmeContext:_channelContext)); } return KeyEventResult.handled; }
-          if (_verticalColumn==1 && (key==LogicalKeyboardKey.select||key==LogicalKeyboardKey.enter)) { if(event is KeyDownEvent){_guideSelectDown=true;_favoriteLong=false;_favoriteHold?.cancel();if(_programmeHasFocus)_favoriteHold=Timer(const Duration(milliseconds:600),(){if(mounted&&_guideSelectDown&&_programmeHasFocus&&!_dialogBusy){_favoriteLong=true;unawaited(_withDialog(_programmeContext));}});} if(event is KeyUpEvent){_favoriteHold?.cancel();_guideSelectDown=false;_favoriteLong=false;} return KeyEventResult.handled; }
+          if ((_verticalColumn==0||_verticalColumn==1) && (key==LogicalKeyboardKey.select||key==LogicalKeyboardKey.enter)) return _guideOk(event,vertical:true);
           if (_verticalColumn == 0 && (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown)) { _guideChannelArrow(event,vertical:true); return KeyEventResult.handled; }
           if (event is KeyUpEvent) { if (_fastScroll) setState(() => _fastScroll = false); return KeyEventResult.handled; }
           if (event is KeyDownEvent || event is KeyRepeatEvent) {
@@ -3252,26 +3279,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
           if (event is KeyUpEvent) { _leftHold?.cancel(); _leftHold = null; if (!_leftLong) { if (_groupFocus) { setState(() { _menuOpen = true; _menuStatus = ''; }); } else if (!_inProgrammes) { setState(() => _groupFocus = true); _scrollGroup(); } else if (_onCurrentProgramme) { setState(() => _inProgrammes = false); } else { setState(() => _stepProgramme(-1)); } } }
           return KeyEventResult.handled;
         }
-        if (_preview && !_groupFocus && (key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter)) {
-          if (event is KeyDownEvent) {
-            _guideSelectDown = true; _favoriteLong = false;
-            _favoriteHold?.cancel();
-            if (_visibleIndices.isNotEmpty) {
-              final c = widget.channels[_highlightIndex];
-              _favoriteHold = Timer(const Duration(milliseconds: 600), () {
-                if (!mounted || !_guideSelectDown || !_preview || _groupFocus || _dialogBusy) return;
-                _favoriteLong = true;
-                if (_programmeHasFocus) { unawaited(_withDialog(_programmeContext)); } else { unawaited(_toggleGuideFavorite(c)); }
-              });
-            }
-          }
-          if (event is KeyUpEvent) {
-            _favoriteHold?.cancel();
-            if (_guideSelectDown && !_favoriteLong) unawaited(_confirmGuide());
-            _guideSelectDown = false; _favoriteLong = false;
-          }
-          return KeyEventResult.handled;
-        }
+        if (_preview && !_groupFocus && (key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter)) return _guideOk(event,vertical:false);
         if (key == LogicalKeyboardKey.contextMenu) {
           if (event is KeyDownEvent) _contextSelectDown = true;
           if (event is KeyUpEvent && _contextSelectDown) {
@@ -3535,9 +3543,9 @@ Map<String, dynamic> _readIptvMap(String? value) {
 }
 
 class _ProgrammeInfoDialog extends StatefulWidget {
-  const _ProgrammeInfoDialog({required this.entries,required this.initial,required this.channelName,required this.channelLogo,required this.onSelected});
+  const _ProgrammeInfoDialog({required this.entries,required this.initial,required this.channelName,required this.channelLogo,required this.channelNumber,required this.onSelected});
   final List<_Programme> entries;
-  final int initial;
+  final int initial,channelNumber;
   final String channelName,channelLogo;
   final ValueChanged<int> onSelected;
   @override State<_ProgrammeInfoDialog> createState()=>_ProgrammeInfoDialogState();
@@ -3568,19 +3576,27 @@ class _ProgrammeInfoDialogState extends State<_ProgrammeInfoDialog>{
       const Divider(color:Colors.white24),
       Expanded(child:Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
         Align(alignment:Alignment.centerLeft,child:Icon(Icons.chevron_left,size:30,color:_index>0?blue:Colors.white24)),
-        if(p.poster.startsWith('http'))...[
-          Flexible(flex:3,child:Column(children:[
-            Expanded(child:ClipRRect(borderRadius:BorderRadius.circular(8),child:Image.network(p.poster,key:ValueKey(p.poster),fit:BoxFit.contain,cacheHeight:480,errorBuilder:(_,__,___)=>const Icon(Icons.image_not_supported_outlined,color:Colors.white38,size:42)))),
-            const SizedBox(height:7),
-            if(widget.channelLogo.isNotEmpty)SizedBox(height:28,child:Image.network(widget.channelLogo,fit:BoxFit.contain,cacheWidth:128,errorBuilder:(_,__,___)=>const SizedBox.shrink())),
-          ])),const SizedBox(width:18),
-        ],
+        Flexible(flex:3,child:LayoutBuilder(builder:(_,constraints){
+          final h=constraints.maxHeight;
+          final posterHeight=(h*.50).clamp(0.0,185.0).toDouble();
+          return Column(mainAxisAlignment:MainAxisAlignment.center,children:[
+            if(p.poster.startsWith('http'))...[
+              SizedBox(height:posterHeight,width:posterHeight*2/3,child:ClipRRect(borderRadius:BorderRadius.circular(10),child:Image.network(p.poster,key:ValueKey(p.poster),fit:BoxFit.cover,cacheHeight:480,errorBuilder:(_,__,___)=>const Icon(Icons.image_not_supported_outlined,color:Colors.white38,size:42)))),
+              SizedBox(height:h*.025),
+            ],
+            SizedBox(height:(h*.15).clamp(0.0,62.0).toDouble(),width:112,child:widget.channelLogo.isNotEmpty?Image.network(widget.channelLogo,fit:BoxFit.contain,cacheWidth:256,errorBuilder:(_,__,___)=>const Icon(Icons.tv,color:Colors.white54)):const Icon(Icons.tv,color:Colors.white54)),
+            const SizedBox(height:5),
+            Text('${widget.channelNumber}',style:const TextStyle(color:Colors.white,fontSize:20,fontWeight:FontWeight.bold)),
+            Flexible(child:Text(widget.channelName,maxLines:2,overflow:TextOverflow.ellipsis,textAlign:TextAlign.center,style:const TextStyle(color:Colors.white70,fontSize:14))),
+            const SizedBox(height:8),
+          ]);
+        })),const SizedBox(width:18),
         Expanded(flex:8,child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
           Text(p.title,maxLines:2,overflow:TextOverflow.ellipsis,style:const TextStyle(color:Colors.white,fontSize:25,fontWeight:FontWeight.bold)),
-          const SizedBox(height:5),Text('${widget.channelName} · ${_date(p.start)}',style:const TextStyle(color:blue,fontSize:14)),
+          const SizedBox(height:5),Text('${_date(p.start)}',style:const TextStyle(color:blue,fontSize:14)),
           const SizedBox(height:5),Text('${_time(p.start)} – ${_time(p.stop)} · $minutes min',style:const TextStyle(color:Colors.white70,fontSize:14)),
           if(live)...[const SizedBox(height:6),Row(children:[const Text('En emisión',style:TextStyle(color:blue)),const Spacer(),Text('${p.stop.difference(now).inMinutes} min restantes',style:const TextStyle(color:Colors.white70,fontSize:12))]),const SizedBox(height:4),LinearProgressIndicator(value:(now.difference(p.start).inSeconds/p.stop.difference(p.start).inSeconds.clamp(1,99999999)).clamp(0.0,1.0).toDouble(),color:blue,backgroundColor:Colors.white24,minHeight:3)],
-          const Divider(color:Colors.white24),const Text('Sinopsis',style:TextStyle(color:Colors.white,fontSize:15,fontWeight:FontWeight.bold)),const SizedBox(height:5),
+          const SizedBox(height:18),
           Expanded(child:Scrollbar(controller:_scroll,thumbVisibility:true,child:SingleChildScrollView(controller:_scroll,padding:const EdgeInsets.only(right:12),child:Text(p.description.isEmpty?'Sin información adicional.':p.description,style:const TextStyle(color:Colors.white,fontSize:15,height:1.35))))),
         ])),
         Align(alignment:Alignment.centerRight,child:Icon(Icons.chevron_right,size:30,color:_index<widget.entries.length-1?blue:Colors.white24)),
