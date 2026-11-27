@@ -1122,11 +1122,11 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   String? _verticalGroupKey, _verticalGroupFocus;
   final _verticalGroupsScroll = ScrollController();
   double _verticalGroupExtent = 38;
-  List<String> get _verticalGroups => ['Favoritos','Todos',..._groups.skip(2)];
+  List<String> get _verticalGroups => ['Favoritos','Todos','Últimos canales',..._groups.skip(2)];
   void _scrollVerticalGroups() { WidgetsBinding.instance.addPostFrameCallback((_) { if (!mounted || !_verticalGuide || !_verticalGroupsScroll.hasClients) return; final i = _verticalGroups.indexOf(_verticalGroupFocus ?? 'Todos'); final p = _verticalGroupsScroll.position; if (i>=0) _verticalGroupsScroll.jumpTo((i*_verticalGroupExtent-p.viewportDimension/2+_verticalGroupExtent/2).clamp(0.0,p.maxScrollExtent).toDouble()); }); }
   void _openVerticalGroups() { setState(() { final key = _verticalGroupKey ?? _groupKey(_channel.source,_channel.group); final parts = _groupParts(key); if (parts != null && parts[1] != null) { _expandedSources.add(parts[0] as String); _groupTree = null; } _verticalGroupFocus = _verticalGroups.contains(key)?key:'Todos'; _verticalColumn = -1; }); _scrollVerticalGroups(); }
-  void _moveVerticalGroup(int delta) { final groups = _verticalGroups; final i = groups.indexOf(_verticalGroupFocus ?? 'Todos'); final next = (i+delta).clamp(0,groups.length-1).toInt(); if (next==i) return; setState(()=>_verticalGroupFocus=groups[next]); _scrollVerticalGroups(); }
-  void _chooseVerticalGroup({bool enterChannels=false}) { final key = _verticalGroupFocus ?? 'Todos'; final parts = _groupParts(key); if (!enterChannels && parts != null && parts[1]==null) { setState(() { final source=parts[0] as String; if (!_expandedSources.remove(source)) _expandedSources.add(source); _groupTree=null; widget.custom['expanded']=_expandedSources.toList(); }); unawaited(_saveCustom()); _scrollVerticalGroups(); return; } final previous = _verticalSelected; setState(() { _verticalGroupKey=key; final rows=_verticalRows; if (rows.isNotEmpty) { final next=rows.contains(previous)?previous:rows.first; if (next!=previous) { _verticalChannelIndex=next; _verticalProgrammeStart=null; _syncVerticalProgramme(reset:true); } } if (enterChannels) _verticalColumn=0; }); _scheduleGuidePage(); _scrollVerticalBoth(); }
+  void _moveVerticalGroup(int delta) { final groups = _verticalGroups; final i = groups.indexOf(_verticalGroupFocus ?? 'Todos'); final next = (i+delta).clamp(0,groups.length-1).toInt(); if (next==i) return; setState(()=>_verticalGroupFocus=groups[next]); _chooseVerticalGroup(focusOnly:true); _scrollVerticalGroups(); }
+  void _chooseVerticalGroup({bool enterChannels=false,bool focusOnly=false}) { final key = _verticalGroupFocus ?? 'Todos'; final parts = _groupParts(key); if (!focusOnly && !enterChannels && parts != null && parts[1]==null) { setState(() { final source=parts[0] as String; if (!_expandedSources.remove(source)) _expandedSources.add(source); _groupTree=null; widget.custom['expanded']=_expandedSources.toList(); }); unawaited(_saveCustom()); _scrollVerticalGroups(); return; } final previous = _verticalSelected; setState(() { _verticalGroupKey=key; final rows=_verticalRows; if (rows.isNotEmpty) { final next=rows.contains(previous)?previous:rows.first; if (next!=previous) { _verticalChannelIndex=next; _verticalProgrammeStart=null; _syncVerticalProgramme(reset:true); } } if (enterChannels) _verticalColumn=0; }); _scheduleGuidePage(); _scrollVerticalBoth(); }
 
   int _groupIndex = 0, _programmeIndex = -1, _timeShift = 0;
   bool _groupFocus = false;
@@ -1362,7 +1362,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   }
   void _backShort() {
     if (_zooming || _applyingLists) return;
-    if (_verticalGuide) { _closeVerticalGuide(); return; }
+    if (_verticalGuide) { if (_settingsOpen) { _closeSettings(); } else { _closeVerticalGuide(); } return; }
     if (_preparingCatalog && !_preview) { _beginCatalog(); _previewMode(true); return; }
     if (_preparingCatalog && _preview) { _previewMode(false); return; }
     if (!_preview) { if (_showName) { _timer?.cancel(); setState(() { _showName = false; _bannerProgramme = null; }); } else { _previewMode(true); } return; }
@@ -1511,7 +1511,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
 
   Future<void> _openSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    if (!mounted || !_menuOpen || _exiting) return;
+    if (!mounted || (!_menuOpen && !(_verticalGuide && _verticalColumn==-2)) || _exiting) return;
     setState(() {
       _settingsUrl = prefs.getString('vision_iptv_url') ?? '';
       _settingsEpg = prefs.getString('vision_iptv_default_epg') ?? prefs.getString('vision_iptv_epg') ?? '';
@@ -1564,6 +1564,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
         if (_groupIndex < 0) _groupIndex = 0;
         _channelIndex = playingIndex >= 0 ? playingIndex : firstVisible >= 0 ? firstVisible : retainedIndex >= 0 ? retainedIndex : 0;
         _highlightIndex = selectedIndex >= 0 ? selectedIndex : _channelIndex;
+        if (_verticalGuide) { final vr=_verticalRows; _verticalChannelIndex=vr.contains(_channelIndex)?_channelIndex:vr.isNotEmpty?vr.first:_channelIndex; _syncVerticalProgramme(reset:true); }
         final rows = _visibleIndices;
         if (rows.isNotEmpty && !rows.contains(_highlightIndex)) _highlightIndex = rows.first;
         _timeShift = 0; _programmeIndex = -1; _stepProgramme(0);
@@ -1575,7 +1576,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
         _failed = true;
         await _switchChannel(_channelIndex);
       }
-      _scrollPreview(); _scrollGroup(); _scheduleResize();
+      _scrollPreview(); _scrollGroup(); if (_verticalGuide) _scrollVerticalBoth(); _scheduleResize();
     } catch (_) { if (mounted) setState(() => _menuStatus = 'No se pudieron aplicar las listas'); }
     finally { if (mounted) { setState(() => _applyingLists = false); _playerFocus.requestFocus(); } }
   }
@@ -2620,7 +2621,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   }
   List<int> get _verticalRows {
     final key = _verticalGroupKey ?? _groupKey(_channel.source,_channel.group);
-    final rows = key == 'Favoritos' ? [for (final id in widget.favoriteOrder()) if (_channelIndices.containsKey(id)) _channelIndices[id]!] : (_groupRows[key] ?? const <int>[]);
+    final rows = key == 'Favoritos' || key == 'Últimos canales' ? [for (final id in (key=='Favoritos'?widget.favoriteOrder():widget.recent())) if (_channelIndices.containsKey(id) && (key=='Favoritos'||!widget.isHidden(widget.channels[_channelIndices[id]!])||widget.isFavorite(widget.channels[_channelIndices[id]!]))) _channelIndices[id]!] : (_groupRows[key] ?? const <int>[]);
     return rows;
   }
   int get _verticalSelected => (_verticalChannelIndex ?? _channelIndex).clamp(0,widget.channels.length-1).toInt();
@@ -2678,6 +2679,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   }
   void _moveVertical(int delta, {bool wrap = true}) {
     if (_preparingCatalog) return;
+    if (_verticalColumn == -2) { setState(()=>_menuIndex=(_menuIndex+delta).clamp(0,_menuLabels.length-1).toInt()); return; }
     if (_verticalColumn == -1) { _moveVerticalGroup(delta); return; }
     if (_verticalColumn == 2) {
       if (_verticalSynopsisScroll.hasClients) { final p = _verticalSynopsisScroll.position; _verticalSynopsisScroll.jumpTo((p.pixels + delta * 42).clamp(0.0,p.maxScrollExtent).toDouble()); }
@@ -2704,6 +2706,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   }
   Future<void> _confirmVertical() async {
     if (_preparingCatalog || _switching) return;
+    if (_verticalColumn == -2) { await _activateVerticalMenu(); return; }
     if (_verticalColumn == -1) { _chooseVerticalGroup(); return; }
     if (_verticalColumn == 0) {
       if (_verticalRows.isEmpty) return;
@@ -2712,6 +2715,26 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
       if (!mounted || !_verticalGuide) return;
       setState(() { _showName = false; _verticalChannelIndex = _channelIndex; _syncVerticalProgramme(reset:true); });
       _scheduleGuidePage(); _scrollVerticalBoth();
+    }
+  }
+  Future<void> _activateVerticalMenu() async {
+    switch (_menuIndex) {
+      case 0:
+      case 1:
+      case 2:
+        setState(() { _verticalGroupFocus = _menuIndex==0?'Todos':_menuIndex==1?'Favoritos':'Últimos canales'; });
+        _chooseVerticalGroup(enterChannels:true);
+        break;
+      case 3:
+        widget.queueManualGuide();
+        setState(()=>_menuStatus='Actualización EPG en segundo plano solicitada');
+        break;
+      case 4:
+        await _openSettings();
+        break;
+      case 5:
+        await _exitIptv();
+        break;
     }
   }
   Future<void> _previousChannel() async {
@@ -2776,6 +2799,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
         final movableWidth = constraints.maxWidth-rightWidth-12;
         final programmeWidth = (movableWidth-leftWidth-10).clamp(1.0,10000.0).toDouble();
         final groupWidth = programmeWidth;
+        final menuWidth = leftWidth;
         final groupKeys = _verticalGroups;
         _verticalGroupExtent = ((constraints.maxHeight-headerHeight-8)/12).clamp(30.0,55.0).toDouble();
         final groupPanel = SizedBox(width:groupWidth,child:panel(Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
@@ -2788,10 +2812,19 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
             ]));
           })),const SizedBox(height:4),
         ])));
+        final menuPanel = SizedBox(width:menuWidth,child:panel(Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          Container(height:headerHeight,color:header,padding:const EdgeInsets.symmetric(horizontal:10),alignment:Alignment.centerLeft,child:const Text('IPTV',style:TextStyle(color:Colors.white,fontSize:16,fontWeight:FontWeight.bold))),
+          const SizedBox(height:4),
+          Expanded(child:ListView.builder(padding:const EdgeInsets.symmetric(horizontal:5),itemExtent:_verticalGroupExtent,itemCount:_menuLabels.length,itemBuilder:(_,i){
+            final focused=_verticalColumn==-2&&i==_menuIndex,fg=focused?const Color(0xFF10151D):Colors.white;
+            return Container(margin:const EdgeInsets.only(bottom:2),padding:const EdgeInsets.symmetric(horizontal:8),decoration:BoxDecoration(color:focused?const Color(0xFFE3EEFF):Colors.transparent,borderRadius:BorderRadius.circular(6)),child:Row(children:[Icon(_menuIcons[i],color:fg,size:18),const SizedBox(width:8),Expanded(child:Text(_menuLabels[i],maxLines:2,overflow:TextOverflow.ellipsis,style:TextStyle(color:fg,fontSize:14)))]));
+          })),
+          if(_menuStatus.isNotEmpty) Padding(padding:const EdgeInsets.all(8),child:Text(_menuStatus,style:const TextStyle(color:muted,fontSize:11))),
+        ])));
         return Row(crossAxisAlignment:CrossAxisAlignment.start,children:[
           SizedBox(width:movableWidth,height:constraints.maxHeight,child:ClipRect(child:Stack(children:[
-            AnimatedPositioned(duration:const Duration(milliseconds:180),curve:Curves.easeOutCubic,left:_verticalColumn==-1?0:-(groupWidth+10),top:0,bottom:0,width:groupWidth+10+movableWidth,child:Row(children:[
-          groupPanel,const SizedBox(width:10),
+            AnimatedPositioned(duration:const Duration(milliseconds:180),curve:Curves.easeOutCubic,left:_verticalColumn==-2?0:_verticalColumn==-1?-(menuWidth+10):-(menuWidth+10+groupWidth+10),top:0,bottom:0,width:menuWidth+10+groupWidth+10+movableWidth,child:Row(children:[
+          menuPanel,const SizedBox(width:10),groupPanel,const SizedBox(width:10),
           SizedBox(width:leftWidth,child:panel(Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
             Container(height:headerHeight,color:header,padding:const EdgeInsets.symmetric(horizontal:10),alignment:Alignment.centerLeft,child:Text(groupLabel,maxLines:2,overflow:TextOverflow.ellipsis,style:const TextStyle(color:Colors.white,fontSize:15,fontWeight:FontWeight.bold))),
             const SizedBox(height:4),
@@ -2848,6 +2881,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
             const SizedBox(height:4),
           ]))),
           ])),
+          if (_settingsOpen) Positioned.fill(child:_iptvSettingsPanel()),
           ]))),
           const SizedBox(width:12),
           SizedBox(width:rightWidth,child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
@@ -3112,7 +3146,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
           if (event is KeyUpEvent) { _backHold?.cancel(); _backHold = null; if (!_backLong) _backShort(); }
           return KeyEventResult.handled;
         }
-        if (_verticalGuide) {
+        if (_verticalGuide && !_settingsOpen) {
           if (_verticalColumn == 0 && (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown)) { _guideChannelArrow(event,vertical:true); return KeyEventResult.handled; }
           if (event is KeyUpEvent) { if (_fastScroll) setState(() => _fastScroll = false); return KeyEventResult.handled; }
           if (event is KeyDownEvent || event is KeyRepeatEvent) {
@@ -3120,8 +3154,8 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
               if (event is KeyRepeatEvent && !_fastScroll) setState(() => _fastScroll = true);
               _moveVertical(key == LogicalKeyboardKey.arrowDown ? 1 : -1);
             } else if (event is KeyDownEvent) {
-              if (key == LogicalKeyboardKey.arrowRight) { if (_verticalColumn == -1) { _chooseVerticalGroup(enterChannels:true); } else { setState(() => _verticalColumn = (_verticalColumn + 1).clamp(0,2).toInt()); if (_verticalColumn == 1) _scrollVerticalBoth(); } }
-              if (key == LogicalKeyboardKey.arrowLeft) { if (_verticalColumn > 0) { setState(() => _verticalColumn--); _scrollVerticalBoth(); } else if (_verticalColumn == 0) { _openVerticalGroups(); } }
+              if (key == LogicalKeyboardKey.arrowRight) { if (_verticalColumn == -2) { setState(()=>_verticalColumn=-1); _scrollVerticalGroups(); } else if (_verticalColumn == -1) { _chooseVerticalGroup(enterChannels:true); } else { setState(() => _verticalColumn = (_verticalColumn + 1).clamp(0,2).toInt()); if (_verticalColumn == 1) _scrollVerticalBoth(); } }
+              if (key == LogicalKeyboardKey.arrowLeft) { if (_verticalColumn > 0) { setState(() => _verticalColumn--); _scrollVerticalBoth(); } else if (_verticalColumn == 0) { _openVerticalGroups(); } else if (_verticalColumn == -1) { setState(()=>_verticalColumn=-2); } }
               if (key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter) unawaited(_confirmVertical());
             }
           }
@@ -3132,7 +3166,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
           if (event is KeyDownEvent && (key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter) && !_preview) { setState(() => _showName = !_showName); _hideLater(); }
           return KeyEventResult.handled;
         }
-        if (_preview && _settingsOpen) {
+        if ((_preview || _verticalGuide) && _settingsOpen) {
           if (key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter) {
             if (event is KeyDownEvent) _settingsSelectDown = true;
             if (event is KeyUpEvent && _settingsSelectDown) { _settingsSelectDown = false; unawaited(_withDialog(_activateSetting)); }
