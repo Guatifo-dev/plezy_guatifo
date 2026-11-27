@@ -201,8 +201,10 @@ class TvBrowseRailLayout {
       horizontalPadding: railEdgePadding * 2,
       itemGap: itemGap,
     );
-    final cardWidth = baseCardWidth * (useWideLayout ? widePosterScale : tallPosterScale) +
-        (compactDetailRail && useWideLayout ? 8.0 : 0.0);
+    final cardWidth = hub.id == 'discover.iptv'
+        ? ((availableWidth - railEdgePadding * 2 - itemGap * 6) / 6.0).clamp(1.0, double.infinity).toDouble()
+        : baseCardWidth * (useWideLayout ? widePosterScale : tallPosterScale) +
+            (compactDetailRail && useWideLayout ? 8.0 : 0.0);
     final posterWidth = fullCardLayout ? cardWidth : cardWidth - (6 * scale);
     final posterHeight = (isPersonHub || isSquareHub)
         ? posterWidth
