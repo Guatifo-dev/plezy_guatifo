@@ -667,21 +667,13 @@ Future<List<VisionDiscoverChannel>> loadVisionDiscoverChannels() async {
   return result;
 }
 
-Future<void> openVisionDiscoverChannel(BuildContext context, VisionDiscoverChannel channel, {Player? handoff}) async {
+Future<void> openVisionDiscoverChannel(BuildContext context, VisionDiscoverChannel channel) async {
   await PlexTrailerPreview.stop();
-  if (!context.mounted) { await handoff?.dispose(); return; }
-  final transfer = _DiscoverPlayerTransfer(handoff);
-  try { await Navigator.of(context).push(MaterialPageRoute<void>(builder: (routeContext) => VisionIptvScreen(
+  if (!context.mounted) return;
+  await Navigator.of(context).push(MaterialPageRoute<void>(builder: (routeContext) => VisionIptvScreen(
     discoverChannel: channel,
-    discoverTransfer: transfer,
     onExit: () { if (routeContext.mounted) Navigator.of(routeContext).pop(); },
-  ))); } finally { await transfer.take()?.dispose(); }
-}
-
-class _DiscoverPlayerTransfer {
-  _DiscoverPlayerTransfer(this._player);
-  Player? _player;
-  Player? take() { final p = _player; _player = null; return p; }
+  )));
 }
 
 Future<void> _openVisionIptvMedia(Player player, _Channel channel, bool useExo, bool forceHls) async {
@@ -734,9 +726,9 @@ class VisionDiscoverPreview extends StatefulWidget {
   const VisionDiscoverPreview({super.key, required this.channel});
   final VisionDiscoverChannel channel;
   @override
-  State<VisionDiscoverPreview> createState() => VisionDiscoverPreviewState();
+  State<VisionDiscoverPreview> createState() => _VisionDiscoverPreviewState();
 }
-class VisionDiscoverPreviewState extends State<VisionDiscoverPreview> {
+class _VisionDiscoverPreviewState extends State<VisionDiscoverPreview> {
   static Future<void> _queue = Future<void>.value();
   static Future<void> get settled => _queue;
   final _video = GlobalKey();
@@ -744,10 +736,13 @@ class VisionDiscoverPreviewState extends State<VisionDiscoverPreview> {
   StreamSubscription<void>? _frames;
   StreamSubscription<dynamic>? _previewErrors;
   bool _ready = false, _failed = false, _cancelled = false;
+  Timer? _delay;
   @override
   void initState() {
     super.initState();
-    _queue = _queue.then((_) => _start()).catchError((Object _) {});
+    _delay = Timer(const Duration(milliseconds: 200), () {
+      _queue = _queue.then((_) => _start()).catchError((Object _) {});
+    });
   }
   Future<void> _start() async {
     if (_cancelled || !mounted) return;
@@ -776,16 +771,6 @@ class VisionDiscoverPreviewState extends State<VisionDiscoverPreview> {
       if (mounted && !_cancelled) setState(() => _failed = true);
     }
   }
-  Player? takeReadyPlayer() {
-    if (!_ready || _failed || _cancelled) return null;
-    final player = _player;
-    if (player == null) return null;
-    _cancelled = true;
-    _player = null;
-    unawaited(_frames?.cancel());
-    unawaited(_previewErrors?.cancel());
-    return player;
-  }
   void _resize() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _cancelled || _player == null) return;
@@ -799,6 +784,7 @@ class VisionDiscoverPreviewState extends State<VisionDiscoverPreview> {
   @override
   void dispose() {
     _cancelled = true;
+    _delay?.cancel();
     _queue = _queue.then((_) async {
       await _frames?.cancel();
       await _previewErrors?.cancel();
@@ -811,11 +797,10 @@ class VisionDiscoverPreviewState extends State<VisionDiscoverPreview> {
   @override
   Widget build(BuildContext context) {
     _resize();
-    final channel = widget.channel;
     return ClipRRect(borderRadius: BorderRadius.circular(12), child: Stack(fit: StackFit.expand, children: [
-      if (_player != null) SizedBox(key: _video, child: Video(player: _player!, backgroundColor: Colors.transparent)),
-      if (_ready && !_failed) const CustomPaint(painter: _DiscoverVideoHole()),
-      if (!_ready || _failed) VisionDiscoverPoster(channel: channel),
+      if (_ready && !_failed) CustomPaint(painter: _DiscoverVideoHole(Theme.of(context).scaffoldBackgroundColor)),
+      if (_player != null) SizedBox(key: _video, child: Video(player: _player!)),
+      if (!_ready || _failed) VisionDiscoverPoster(channel: widget.channel),
     ]));
   }
 }
@@ -834,22 +819,23 @@ class VisionDiscoverPoster extends StatelessWidget {
   }
 }
 class _DiscoverVideoHole extends CustomPainter {
-  const _DiscoverVideoHole();
+  const _DiscoverVideoHole(this.background);
+  final Color background;
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
     final rounded = RRect.fromRectAndRadius(rect, const Radius.circular(12));
     canvas.drawRRect(rounded, Paint()..blendMode = BlendMode.clear);
-
+    final outside = Path.combine(PathOperation.difference, Path()..addRect(rect), Path()..addRRect(rounded));
+    canvas.drawPath(outside, Paint()..color = background);
   }
   @override
-  bool shouldRepaint(covariant _DiscoverVideoHole oldDelegate) => false;
+  bool shouldRepaint(covariant _DiscoverVideoHole oldDelegate) => oldDelegate.background != background;
 }
-Future<void> waitVisionDiscoverPreviewClosed() => VisionDiscoverPreviewState.settled;
+Future<void> waitVisionDiscoverPreviewClosed() => _VisionDiscoverPreviewState.settled;
 
 class VisionIptvScreen extends StatefulWidget {
-  const VisionIptvScreen({super.key, this.settingsOnly = false, this.onExit, this.discoverChannel, this.discoverTransfer});
-  final _DiscoverPlayerTransfer? discoverTransfer;
+  const VisionIptvScreen({super.key, this.settingsOnly = false, this.onExit, this.discoverChannel});
   final VisionDiscoverChannel? discoverChannel;
   final VoidCallback? onExit;
   final bool settingsOnly;
@@ -1021,7 +1007,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
       final first = ordered.indexWhere((c) => !_hidden(c) || _favorites.contains(c.favoriteId));
       final index = fast ? 0 : ordered.indexWhere((c) => c.favoriteId == _lastChannel && (!_hidden(c) || _favorites.contains(c.favoriteId)));
       await Navigator.of(context).push(MaterialPageRoute<void>(
-        builder: (_) => _IptvPlayer(discoverTransfer: widget.discoverTransfer, startFullscreen: _quickStart && index >= 0, quickStart: _quickStart, showLoadingIndicator: prefs.getBool('vision_iptv_show_loading_indicator') ?? false, onAutomaticRefresh:_automaticRefresh, hasManualRefresh:()=>_hasManualRefresh, queueManualList:_queueManualList, queueManualGuide:_queueManualGuide, epgUpdatedLabel:()=>_epgUpdatedLabel, prepareCatalog: resume != null ? () => _prepareResumeCatalog(resume,custom) : null, channel: index >= 0 ? ordered[index] : ordered[first < 0 ? 0 : first], channels: ordered,
+        builder: (_) => _IptvPlayer(startFullscreen: _quickStart && index >= 0, quickStart: _quickStart, showLoadingIndicator: prefs.getBool('vision_iptv_show_loading_indicator') ?? false, onAutomaticRefresh:_automaticRefresh, hasManualRefresh:()=>_hasManualRefresh, queueManualList:_queueManualList, queueManualGuide:_queueManualGuide, epgUpdatedLabel:()=>_epgUpdatedLabel, prepareCatalog: resume != null ? () => _prepareResumeCatalog(resume,custom) : null, channel: index >= 0 ? ordered[index] : ordered[first < 0 ? 0 : first], channels: ordered,
           guide: _guide, guideSource: _guideNotifier, allChannels: ordered,
           favoriteOrder: () => _favorites.toList(), onFavoriteOrder: _reorderFavorites, onReloadLists: _reloadListsInPlayer,
           listStatuses: _listStatuses, listGroups: _listGroups, isHidden: _hidden, listError: () => _error,
@@ -1531,8 +1517,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
 }
 
 class _IptvPlayer extends StatefulWidget {
-  const _IptvPlayer({this.discoverTransfer, required this.startFullscreen, required this.quickStart, required this.showLoadingIndicator, required this.onAutomaticRefresh, required this.hasManualRefresh, required this.queueManualList, required this.queueManualGuide, required this.epgUpdatedLabel, this.prepareCatalog, required this.favoriteOrder, required this.onFavoriteOrder, required this.onReloadLists, required this.listStatuses, required this.listGroups, required this.isHidden, required this.listError, required this.onFullscreen, required this.bannerSeconds, required this.epgNames, required this.rawEpgId, required this.epgId, required this.onAssignEpg, required this.recent, required this.onTuned, required this.onRefreshGuide, required this.onGuidePage, required this.guideStatus, required this.channel, required this.channels, required this.guide, required this.guideSource, required this.allChannels, required this.onFavorite, required this.isFavorite, required this.useExoPlayer, required this.tunneling, required this.buffer, required this.forceHls, required this.custom, required this.customKey, required this.epgLogos, required this.logoSource, required this.useEpgNames, required this.passthrough, required this.afr});
-  final _DiscoverPlayerTransfer? discoverTransfer;
+  const _IptvPlayer({required this.startFullscreen, required this.quickStart, required this.showLoadingIndicator, required this.onAutomaticRefresh, required this.hasManualRefresh, required this.queueManualList, required this.queueManualGuide, required this.epgUpdatedLabel, this.prepareCatalog, required this.favoriteOrder, required this.onFavoriteOrder, required this.onReloadLists, required this.listStatuses, required this.listGroups, required this.isHidden, required this.listError, required this.onFullscreen, required this.bannerSeconds, required this.epgNames, required this.rawEpgId, required this.epgId, required this.onAssignEpg, required this.recent, required this.onTuned, required this.onRefreshGuide, required this.onGuidePage, required this.guideStatus, required this.channel, required this.channels, required this.guide, required this.guideSource, required this.allChannels, required this.onFavorite, required this.isFavorite, required this.useExoPlayer, required this.tunneling, required this.buffer, required this.forceHls, required this.custom, required this.customKey, required this.epgLogos, required this.logoSource, required this.useEpgNames, required this.passthrough, required this.afr});
   final Map<String, dynamic> custom;
   final String customKey, logoSource;
   final bool useEpgNames;
@@ -2970,8 +2955,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
       await PlaybackCoordinator.instance.claimVideo();
       debugPrint('[VisionIPTV] claim: ${_startup.elapsedMilliseconds} ms');
       if (!mounted || _closing != null) return;
-      final transferred = widget.discoverTransfer?.take();
-      final player = transferred ?? Player(useExoPlayer: widget.useExoPlayer, hardwareDecoding: true);
+      final player = Player(useExoPlayer: widget.useExoPlayer, hardwareDecoding: true);
       _player = player;
       _errors = player.streams.error.listen((_) {
         if (mounted) { setState(() => _failed = true); _beginCatalog(); }
@@ -2988,18 +2972,6 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
           unawaited(_readStats());
         }
       });
-      if (transferred != null) {
-        setState(() { _ready = true; _failed = false; });
-        _autoFirstReady ??= DateTime.now();
-        _lastInteraction = DateTime.now();
-        _beginCatalog();
-        unawaited(widget.onTuned(_channel));
-        _scheduleResize();
-        unawaited(_readStats());
-        if (widget.afr) unawaited(_matchIptvRate(player, _afrGeneration));
-        _hideLater();
-        return;
-      }
       setState(() {});
       try {
         if (widget.useExoPlayer) {
@@ -3889,7 +3861,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
           top: _verticalGuide ? verticalVideo.top : _zoomRect?.top ?? (_preview ? 16 : 0), right: _zoomRect != null || _smallVideo ? null : 0,
           left: _verticalGuide ? verticalVideo.left : _zoomRect?.left ?? (_preview ? 20 : 0), bottom: _zoomRect != null || _smallVideo ? null : 0,
           width: _verticalGuide ? verticalVideo.width : _zoomRect?.width ?? (_preview ? 288 : null), height: _verticalGuide ? verticalVideo.height : _zoomRect?.height ?? (_preview ? 162 : null),
-          child: SizedBox(key: _videoKey, child: Video(player: _player!, backgroundColor: _ready ? Colors.transparent : Colors.black))),
+          child: SizedBox(key: _videoKey, child: Video(player: _player!))),
         if (_preview && !_zooming) const Positioned(left: 20, top: 16, width: 288, height: 162, child: IgnorePointer(child: CustomPaint(painter: _PreviewCornerMask()))),
         if (_verticalGuide) Positioned.fromRect(rect:verticalVideo,child:const IgnorePointer(child:CustomPaint(painter:_PreviewCornerMask()))),
         if (_showLoadingIndicator && _tuned && !_ready && !_failed && (_smallVideo || _autoFirstReady!=null)) Positioned(
