@@ -382,7 +382,6 @@ Color? _epgColor(String raw) {
   return Color(int.parse(hex, radix: 16));
 }
 String epgPlainText(String value) => value.replaceAll(_epgColorTag, '');
-final Set<String> _epgColorRenderSamples = <String>{};
 class EpgColorText extends StatelessWidget {
   const EpgColorText(this.value, {super.key, this.style, this.maxLines, this.overflow, this.textAlign});
   final String value;
@@ -392,12 +391,6 @@ class EpgColorText extends StatelessWidget {
   final TextAlign? textAlign;
   @override
   Widget build(BuildContext context) {
-    final tags = _epgColorTag.allMatches(value).where((m) => m.group(1) != null).toList();
-    final known = tags.where((m) => _epgColor(m.group(1)!) != null).length;
-    final sample = 'tags=${tags.length} recognized=$known';
-    if (value.isNotEmpty && _epgColorRenderSamples.length < 30 && _epgColorRenderSamples.add(sample)) {
-      debugPrint('[VisionEPGColor] render $sample');
-    }
     if (!value.contains('[')) return Text(value, style: style, maxLines: maxLines, overflow: overflow, textAlign: textAlign);
     final spans = <TextSpan>[];
     final colors = <Color?>[];
@@ -423,10 +416,33 @@ class EpgColorText extends StatelessWidget {
   }
 }
 
+// Only split a trailing episode block when the provider explicitly marks it.
+(String, String) _splitEpgTitle(String raw) {
+  final blocks = RegExp(r'\[COLOR\s+(tomato|goldenrod)\]([^\[]*)\[/COLOR\]', caseSensitive: false).allMatches(raw).toList();
+  for (final block in blocks) {
+    final prefix = raw.substring(0, block.start).trimRight();
+    if (prefix.isEmpty) continue;
+    final token = (block.group(2) ?? '').trim();
+    final color = block.group(1)!.toLowerCase();
+    final numbered = RegExp(r'^(?:T\s*\d+|E\s*\d+|S\s*\d+|Temporada\s+\d+|Episodio\s+\d+|Cap[ií]tulo\s+\d+)', caseSensitive: false).hasMatch(token);
+    if (color == 'goldenrod' || numbered) {
+      final suffix = raw.substring(block.start).trim();
+      final remainder = suffix.replaceAll(RegExp(r'\[COLOR\s+[^\]]+\][^\[]*\[/COLOR\]', caseSensitive: false), '').trim();
+      if (remainder.isEmpty) return (prefix, suffix);
+    }
+  }
+  return (raw, '');
+}
+String epgDescriptionWithEpisode(String episode, String description) =>
+    episode.isEmpty ? description : description.isEmpty ? episode : '$episode\n$description';
+
 class _Programme {
-  const _Programme(this.title, this.start, this.stop, this.description, {this.poster = '', this.subtitle = ''});
+  const _Programme(this.rawTitle, this.start, this.stop, this.description, {this.poster = '', this.subtitle = ''});
   final String poster, subtitle;
-  final String title, description;
+  final String rawTitle, description;
+  String get title => _splitEpgTitle(rawTitle).$1;
+  String get episode => _splitEpgTitle(rawTitle).$2;
+  String get displayDescription => epgDescriptionWithEpisode(episode, description);
   final DateTime start, stop;
 }
 
@@ -459,7 +475,7 @@ Future<int> _indexGuide((String, String) input) async {
     final now = DateTime.now();
     final earliest = now.subtract(const Duration(days: 1));
     final latest = now.add(const Duration(days: 3));
-    int count = 0, titleColors = 0, subtitleColors = 0, descColors = 0, subtitles = 0;
+    int count = 0;
     try {
       final signature = await file.openRead(0, 2).expand((x) => x).toList();
       Stream<List<int>> bytes = file.openRead();
@@ -479,10 +495,6 @@ Future<int> _indexGuide((String, String) input) async {
             final title = node.getElement('title')?.innerText ?? '';
             final desc = node.getElement('desc')?.innerText ?? '';
             final subtitle = node.getElement('sub-title')?.innerText ?? '';
-            if (_epgColorTag.hasMatch(title)) titleColors++;
-            if (_epgColorTag.hasMatch(desc)) descColors++;
-            if (_epgColorTag.hasMatch(subtitle)) subtitleColors++;
-            if (subtitle.isNotEmpty) subtitles++;
             programme.execute([id, start.millisecondsSinceEpoch, stop.millisecondsSinceEpoch,
               title, desc, node.getElement('icon')?.getAttribute('src') ?? '', subtitle]);
             count++;
@@ -492,7 +504,6 @@ Future<int> _indexGuide((String, String) input) async {
       db.execute('COMMIT');
       db.execute('CREATE INDEX programme_channel_start ON programmes(channel, start)');
       db.execute("INSERT OR IGNORE INTO channels SELECT DISTINCT channel, channel, '' FROM programmes");
-      debugPrint('[VisionEPGColor] XML indexed total=$count titleColor=$titleColors subtitleColor=$subtitleColors descColor=$descColors subtitles=$subtitles');
       return count;
     } finally {
       channel.dispose(); programme.dispose();
@@ -517,11 +528,6 @@ _GuideData _readIndexedGuide((String, List<String>, bool) input) {
           DateTime.fromMillisecondsSinceEpoch(p['stop'] as int, isUtc: true), p['description'] as String, poster: p['poster'] as String, subtitle: p['subtitle'] as String? ?? '')];
       }
     } finally { query.dispose(); }
-    if (input.$2.isNotEmpty) {
-      int total = 0, titles = 0, subs = 0, descriptions = 0;
-      for (final entries in result.values) { for (final p in entries) { total++; if (_epgColorTag.hasMatch(p.title)) titles++; if (_epgColorTag.hasMatch(p.subtitle)) subs++; if (_epgColorTag.hasMatch(p.description)) descriptions++; } }
-      debugPrint('[VisionEPGColor] SQLite file=${input.$1.split('/').last} subtitleColumn=$hasSubtitle channels=${input.$2.length} total=$total titleColor=$titles subtitleColor=$subs descColor=$descriptions');
-    }
     return _GuideData(result, names, logos);
   } finally { db.dispose(); }
 }
@@ -747,7 +753,7 @@ Future<List<VisionDiscoverChannel>> loadVisionDiscoverChannels() async {
         } catch (_) {}
       }
     }
-    result.add(VisionDiscoverChannel(c, name, logo, programme?.title ?? 'Sin información EPG', programme?.description ?? '', programme == null ? '' : '${clock(programme.start)} – ${clock(programme.stop)} · En emisión', programme?.poster ?? '', programme?.subtitle ?? ''));
+    result.add(VisionDiscoverChannel(c, name, logo, programme?.title ?? 'Sin información EPG', programme?.displayDescription ?? '', programme == null ? '' : '${clock(programme.start)} – ${clock(programme.stop)} · En emisión', programme?.poster ?? '', programme?.subtitle ?? ''));
   }
   return result;
 }
@@ -1017,6 +1023,13 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
       _passthrough = prefs.getBool('vision_iptv_passthrough') ?? false;
       _afr = prefs.getBool('vision_iptv_afr') ?? false;
     });
+    final resume = _resumeChannel;
+    if (resume != null) {
+      final list = _lists.where((l) => l['id'] == resume.source).firstOrNull;
+      final individual = list?['epg'] ?? '';
+      final effective = individual.isNotEmpty ? individual : _epgUrl;
+      if (effective.isNotEmpty && effective != resume.epgSource) _resumeChannel = resume.withSource(resume.source, resume.sourceName, effective);
+    }
     _restoring = false;
     if (!widget.settingsOnly && _openWhenLoaded && !_guideOpen) { _scheduleEntry(); return; }
     if (!widget.settingsOnly) {
@@ -1135,8 +1148,10 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
     final prefs = await SharedPreferences.getInstance();
     _url.text = prefs.getString('vision_iptv_url') ?? '';
     _lists = _iptvLists(prefs);
+    final previousEpg = _epgUrl;
     _epgUrl = prefs.getString('vision_iptv_default_epg') ?? prefs.getString('vision_iptv_epg') ?? '';
     if (_loadedPlaylist != _listSignature || refreshIds.isNotEmpty) await _load(reuse: true, refreshIds: refreshIds);
+    if (previousEpg != _epgUrl) { _manualGuideQueued = true; visionDiscoverIptvChanged.value++; }
     if (!mounted || _loadedPlaylist != _listSignature) return null;
     return _orderedChannels(_readIptvMap(prefs.getString(_customKey)));
   }
@@ -1213,6 +1228,8 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
     if (!mounted) return;
     setState(() => _epgUrl = value.trim());
     await prefs.setString('vision_iptv_default_epg', _epgUrl);
+    if (!widget.settingsOnly && mounted) { await _ensureCatalog(); if (mounted) await _loadGuide(force: true); }
+    visionDiscoverIptvChanged.value++;
   }
 
   List<_Channel> _requestedGuideChannels = [];
@@ -1272,7 +1289,6 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
   Future<void> _loadGuide({bool force = false, bool automatic = false, bool cacheOnly = false}) async {
     if (_guideLoading || !mounted) return;
     final sources = _channels.where((c) => !_hidden(c) || _favorites.contains(c.favoriteId)).map((c) => c.epgSource).where((u) => u.isNotEmpty).toSet();
-    debugPrint('[VisionEPGColor] refresh force=$force automatic=$automatic cacheOnly=$cacheOnly default=${_epgUrl.isEmpty ? "empty" : _sourceId(_epgUrl).substring(0, 12)} sources=${sources.map((u) => _sourceId(u).substring(0, 12)).join(",")}');
     if (sources.isEmpty) return;
     _guideLoading = true;
     final signature = _loadedPlaylist;
@@ -1311,7 +1327,6 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
           final client = http.Client();
           try {
             final response = await client.send(http.Request('GET', uri)).timeout(const Duration(seconds: 45));
-            debugPrint('[VisionEPGColor] download source=${hash.substring(0, 12)} HTTP=${response.statusCode}');
             if (response.statusCode != 200) throw StateError('EPG HTTP');
             await response.stream.timeout(const Duration(seconds: 45)).pipe(xml.openWrite());
           } finally { client.close(); }
@@ -2461,6 +2476,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     if (key == 'banner') { final prefs = await SharedPreferences.getInstance(); if (!mounted) return; setState(() => _bannerSeconds = _bannerChoices[(_bannerChoices.indexOf(_bannerSeconds) + 1) % _bannerChoices.length]); await prefs.setInt('vision_iptv_banner_seconds', _bannerSeconds); return; }
     if (key == 'm3u' || key == 'epg') { await _editSettingsUrl(key == 'epg'); return; }
     if (key == 'refresh') {
+      if (_listsDirty) { await _applyListChanges(keepSettings: true); if (!mounted || _listsDirty) return; }
       widget.queueManualGuide();
       setState(() => _menuStatus = 'Actualización EPG en segundo plano solicitada');
       return;
@@ -3578,7 +3594,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
                   SizedBox(width:(c.maxWidth*.29).clamp(40.0,112.0).toDouble(),height:c.maxHeight,child:ClipRRect(borderRadius:BorderRadius.circular(6),child:Image.network(selected.poster,cacheHeight:256,fit:BoxFit.contain,alignment:Alignment.topCenter,errorBuilder:(_,__,___)=>const SizedBox.shrink()))),
                   const SizedBox(width:9),
                 ],
-                Expanded(child:Scrollbar(controller:_verticalSynopsisScroll,thumbVisibility:_verticalColumn==2,child:SingleChildScrollView(controller:_verticalSynopsisScroll,padding:const EdgeInsets.only(right:8),child:EpgColorText(selected.description,style:const TextStyle(color:Colors.white,fontSize:14,height:1.22))))),
+                Expanded(child:Scrollbar(controller:_verticalSynopsisScroll,thumbVisibility:_verticalColumn==2,child:SingleChildScrollView(controller:_verticalSynopsisScroll,padding:const EdgeInsets.only(right:8),child:EpgColorText(selected.displayDescription,style:const TextStyle(color:Colors.white,fontSize:14,height:1.22))))),
               ]))),
             ])))),
           ])),
@@ -3614,7 +3630,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
       ]),
       if (p != null && p.subtitle.isNotEmpty) EpgColorText(p.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 12)),
       const SizedBox(height: 7),
-      Expanded(child: EpgColorText(p?.description ?? '', maxLines: 6, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 14))),
+      Expanded(child: EpgColorText(p?.displayDescription ?? '', maxLines: 6, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 14))),
     ]);
     if (poster.isEmpty || _fastScroll || !poster.startsWith('http')) return details;
     return Row(children: [Expanded(child: details), const SizedBox(width: 12), SizedBox(width: 108, height: 162, child: ClipRRect(borderRadius: BorderRadius.circular(9), child: Image.network(poster, cacheHeight: 324, fit: BoxFit.contain, errorBuilder: (_, _, _) => const SizedBox.shrink())))]);
@@ -3768,9 +3784,9 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
               const SizedBox(height: 5),
               if (live) Text('En emisión · Quedan $remaining min', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 14)),
               if (current.subtitle.isNotEmpty) EpgColorText(current.subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 13)),
-              if (current.description.isNotEmpty) ...[
+              if (current.displayDescription.isNotEmpty) ...[
                 const SizedBox(height: 8),
-                EpgColorText(current.description, maxLines: 4, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 14)),
+                EpgColorText(current.displayDescription, maxLines: 4, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 14)),
               ],
               if (next != null) Padding(padding: const EdgeInsets.only(top: 8), child: EpgColorText('A continuación · ${_clock(next.start)} · ${next.title}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 13))),
             ])),
@@ -4191,7 +4207,7 @@ class _ProgrammeInfoDialogState extends State<_ProgrammeInfoDialog>{
           if(live)...[const SizedBox(height:6),Row(children:[const Text('En emisión',style:TextStyle(color:blue)),const Spacer(),Text('${p.stop.difference(now).inMinutes} min restantes',style:const TextStyle(color:Colors.white70,fontSize:12))]),const SizedBox(height:4),LinearProgressIndicator(value:(now.difference(p.start).inSeconds/p.stop.difference(p.start).inSeconds.clamp(1,99999999)).clamp(0.0,1.0).toDouble(),color:blue,backgroundColor:Colors.white24,minHeight:3)],
           if (p.subtitle.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 6), child: EpgColorText(p.subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 14))),
           const SizedBox(height:18),
-          Expanded(child:Scrollbar(controller:_scroll,thumbVisibility:true,child:SingleChildScrollView(controller:_scroll,padding:const EdgeInsets.only(right:12),child:EpgColorText(p.description.isEmpty?'Sin información adicional.':p.description,style:const TextStyle(color:Colors.white,fontSize:15,height:1.35))))),
+          Expanded(child:Scrollbar(controller:_scroll,thumbVisibility:true,child:SingleChildScrollView(controller:_scroll,padding:const EdgeInsets.only(right:12),child:EpgColorText(p.displayDescription.isEmpty?'Sin información adicional.':p.displayDescription,style:const TextStyle(color:Colors.white,fontSize:15,height:1.35))))),
         ])),
         SizedBox(width:30,child:Center(child:Icon(Icons.chevron_right,size:30,color:_index<widget.entries.length-1?blue:Colors.white24))),
       ])),
