@@ -19,6 +19,7 @@ import 'connection/connection_bootstrap.dart';
 import 'connection/connection_registry.dart';
 import 'navigation/profile_navigation_scope.dart';
 import 'navigation/profile_session_screen.dart';
+import 'navigation/navigation_tabs.dart';
 import 'profiles/active_profile_binder.dart';
 import 'profiles/active_profile_provider.dart';
 import 'profiles/profile.dart';
@@ -2515,6 +2516,12 @@ class _SetupScreenState extends State<SetupScreen> with MountedSetStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    if (!_enteringOffline && SettingsService.instanceOrNull?.read(SettingsService.startupSection) == NavigationTabId.liveTv) {
+      return const ColoredBox(
+        color: Colors.black,
+        child: Center(child: Text('Cargando TV en vivo…', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600))),
+      );
+    }
     const coralColor = Color(0xFFE5A00D);
     final height = MediaQuery.sizeOf(context).height;
     // The stacked layout below hangs its two rows off fixed ±170/180 offsets from the middle, which
