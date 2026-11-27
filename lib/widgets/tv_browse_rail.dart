@@ -530,6 +530,8 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
     return true;
   }
 
+  bool get hasRailFocus => _focusNode.hasFocus;
+
   void requestFocus() {
     _notifyFocusedItem();
     _focusNode.requestFocus();
