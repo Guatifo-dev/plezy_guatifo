@@ -532,6 +532,10 @@ _GuideData _readIndexedGuide((String, List<String>, bool) input) {
   } finally { db.dispose(); }
 }
 
+const _visionDefaultEpg = 'https://raw.githubusercontent.com/davidmuma/EPG_dobleM/master/guiatv_color.xml.gz';
+String _defaultEpgUrl(SharedPreferences prefs) =>
+    prefs.getString('vision_iptv_default_epg') ?? prefs.getString('vision_iptv_epg') ?? _visionDefaultEpg;
+
 String _epgKey(String source, String id) => jsonEncode([source, id]);
 String _sourceId(String url) => sha256.convert(utf8.encode(url)).toString();
 Set<String> _hiddenGroups(Map<String,String> list) {
@@ -719,7 +723,7 @@ Future<List<VisionDiscoverChannel>> loadVisionDiscoverChannels() async {
     if (!await disk.exists()) continue;
     try {
       var epg = list['epg'] ?? '';
-      if (epg.isEmpty) epg = prefs.getString('vision_iptv_default_epg') ?? prefs.getString('vision_iptv_epg') ?? '';
+      if (epg.isEmpty) epg = _defaultEpgUrl(prefs);
       if (epg.isEmpty && resume?.source == id) epg = resume!.epgSource;
       final channels = await compute(_readDiscoverRecent, (disk.path, id, list['name'] ?? 'Lista IPTV', epg, ids));
       for (final c in channels) {
@@ -1015,7 +1019,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
       _bannerSeconds = prefs.getInt('vision_iptv_banner_seconds') ?? 4;
       try { _epgOverrides = Map<String, String>.from(jsonDecode(prefs.getString('vision_iptv_epg_overrides') ?? '{}') as Map); } catch (_) { _epgOverrides = {}; }
       _favorites = (prefs.getStringList('vision_iptv_favorites') ?? []).toSet();
-      _epgUrl = prefs.getString('vision_iptv_default_epg') ?? prefs.getString('vision_iptv_epg') ?? '';
+      _epgUrl = _defaultEpgUrl(prefs);
       _useExoPlayer = prefs.getBool('vision_iptv_exo') ?? true;
       _tunneling = prefs.getBool('vision_iptv_tunneling') ?? false;
       _buffer = prefs.getString('vision_iptv_buffer') ?? 'minimum';
@@ -1149,7 +1153,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
     _url.text = prefs.getString('vision_iptv_url') ?? '';
     _lists = _iptvLists(prefs);
     final previousEpg = _epgUrl;
-    _epgUrl = prefs.getString('vision_iptv_default_epg') ?? prefs.getString('vision_iptv_epg') ?? '';
+    _epgUrl = _defaultEpgUrl(prefs);
     if (_loadedPlaylist != _listSignature || refreshIds.isNotEmpty) await _load(reuse: true, refreshIds: refreshIds);
     if (previousEpg != _epgUrl) { _manualGuideQueued = true; visionDiscoverIptvChanged.value++; }
     if (!mounted || _loadedPlaylist != _listSignature) return null;
@@ -2149,7 +2153,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     if (!mounted || (!_menuOpen && !(_verticalGuide && _verticalColumn==-2)) || _exiting) return;
     setState(() {
       _settingsUrl = prefs.getString('vision_iptv_url') ?? '';
-      _settingsEpg = prefs.getString('vision_iptv_default_epg') ?? prefs.getString('vision_iptv_epg') ?? '';
+      _settingsEpg = _defaultEpgUrl(prefs);
       _settingsExo = prefs.getBool('vision_iptv_exo') ?? true;
       _useEpgNames = prefs.getBool('vision_iptv_use_epg_names') ?? false;
       _quickStartSetting = prefs.getBool('vision_iptv_quick_start') ?? true;
