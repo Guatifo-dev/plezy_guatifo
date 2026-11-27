@@ -382,6 +382,7 @@ Color? _epgColor(String raw) {
   return Color(int.parse(hex, radix: 16));
 }
 String epgPlainText(String value) => value.replaceAll(_epgColorTag, '');
+final Set<String> _epgColorRenderSamples = <String>{};
 class EpgColorText extends StatelessWidget {
   const EpgColorText(this.value, {super.key, this.style, this.maxLines, this.overflow, this.textAlign});
   final String value;
@@ -391,6 +392,12 @@ class EpgColorText extends StatelessWidget {
   final TextAlign? textAlign;
   @override
   Widget build(BuildContext context) {
+    final tags = _epgColorTag.allMatches(value).where((m) => m.group(1) != null).toList();
+    final known = tags.where((m) => _epgColor(m.group(1)!) != null).length;
+    final sample = 'tags=${tags.length} recognized=$known';
+    if (value.isNotEmpty && _epgColorRenderSamples.length < 30 && _epgColorRenderSamples.add(sample)) {
+      debugPrint('[VisionEPGColor] render $sample');
+    }
     if (!value.contains('[')) return Text(value, style: style, maxLines: maxLines, overflow: overflow, textAlign: textAlign);
     final spans = <TextSpan>[];
     final colors = <Color?>[];
@@ -452,7 +459,7 @@ Future<int> _indexGuide((String, String) input) async {
     final now = DateTime.now();
     final earliest = now.subtract(const Duration(days: 1));
     final latest = now.add(const Duration(days: 3));
-    int count = 0;
+    int count = 0, titleColors = 0, subtitleColors = 0, descColors = 0, subtitles = 0;
     try {
       final signature = await file.openRead(0, 2).expand((x) => x).toList();
       Stream<List<int>> bytes = file.openRead();
@@ -469,9 +476,15 @@ Future<int> _indexGuide((String, String) input) async {
             final id = node.getAttribute('channel');
             final start = _xmltvDate(node.getAttribute('start')), stop = _xmltvDate(node.getAttribute('stop'));
             if (id == null || start == null || stop == null || stop.isBefore(earliest) || start.isAfter(latest)) continue;
+            final title = node.getElement('title')?.innerText ?? '';
+            final desc = node.getElement('desc')?.innerText ?? '';
+            final subtitle = node.getElement('sub-title')?.innerText ?? '';
+            if (_epgColorTag.hasMatch(title)) titleColors++;
+            if (_epgColorTag.hasMatch(desc)) descColors++;
+            if (_epgColorTag.hasMatch(subtitle)) subtitleColors++;
+            if (subtitle.isNotEmpty) subtitles++;
             programme.execute([id, start.millisecondsSinceEpoch, stop.millisecondsSinceEpoch,
-              node.getElement('title')?.innerText ?? '', node.getElement('desc')?.innerText ?? '',
-              node.getElement('icon')?.getAttribute('src') ?? '', node.getElement('sub-title')?.innerText ?? '']);
+              title, desc, node.getElement('icon')?.getAttribute('src') ?? '', subtitle]);
             count++;
           }
         }
@@ -479,6 +492,7 @@ Future<int> _indexGuide((String, String) input) async {
       db.execute('COMMIT');
       db.execute('CREATE INDEX programme_channel_start ON programmes(channel, start)');
       db.execute("INSERT OR IGNORE INTO channels SELECT DISTINCT channel, channel, '' FROM programmes");
+      debugPrint('[VisionEPGColor] XML indexed total=$count titleColor=$titleColors subtitleColor=$subtitleColors descColor=$descColors subtitles=$subtitles');
       return count;
     } finally {
       channel.dispose(); programme.dispose();
@@ -503,6 +517,11 @@ _GuideData _readIndexedGuide((String, List<String>, bool) input) {
           DateTime.fromMillisecondsSinceEpoch(p['stop'] as int, isUtc: true), p['description'] as String, poster: p['poster'] as String, subtitle: p['subtitle'] as String? ?? '')];
       }
     } finally { query.dispose(); }
+    if (input.$2.isNotEmpty) {
+      int total = 0, titles = 0, subs = 0, descriptions = 0;
+      for (final entries in result.values) { for (final p in entries) { total++; if (_epgColorTag.hasMatch(p.title)) titles++; if (_epgColorTag.hasMatch(p.subtitle)) subs++; if (_epgColorTag.hasMatch(p.description)) descriptions++; } }
+      debugPrint('[VisionEPGColor] SQLite file=${input.$1.split('/').last} subtitleColumn=$hasSubtitle channels=${input.$2.length} total=$total titleColor=$titles subtitleColor=$subs descColor=$descriptions');
+    }
     return _GuideData(result, names, logos);
   } finally { db.dispose(); }
 }
@@ -1253,6 +1272,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
   Future<void> _loadGuide({bool force = false, bool automatic = false, bool cacheOnly = false}) async {
     if (_guideLoading || !mounted) return;
     final sources = _channels.where((c) => !_hidden(c) || _favorites.contains(c.favoriteId)).map((c) => c.epgSource).where((u) => u.isNotEmpty).toSet();
+    debugPrint('[VisionEPGColor] refresh force=$force automatic=$automatic cacheOnly=$cacheOnly default=${_epgUrl.isEmpty ? "empty" : _sourceId(_epgUrl).substring(0, 12)} sources=${sources.map((u) => _sourceId(u).substring(0, 12)).join(",")}');
     if (sources.isEmpty) return;
     _guideLoading = true;
     final signature = _loadedPlaylist;
@@ -1291,6 +1311,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
           final client = http.Client();
           try {
             final response = await client.send(http.Request('GET', uri)).timeout(const Duration(seconds: 45));
+            debugPrint('[VisionEPGColor] download source=${hash.substring(0, 12)} HTTP=${response.statusCode}');
             if (response.statusCode != 200) throw StateError('EPG HTTP');
             await response.stream.timeout(const Duration(seconds: 45)).pipe(xml.openWrite());
           } finally { client.close(); }
