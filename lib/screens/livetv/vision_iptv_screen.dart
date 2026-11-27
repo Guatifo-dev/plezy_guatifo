@@ -3354,7 +3354,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     _pendingChannelWrap = null; _fastScroll = false;
     setState(() {
       _verticalGuide = true; _showName = false; _showChannels = false;
-      _verticalColumn = 1; _verticalChannelIndex = _channelIndex;
+      _verticalColumn = 0; _verticalChannelIndex = _channelIndex;
       _verticalGroupKey = _selectedGroup == 'Favoritos' && widget.isFavorite(_channel) ? 'Favoritos' : _groupKey(_channel.source,_channel.group);
       _verticalProgrammeStart = null; _syncVerticalProgramme(reset:true);
     });
