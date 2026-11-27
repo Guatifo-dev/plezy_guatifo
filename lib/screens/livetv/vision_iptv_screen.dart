@@ -799,7 +799,10 @@ class _VisionDiscoverPreviewState extends State<VisionDiscoverPreview> {
     _resize();
     return ClipRRect(borderRadius: BorderRadius.circular(12), child: Stack(fit: StackFit.expand, children: [
       if (_ready && !_failed) CustomPaint(painter: _DiscoverVideoHole(Theme.of(context).scaffoldBackgroundColor)),
-      if (_player != null) SizedBox(key: _video, child: Video(player: _player!)),
+      if (_player != null) SizedBox(key: _video, child: Opacity(
+        opacity: _ready && !_failed ? 1.0 : 0.0,
+        child: Video(player: _player!),
+      )),
       if (!_ready || _failed) VisionDiscoverPoster(channel: widget.channel),
     ]));
   }
