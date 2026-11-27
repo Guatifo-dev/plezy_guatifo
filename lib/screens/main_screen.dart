@@ -654,11 +654,7 @@ class _MainScreenState extends State<MainScreen>
       // A cold start directly on IPTV never passes through _selectTab.
       // Use the same entry hook once the profile and first route are ready.
       if (_currentTab == NavigationTabId.liveTv && !_isShowingProfileSelection) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted || _currentTab != NavigationTabId.liveTv || _isShowingProfileSelection) return;
-          _onScreen<FocusableTab>(NavigationTabId.liveTv, (screen) => screen.focusActiveTabIfReady());
-        });
-        WidgetsBinding.instance.ensureVisualUpdate();
+        _onScreen<FocusableTab>(NavigationTabId.liveTv, (screen) => screen.focusActiveTabIfReady());
       }
       _updateTvosMenuPassthrough();
 
