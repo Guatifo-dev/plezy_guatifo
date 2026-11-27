@@ -1,42 +1,17 @@
-name: Build Plezy Guatifo APK
+name: Build Plezy Vision Tablet ARM64
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - main
-      - build/plezyvision-*
-      - feature/plex-trailer-preview
-      - feature/plezy-vision-icon-183
-      - test-firetv-home-banner
-      - test-firetv-explicit-launcher-icon
-      - test-plezyvision-centered-logo-banner
-      - plezyvision-hide-original-updates
-      - fix/discover-catalog-live-refresh
-      - fix/trailer-audio-on-navigation
-      - feature/dynamic-ambient-background
-      - stable/ambient-8aad4a8
-      - fix/movie-details-four-improvements-2fa806d
-      - feature/movie-detail-slide-return-focus-7f59d4c
-      - feature/movie-navigation-all-rails-3161dd1
-      - feature/detail-navigation-polish-464b398
-      - fix/vision-series-full-fanart-trailer-insets-24d6fc9
-      - feature/series-discover-identical-backdrop-138c490
-      - feature/movie-discover-shared-spotlight-ffa4d8f
-      - feature/series-last-episode-added-56fcdf0
-      - feature/reduce-trailer-rebuilds-ede1a01
-      - feature/optimize-movie-fanart-masks-ede1a01
-      - feature/optimize-discover-catalog-ede1a01
-      - feature/movie-buttons-spacing-synopsis-10-lines-24a00db
-      - feature/movie-detail-layout-and-opaque-backdrop-5c94dfa
-      - feature/movie-sheet-match-series-9904f71
+      - experimental/tablet-android
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-android:
-    name: Build Android ARM32 APK
+    name: Build Tablet ARM64 APK
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -156,65 +131,24 @@ jobs:
           print("Generated 5 transparent launcher icons and 3 centered 16:9 banners")
           PY
 
-      - name: Build release APK (persistent signing)
+      - name: Build Tablet APK (persistent signing)
         env:
-          GUA_ARM32: "1"
-        run: flutter build apk --release --target-platform android-arm --build-number="$((160 + GITHUB_RUN_NUMBER))" --build-name=2.0.0 --dart-define=GIT_COMMIT=${{ github.sha }}
+          GUA_ARM64: "1"
+        run: flutter build apk --release --target-platform android-arm64 --build-number="$((160 + GITHUB_RUN_NUMBER))" --build-name=0.1.0 --dart-define=GIT_COMMIT=${{ github.sha }}
 
-      - name: Publish APK artifact
+      - name: Verify and name tablet APK
+        run: |
+          set -euo pipefail
+          apk=build/app/outputs/flutter-apk/app-release.apk
+          "$ANDROID_HOME/build-tools/36.1.0/aapt" dump badging "$apk" | tee /tmp/tablet-badging.txt
+          grep -F "package: name='com.guatifo.plezy.tablet'" /tmp/tablet-badging.txt
+          grep -F "native-code: 'arm64-v8a'" /tmp/tablet-badging.txt
+          cp "$apk" build/app/outputs/flutter-apk/PlezyVision-Tablet.apk
+
+      - name: Upload Tablet APK
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: plezy-guatifo-android-arm32
-          path: build/app/outputs/flutter-apk/app-release.apk
+          name: PlezyVision-Tablet-arm64-test
+          path: build/app/outputs/flutter-apk/PlezyVision-Tablet.apk
           if-no-files-found: error
           retention-days: 14
-
-      - name: Publish PlezyVision v1.0.1 release
-        if: ${{ github.ref == 'refs/heads/fix/discover-catalog-live-refresh' && contains(github.event.head_commit.message, '[publish-v1.0.1]') }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          gh release create v1.0.1 build/app/outputs/flutter-apk/app-release.apk#PlezyVision.apk \
-            --target "$GITHUB_SHA" \
-            --title "PlezyVision 1.0.1" \
-            --notes "### Mejoras
-          - **Todas mis Películas** y **Todas mis Series** actualizan su contenido cuando se producen cambios en las bibliotecas del servidor Plex.
-          - Las películas y series eliminadas dejan de aparecer en esos apartados y se incorporan las nuevas sin tener que reiniciar la aplicación.
-          - Actualización al regresar a la aplicación y al refrescar manualmente.
-
-          Actualización instalable sobre PlezyVision 1.0 sin perder los ajustes. APK para Fire TV ARM32."
-
-      - name: Publish PlezyVision v1.0.2 release
-        if: ${{ github.ref == 'refs/heads/fix/trailer-audio-on-navigation' && contains(github.event.head_commit.message, '[publish-v1.0.2]') }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          gh release create v1.0.2 build/app/outputs/flutter-apk/app-release.apk#PlezyVision.apk \
-            --target "$GITHUB_SHA" \
-            --title "PlezyVision 1.0.2" \
-            --notes-file docs/PLEZYVISION-1.0.2.md
-
-      - name: Publish PlezyVision v2.0.0 release
-        if: ${{ github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[publish-v2.0.0]') }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          gh release create v2.0.0 build/app/outputs/flutter-apk/app-release.apk#PlezyVision.apk \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --title "Plezy Vision 2.0.0" \
-            --notes "## TV en vivo e IPTV
-          - Listas IPTV M3U y Xtream Codes, grupos y favoritos.
-          - Dos guías EPG con vista previa, información ampliada y etiquetas de colores.
-          - EPG dobleM predeterminada y modificable.
-          - Actualización de listas y EPG en segundo plano.
-          - ExoPlayer y MPV, con compatibilidad DASH y DRM según dispositivo, motor y contenido.
-          - Nueva fila opcional de canales favoritos en Discover, con fondo ambiental y reproducción automática o manual.
-          - Tutorial integrado y navegación adaptada al mando de Fire TV.
-
-          Gracias a David dobleM (https://github.com/davidmuma) por su trabajo en el desarrollo y mantenimiento de su EPG.
-
-          APK ARM32 (armeabi-v7a) con la firma habitual de Plezy Vision. La aplicación no incluye listas IPTV ni suscripciones."

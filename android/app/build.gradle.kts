@@ -304,7 +304,7 @@ android {
 
   defaultConfig {
     // Keep the customized build alongside the official Plezy installation.
-    applicationId = "com.guatifo.plezy"
+    applicationId = "com.guatifo.plezy.tablet"
     minSdk = 25 // Fire OS 6.x (API 25); the mpv-android AAR shares the same floor
     targetSdk = flutter.targetSdkVersion
     versionCode = flutter.versionCode
@@ -326,6 +326,12 @@ android {
     if (System.getenv("GUA_ARM32") != null) {
       ndk {
         abiFilters += listOf("armeabi-v7a")
+      }
+    }
+
+    if (System.getenv("GUA_ARM64") != null) {
+      ndk {
+        abiFilters += listOf("arm64-v8a")
       }
     }
 
@@ -418,6 +424,10 @@ android {
       // (the one libmpv was linked against) win for std::from_chars<float>,
       // while older native consumers remain ABI-compatible.
       pickFirsts.add("lib/*/libc++_shared.so")
+
+      if (System.getenv("GUA_ARM64") != null) {
+        excludes.addAll(listOf("**/armeabi-v7a/**", "**/x86/**", "**/x86_64/**"))
+      }
 
       // The Guatifo CI APK is built for 32-bit ARM only. Some native
       // dependencies ship extra ABIs through custom JNI source directories,
