@@ -636,9 +636,6 @@ Future<List<VisionDiscoverChannel>> loadVisionDiscoverChannels() async {
       }
     } catch (_) {}
   }
-  if (resume != null && active.any((l) => l['id'] == resume.source)) {
-    found.putIfAbsent(resume.favoriteId, () => resume);
-  }
   final custom = _readIptvMap(prefs.getString('vision_iptv_custom_multi_v1'));
   final overrides = _readIptvMap(prefs.getString('vision_iptv_epg_overrides'));
   final result = <VisionDiscoverChannel>[];
@@ -816,8 +813,8 @@ class VisionDiscoverPreviewState extends State<VisionDiscoverPreview> {
     _resize();
     final channel = widget.channel;
     return ClipRRect(borderRadius: BorderRadius.circular(12), child: Stack(fit: StackFit.expand, children: [
-      if (_ready && !_failed) const CustomPaint(painter: _DiscoverVideoHole()),
       if (_player != null) SizedBox(key: _video, child: Video(player: _player!, backgroundColor: Colors.transparent)),
+      if (_ready && !_failed) const CustomPaint(painter: _DiscoverVideoHole()),
       if (!_ready || _failed) VisionDiscoverPoster(channel: channel),
     ]));
   }
@@ -843,8 +840,7 @@ class _DiscoverVideoHole extends CustomPainter {
     final rect = Offset.zero & size;
     final rounded = RRect.fromRectAndRadius(rect, const Radius.circular(12));
     canvas.drawRRect(rounded, Paint()..blendMode = BlendMode.clear);
-    final outside = Path.combine(PathOperation.difference, Path()..addRect(rect), Path()..addRRect(rounded));
-    canvas.drawPath(outside, Paint()..color = const Color(0xFF10151D));
+
   }
   @override
   bool shouldRepaint(covariant _DiscoverVideoHole oldDelegate) => false;
@@ -3893,7 +3889,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
           top: _verticalGuide ? verticalVideo.top : _zoomRect?.top ?? (_preview ? 16 : 0), right: _zoomRect != null || _smallVideo ? null : 0,
           left: _verticalGuide ? verticalVideo.left : _zoomRect?.left ?? (_preview ? 20 : 0), bottom: _zoomRect != null || _smallVideo ? null : 0,
           width: _verticalGuide ? verticalVideo.width : _zoomRect?.width ?? (_preview ? 288 : null), height: _verticalGuide ? verticalVideo.height : _zoomRect?.height ?? (_preview ? 162 : null),
-          child: SizedBox(key: _videoKey, child: Video(player: _player!))),
+          child: SizedBox(key: _videoKey, child: Video(player: _player!, backgroundColor: _ready ? Colors.transparent : Colors.black))),
         if (_preview && !_zooming) const Positioned(left: 20, top: 16, width: 288, height: 162, child: IgnorePointer(child: CustomPaint(painter: _PreviewCornerMask()))),
         if (_verticalGuide) Positioned.fromRect(rect:verticalVideo,child:const IgnorePointer(child:CustomPaint(painter:_PreviewCornerMask()))),
         if (_showLoadingIndicator && _tuned && !_ready && !_failed && (_smallVideo || _autoFirstReady!=null)) Positioned(
