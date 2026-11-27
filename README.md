@@ -14,6 +14,30 @@ Cliente de Plex basado en [Plezy](https://github.com/edde746/plezy), adaptado y 
 
 ---
 
+## Nueva versión 2.0.0 — TV en vivo e IPTV
+
+Se ha ampliado el módulo de TV en vivo de Plezy, originalmente destinado a los canales de Plex, para permitir la reproducción y gestión de nuestras propias listas IPTV, con una interfaz adaptada a Fire TV y a su mando a distancia.
+
+### TV en vivo
+
+- Compatibilidad con listas M3U y Xtream Codes, múltiples listas, grupos y favoritos.
+- Dos diseños de guía electrónica de programación (EPG): cuadrícula horizontal y columnas, con vista previa de televisión en directo.
+- Información de programas con carátulas, sinopsis, horarios, temporadas, episodios, género y clasificación por edades cuando la EPG los proporciona.
+- Compatibilidad con etiquetas de colores de XMLTV y EPG dobleM configurada de forma predeterminada, modificable por el usuario.
+- Actualización de listas y EPG en segundo plano.
+- Reproducción mediante ExoPlayer o MPV; compatibilidad con DASH y DRM según el motor, dispositivo y contenido.
+- Arranque rápido en el último canal reproducido y tutorial de uso del mando integrado.
+
+### IPTV en Discover
+
+Nueva fila opcional **TV en vivo (Favoritos)** en la pantalla de inicio, con acceso directo a los canales favoritos, información del programa en emisión, fondo ambiental dinámico y vista previa en directo automática o manual.
+
+### Agradecimientos
+
+Especial agradecimiento a [**David dobleM**](https://github.com/davidmuma) por su trabajo en el desarrollo y mantenimiento de su EPG, incorporada de forma predeterminada en Plezy Vision.
+
+La aplicación no incluye listas IPTV ni suscripciones: cada usuario debe configurar sus propias fuentes autorizadas.
+
 ## Qué es Plezy Vision
 
 Plezy Vision es una personalización de Plezy enfocada en **Plex y la experiencia de televisión**. Incorpora una interfaz adaptada al uso con mando, un diseño renovado de las fichas y opciones adicionales de presentación y reproducción.
