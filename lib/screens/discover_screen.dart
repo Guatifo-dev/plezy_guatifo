@@ -59,6 +59,7 @@ import '../widgets/fitting_title_text.dart';
 import '../widgets/tv_browse_rail.dart';
 import '../widgets/tv_spotlight_scaffold.dart';
 import '../widgets/plex_trailer_preview.dart';
+import 'livetv/vision_iptv_screen.dart';
 import '../mixins/refreshable.dart';
 import '../mixins/tab_visibility_aware.dart';
 import '../i18n/strings.g.dart';
@@ -442,6 +443,89 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   // _hubs with fresh instances on change, never mutates in place) so unrelated
   // rebuilds hand TvBrowseRail the same hubs list and its didUpdateWidget
   // fast path — and the cached rail widget below — kick in.
+  List<VisionDiscoverChannel> _liveChannels = [];
+  List<MediaItem> _liveItems = [];
+  VisionDiscoverChannel? _liveSelected;
+  bool _liveTransition = false;
+  bool _openingLive = false;
+  int _liveLoadGeneration = 0;
+  int _liveFocusGeneration = 0;
+  Timer? _liveRefreshTimer;
+  bool _liveDisposed = false;
+
+  Future<void> _loadLiveRow() async {
+    final generation = ++_liveLoadGeneration;
+    try {
+      final channels = await loadVisionDiscoverChannels();
+      if (!mounted || _liveDisposed || generation != _liveLoadGeneration) return;
+      final old = _liveChannels;
+      if (old.length == channels.length && List.generate(old.length, (i) => old[i].id == channels[i].id && old[i].name == channels[i].name && old[i].logo == channels[i].logo && old[i].programme == channels[i].programme && old[i].description == channels[i].description && old[i].schedule == channels[i].schedule).every((v) => v)) return;
+      if (_liveSelected != null && !channels.any((c) => c.id == _liveSelected!.id)) _leaveLiveRow();
+      setState(() {
+        _liveChannels = channels;
+        _liveItems = [for (final c in channels) MediaItem.plex(id: 'iptv:${c.id}', kind: MediaKind.episode, title: c.name, thumbPath: c.logo, summary: c.description)];
+        _tvBrowseHubsCache = null;
+      });
+    } catch (_) {}
+  }
+  void _liveRowChanged() { if (PlatformDetector.isTV()) unawaited(_loadLiveRow()); }
+  void _leaveLiveRow() {
+    if (_liveDisposed || !mounted || (_liveSelected == null && !_liveTransition)) return;
+    final generation = ++_liveFocusGeneration;
+    setState(() { _liveSelected = null; _liveTransition = true; });
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await waitVisionDiscoverPreviewClosed();
+      if (mounted && !_liveDisposed && generation == _liveFocusGeneration) setState(() => _liveTransition = false);
+    });
+  }
+  void _focusLiveOrMedia(MediaItem item) {
+    final index = _liveItems.indexWhere((i) => i.id == item.id);
+    if (index < 0) { _leaveLiveRow(); _setSpotlightItem(item); return; }
+    if (_openingLive || !_isTabVisible || _liveDisposed) return;
+    final channel = _liveChannels[index];
+    if (_liveSelected?.id == channel.id) return;
+    ++_liveFocusGeneration;
+    setState(() { _liveSelected = channel; _liveTransition = false; });
+    unawaited(PlexTrailerPreview.stop());
+  }
+  Future<bool> _activateLiveItem(MediaItem item) async {
+    final index = _liveItems.indexWhere((i) => i.id == item.id);
+    if (index < 0) return false;
+    if (_openingLive) return true;
+    final channel = _liveChannels[index];
+    _openingLive = true;
+    _leaveLiveRow();
+    await WidgetsBinding.instance.endOfFrame;
+    await waitVisionDiscoverPreviewClosed();
+    if (mounted) await openVisionDiscoverChannel(context, channel);
+    _openingLive = false;
+    if (mounted && !_liveDisposed) { await _loadLiveRow(); if (mounted) _tvBrowseRailKey.currentState?.requestFocus(); }
+    return true;
+  }
+  Widget _liveSpotlight(VisionDiscoverChannel channel) {
+    return LayoutBuilder(builder: (context, constraints) {
+      final width = constraints.maxWidth, height = constraints.maxHeight;
+      final videoWidth = math.min(width * .49, height * .43 * 16 / 9);
+      final videoHeight = videoWidth * 9 / 16;
+      final top = height * .10;
+      return Stack(children: [
+        Positioned(top: top, left: width * .045, width: width * .43, height: height * .43,
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            SizedBox(height: math.min(65.0, height * .12), child: channel.logo.startsWith('http')
+              ? Image.network(channel.logo, fit: BoxFit.contain, errorBuilder: (_, __, ___) => Text(channel.name, style: const TextStyle(color: Colors.white, fontSize: 24)))
+              : Text(channel.name, style: const TextStyle(color: Colors.white, fontSize: 24))),
+            const SizedBox(height: 8),
+            Text(channel.programme, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+            if (channel.schedule.isNotEmpty) Text(channel.schedule, style: const TextStyle(color: Color(0xFF90CAF9), fontSize: 13)),
+            const SizedBox(height: 8),
+            Expanded(child: Text(channel.description, maxLines: 5, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 14))),
+          ])),
+        Positioned(top: top, right: width * .025, width: videoWidth, height: videoHeight,
+          child: VisionDiscoverPreview(key: ValueKey(channel.id), channel: channel)),
+      ]);
+    });
+  }
+
   List<MediaHub>? _tvBrowseHubsCache;
   (List<MediaItem>, List<MediaHub>, bool, String)? _tvBrowseHubsCacheKey;
 
@@ -452,6 +536,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     if (_onDeck.isNotEmpty) {
       hubs.add(_continueWatchingHub);
     }
+    if (_liveItems.isNotEmpty) hubs.add(MediaHub(id: 'discover.iptv', title: 'TV en vivo', type: 'episode', size: _liveItems.length, more: false, items: _liveItems));
     hubs.addAll(_hubs.where((hub) => hub.items.isNotEmpty));
     _tvBrowseHubsCache = hubs;
     _tvBrowseHubsCacheKey = key;
@@ -1046,6 +1131,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     // Leaving Discover's posters for the sidebar is not a route handoff.
     // Stop immediately; keep the shared session's three-second grace period
     // intact for Discover <-> movie detail navigation.
+    _leaveLiveRow();
     if (PlatformDetector.isTV()) unawaited(PlexTrailerPreview.stop());
     MainScreenFocusScope.focusSidebarOf(context);
   }
@@ -1054,6 +1140,11 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    if (PlatformDetector.isTV()) {
+      visionDiscoverIptvChanged.addListener(_liveRowChanged);
+      unawaited(_loadLiveRow());
+      _liveRefreshTimer = Timer.periodic(const Duration(minutes: 1), (_) { if (_isTabVisible) unawaited(_loadLiveRow()); });
+    }
     _heroFocusNode = FocusNode(debugLabel: 'hero_section');
     _heroFocusNode.addListener(_onHeroFocusChanged);
     _discover = context.read<DiscoverProvider>();
@@ -1183,6 +1274,9 @@ class _DiscoverScreenState extends State<DiscoverScreen>
 
   @override
   void dispose() {
+    _liveDisposed = true;
+    visionDiscoverIptvChanged.removeListener(_liveRowChanged);
+    _liveRefreshTimer?.cancel();
     HardwareKeyboard.instance.removeHandler(_onContinueCycleRemoteKey);
     _continueCycleTimer?.cancel();
     _discover.removeListener(_onDiscoverChanged);
@@ -1220,7 +1314,8 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       if (!startedFullPass && (Platform.isIOS || Platform.isAndroid)) {
         unawaited(_discover.refreshContinueWatching());
       }
-    } else if (state == AppLifecycleState.inactive || state == AppLifecycleState.hidden) {
+    } else if (state == AppLifecycleState.inactive || state == AppLifecycleState.hidden || state == AppLifecycleState.paused) {
+      _leaveLiveRow();
       _stopContinueCycle();
       // Stop animations to prevent scroll state corruption while backgrounded
       _autoScrollTimer?.cancel();
@@ -1298,6 +1393,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
 
   @override
   void onTabHidden() {
+    _leaveLiveRow();
     _stopContinueCycle();
     _isTabVisible = false;
     _pendingTvBrowseRailFocus = false;
@@ -1308,6 +1404,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   @override
   void onTabShown() {
     _isTabVisible = true;
+    _liveRowChanged();
     _discover.refreshIfStale();
     _refreshCatalogIfDue();
     if (!_isAutoScrollPaused) {
@@ -1837,10 +1934,12 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       continueCycleInterval: Duration(seconds: _continueCycleSeconds),
       focusMemory: _hubFocusMemory,
       showServerName: showServerName,
-      iconForHub: (hub, _) => hubIconFor(hub),
-      onFocusedItemChanged: _setSpotlightItem,
+      iconForHub: (hub, _) => hub.id == 'discover.iptv' ? Icons.tv : hubIconFor(hub),
+      onFocusedItemChanged: _focusLiveOrMedia,
+      onRailFocusLost: _leaveLiveRow,
       onLongPressItem: _openSynopsisPanel,
       onActivateItem: (hub, item) async {
+        if (hub.id == 'discover.iptv') return _activateLiveItem(item);
         // Recently-added Plex seasons are sparse season records, not full shows.
         // Open the canonical show while retaining the selected season ID.
         // This also lets the TV detail rail initialize its episode focus.
@@ -1949,7 +2048,8 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       metadataBelowBuilder: _buildTvSpotlightFormatMetadata,
       resolveClient: _getMediaClientForItem,
       hideSpoilers: hideSpoilers,
-      allowTrailerPreview: !_continueCycleActive,
+      allowTrailerPreview: !_continueCycleActive && _liveSelected == null && !_liveTransition && !_openingLive,
+      customSpotlight: _liveSelected == null ? null : _liveSpotlight(_liveSelected!),
       foreground: Stack(
         fit: StackFit.expand,
         clipBehavior: Clip.none,
