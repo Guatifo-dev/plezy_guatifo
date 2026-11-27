@@ -579,6 +579,8 @@ List<_Channel> _readDiscoverRecent((String, String, String, String, List<String>
   final db = sqlite3.open(input.$1, mode: OpenMode.readOnly);
   try {
     final result = <_Channel>[];
+    final metadata = db.select('SELECT epg FROM metadata LIMIT 1');
+    final epg = input.$4.isNotEmpty ? input.$4 : (metadata.isEmpty ? '' : metadata.first['epg'] as String? ?? '');
     final query = db.prepare('SELECT * FROM channels WHERE grp=? AND name=? AND tvg=? LIMIT 1');
     try {
       for (final id in input.$5) {
@@ -587,7 +589,7 @@ List<_Channel> _readDiscoverRecent((String, String, String, String, List<String>
         for (final row in query.select([parts[1], parts[2], parts[3]])) {
           result.add(_Channel(row['name'] as String, row['grp'] as String, row['url'] as String, row['logo'] as String,
             drmType: row['drm'] as String?, drmLicense: row['license'] as String?, manifestType: row['manifest'] as String?, tvgId: row['tvg'] as String)
-            .withSource(input.$2, input.$3, input.$4));
+            .withSource(input.$2, input.$3, epg));
         }
       }
     } finally { query.dispose(); }
@@ -663,7 +665,7 @@ Future<void> openVisionDiscoverChannel(BuildContext context, VisionDiscoverChann
   )));
 }
 
-Future<void> openVisionIptvMedia(Player player, _Channel channel, bool useExo, bool forceHls) async {
+Future<void> _openVisionIptvMedia(Player player, _Channel channel, bool useExo, bool forceHls) async {
       final path = Uri.parse(channel.url).path.toLowerCase();
       final isDash = path.endsWith('.mpd') || channel.manifestType == 'mpd' || channel.manifestType == 'dash';
       // Media3 infers DASH from the manifest URI when no HLS MIME is forced.
@@ -721,6 +723,7 @@ class _VisionDiscoverPreviewState extends State<VisionDiscoverPreview> {
   final _video = GlobalKey();
   Player? _player;
   StreamSubscription<void>? _frames;
+  StreamSubscription<dynamic>? _previewErrors;
   bool _ready = false, _failed = false, _cancelled = false;
   Timer? _delay;
   @override
@@ -741,8 +744,9 @@ class _VisionDiscoverPreviewState extends State<VisionDiscoverPreview> {
       final c = widget.channel._channel;
       final player = Player(useExoPlayer: useExo, hardwareDecoding: true);
       _player = player;
+      _previewErrors = player.streams.error.listen((_) { if (mounted && !_cancelled) setState(() => _failed = true); });
       _frames = player.streams.playbackRestart.listen((_) {
-        if (mounted && !_cancelled) { setState(() => _ready = true); _resize(); }
+        if (mounted && !_cancelled) { setState(() { _ready = true; _failed = false; }); _resize(); }
       });
       setState(() {});
       try {
@@ -750,7 +754,7 @@ class _VisionDiscoverPreviewState extends State<VisionDiscoverPreview> {
         await player.setProperty('hwdec', 'mediacodec,mediacodec-copy');
       } catch (_) {}
       if (_cancelled || !mounted) return;
-      await openVisionIptvMedia(player, c, useExo, prefs.getBool('vision_iptv_force_hls') ?? false);
+      await _openVisionIptvMedia(player, c, useExo, prefs.getBool('vision_iptv_force_hls') ?? false);
       if (!_cancelled && mounted) _resize();
     } catch (_) {
       if (mounted && !_cancelled) setState(() => _failed = true);
@@ -772,6 +776,7 @@ class _VisionDiscoverPreviewState extends State<VisionDiscoverPreview> {
     _delay?.cancel();
     _queue = _queue.then((_) async {
       await _frames?.cancel();
+      await _previewErrors?.cancel();
       final player = _player;
       _player = null;
       if (player != null) { try { await player.dispose(); } catch (_) {} }
@@ -2982,7 +2987,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   Future<void> _openChannel(Player player) async {
       _afrGeneration++;
       debugPrint('[VisionIPTV] opening: ${_startup.elapsedMilliseconds} ms');
-      await openVisionIptvMedia(player, _channel, widget.useExoPlayer, widget.forceHls);
+      await _openVisionIptvMedia(player, _channel, widget.useExoPlayer, widget.forceHls);
       debugPrint('[VisionIPTV] open returned: ${_startup.elapsedMilliseconds} ms');
       if (mounted) { _scheduleResize(); if (!_preview && _ready) unawaited(widget.onFullscreen(_channel)); _hideLater(); }
   }
