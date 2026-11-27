@@ -21,6 +21,7 @@ import 'package:crypto/crypto.dart';
 import '../video_player/player_output_format.dart';
 import 'package:provider/provider.dart';
 import 'live_tv_screen.dart';
+import '../../widgets/plex_trailer_preview.dart';
 import '../video_player/wakelock_controller.dart';
 
 Future<void> _showIptvRemoteHelp(BuildContext context) async {
@@ -561,8 +562,246 @@ String _programmeLine(Map<String, List<_Programme>> guide, _Channel channel) {
   return '';
 }
 
+// Discover reads only the five recent channel IDs from the local indexed lists.
+class VisionDiscoverChannel {
+  const VisionDiscoverChannel(this._channel, this.name, this.logo, this.programme, this.description, this.schedule);
+  final _Channel _channel;
+  final String name, logo, programme, description, schedule;
+  String get id => _channel.favoriteId;
+}
+
+final visionDiscoverIptvChanged = ValueNotifier<int>(0);
+const _discoverIptvPref = 'vision_iptv_discover_row';
+Future<bool> visionDiscoverIptvEnabled() async =>
+    (await SharedPreferences.getInstance()).getBool(_discoverIptvPref) ?? true;
+
+List<_Channel> _readDiscoverRecent((String, String, String, String, List<String>) input) {
+  final db = sqlite3.open(input.$1, mode: OpenMode.readOnly);
+  try {
+    final result = <_Channel>[];
+    final query = db.prepare('SELECT * FROM channels WHERE grp=? AND name=? AND tvg=? LIMIT 1');
+    try {
+      for (final id in input.$5) {
+        final parts = jsonDecode(id) as List;
+        if (parts.length != 4 || parts[0] != input.$2) continue;
+        for (final row in query.select([parts[1], parts[2], parts[3]])) {
+          result.add(_Channel(row['name'] as String, row['grp'] as String, row['url'] as String, row['logo'] as String,
+            drmType: row['drm'] as String?, drmLicense: row['license'] as String?, manifestType: row['manifest'] as String?, tvgId: row['tvg'] as String)
+            .withSource(input.$2, input.$3, input.$4));
+        }
+      }
+    } finally { query.dispose(); }
+    return result;
+  } finally { db.dispose(); }
+}
+
+Future<List<VisionDiscoverChannel>> loadVisionDiscoverChannels() async {
+  final prefs = await SharedPreferences.getInstance();
+  if (!(prefs.getBool(_discoverIptvPref) ?? true)) return [];
+  final ids = (prefs.getStringList('vision_iptv_recent') ?? []).take(5).toList();
+  final resume = _Channel.fromResumeJson(prefs.getString('vision_iptv_resume_channel'));
+  if (ids.isEmpty && resume != null) ids.add(resume.favoriteId);
+  if (ids.isEmpty) return [];
+  final support = await getApplicationSupportDirectory();
+  final cache = await getApplicationCacheDirectory();
+  final found = <String, _Channel>{};
+  final active = _iptvLists(prefs).where((l) => l['active'] == 'true').toList();
+  for (final list in active) {
+    final id = list['id']!;
+    final disk = File('${support.path}/vision_playlist_${_playlistKey(list)}.sqlite');
+    if (!await disk.exists()) continue;
+    try {
+      var epg = list['epg'] ?? '';
+      if (epg.isEmpty) epg = prefs.getString('vision_iptv_default_epg') ?? prefs.getString('vision_iptv_epg') ?? '';
+      if (epg.isEmpty && resume?.source == id) epg = resume!.epgSource;
+      final channels = await compute(_readDiscoverRecent, (disk.path, id, list['name'] ?? 'Lista IPTV', epg, ids));
+      for (final c in channels) {
+        if (!_hiddenGroups(list).contains(c.group)) found[c.favoriteId] = c;
+      }
+    } catch (_) {}
+  }
+  if (resume != null && active.any((l) => l['id'] == resume.source && !_hiddenGroups(l).contains(resume.group))) {
+    found.putIfAbsent(resume.favoriteId, () => resume);
+  }
+  final custom = _readIptvMap(prefs.getString('vision_iptv_custom_multi_v1'));
+  final overrides = _readIptvMap(prefs.getString('vision_iptv_epg_overrides'));
+  final result = <VisionDiscoverChannel>[];
+  final now = DateTime.now();
+  String clock(DateTime d) => '${d.toLocal().hour.toString().padLeft(2, '0')}:${d.toLocal().minute.toString().padLeft(2, '0')}';
+  for (final id in ids) {
+    final c = found[id];
+    if (c == null) continue;
+    var name = (custom['names'] as Map?)?[id] as String? ?? c.name;
+    var logo = c.logo;
+    _Programme? programme;
+    if (c.epgSource.isNotEmpty) {
+      final disk = File('${cache.path}/vision_epg_${_sourceId(c.epgSource)}.sqlite');
+      if (await disk.exists()) {
+        try {
+          final epgId = overrides[id] as String? ?? c.tvgId;
+          final data = await compute(_readIndexedGuide, (disk.path, [epgId], true));
+          if (prefs.getBool('vision_iptv_use_epg_names') == true && (custom['names'] as Map?)?[id] == null) name = data.names[epgId] ?? name;
+          final source = (custom['logos'] as Map?)?[id] ?? prefs.getString('vision_iptv_logo_source') ?? 'epg';
+          if (source != 'm3u' || logo.isEmpty) logo = data.logos[epgId] ?? logo;
+          for (final p in data.programmes[epgId] ?? const <_Programme>[]) {
+            if (!now.isBefore(p.start) && now.isBefore(p.stop)) { programme = p; break; }
+          }
+        } catch (_) {}
+      }
+    }
+    result.add(VisionDiscoverChannel(c, name, logo, programme?.title ?? 'Sin información EPG', programme?.description ?? '', programme == null ? '' : '${clock(programme.start)} – ${clock(programme.stop)} · En emisión'));
+  }
+  return result;
+}
+
+Future<void> openVisionDiscoverChannel(BuildContext context, VisionDiscoverChannel channel) async {
+  await PlexTrailerPreview.stop();
+  if (!context.mounted) return;
+  await Navigator.of(context).push(MaterialPageRoute<void>(builder: (routeContext) => VisionIptvScreen(
+    discoverChannel: channel,
+    onExit: () { if (routeContext.mounted) Navigator.of(routeContext).pop(); },
+  )));
+}
+
+Future<void> openVisionIptvMedia(Player player, _Channel channel, bool useExo, bool forceHls) async {
+      final path = Uri.parse(channel.url).path.toLowerCase();
+      final isDash = path.endsWith('.mpd') || channel.manifestType == 'mpd' || channel.manifestType == 'dash';
+      // Media3 infers DASH from the manifest URI when no HLS MIME is forced.
+      final forceLiveHls = !useExo ||
+          (!isDash && (forceHls || path.endsWith('.m3u8')));
+      if (useExo) {
+        final format = isDash ? 'DASH' : (forceLiveHls ? 'HLS' : 'Auto');
+        debugPrint('[VisionIPTV] Exo format: $format');
+      }
+      debugPrint('[VisionDRM] preparing playback');
+      final drmType = channel.drmType;
+      final license = channel.drmLicense;
+      final clearKey = drmType == 'clearkey' || drmType == 'org.w3.clearkey';
+      debugPrint('[VisionDRM] DASH=$isDash DRM recognized=$clearKey license present=${license != null && license.isNotEmpty}');
+      if (useExo && player is PlayerAndroid && (isDash || clearKey)) {
+        String? localLicense;
+        String? licenseUrl;
+        if (clearKey) {
+          if (license == null || license.isEmpty) throw StateError('Missing ClearKey license');
+          final licenseUri = Uri.tryParse(license);
+          if (licenseUri != null && ['http', 'https'].contains(licenseUri.scheme) && licenseUri.host.isNotEmpty) {
+            licenseUrl = license;
+          } else if (license.startsWith('{')) {
+            final decoded = jsonDecode(license);
+            if (decoded is! Map || decoded['keys'] is! List) throw StateError('Invalid ClearKey license');
+            localLicense = jsonEncode(decoded);
+          } else {
+            String encodeHex(String hex) {
+              if (hex.length != 32 || RegExp(r'[^0-9a-fA-F]').hasMatch(hex)) throw StateError('Invalid ClearKey value');
+              return base64UrlEncode(List<int>.generate(16, (i) => int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16))).replaceAll('=', '');
+            }
+            final pair = license.split(':');
+            if (pair.length != 2) throw StateError('Unsupported ClearKey license');
+            localLicense = jsonEncode({'keys': [{'kty': 'oct', 'kid': encodeHex(pair[0].trim()), 'k': encodeHex(pair[1].trim())}], 'type': 'temporary'});
+          }
+        }
+        debugPrint('[VisionDRM] invoking native player');
+        await player.open(Media(channel.url), isLive: false, dashManifest: true,
+          clearKeyLicense: localLicense, clearKeyLicenseUrl: licenseUrl);
+      } else {
+        await player.open(Media(channel.url), isLive: forceLiveHls);
+      }
+      debugPrint('[VisionDRM] open returned');
+}
+
+class VisionDiscoverPreview extends StatefulWidget {
+  const VisionDiscoverPreview({super.key, required this.channel});
+  final VisionDiscoverChannel channel;
+  @override
+  State<VisionDiscoverPreview> createState() => _VisionDiscoverPreviewState();
+}
+class _VisionDiscoverPreviewState extends State<VisionDiscoverPreview> {
+  static Future<void> _queue = Future<void>.value();
+  static Future<void> get settled => _queue;
+  final _video = GlobalKey();
+  Player? _player;
+  StreamSubscription<void>? _frames;
+  bool _ready = false, _failed = false, _cancelled = false;
+  Timer? _delay;
+  @override
+  void initState() {
+    super.initState();
+    _delay = Timer(const Duration(seconds: 1), () {
+      _queue = _queue.then((_) => _start()).catchError((Object _) {});
+    });
+  }
+  Future<void> _start() async {
+    if (_cancelled || !mounted) return;
+    try {
+      await PlexTrailerPreview.stop();
+      if (_cancelled || !mounted) return;
+      final prefs = await SharedPreferences.getInstance();
+      if (_cancelled || !mounted) return;
+      final useExo = prefs.getBool('vision_iptv_exo') ?? true;
+      final c = widget.channel._channel;
+      final player = Player(useExoPlayer: useExo, hardwareDecoding: true);
+      _player = player;
+      _frames = player.streams.playbackRestart.listen((_) {
+        if (mounted && !_cancelled) { setState(() => _ready = true); _resize(); }
+      });
+      setState(() {});
+      try {
+        if (useExo) await player.setProperty('tunneled-playback', 'no');
+        await player.setProperty('hwdec', 'mediacodec,mediacodec-copy');
+      } catch (_) {}
+      if (_cancelled || !mounted) return;
+      await openVisionIptvMedia(player, c, useExo, prefs.getBool('vision_iptv_force_hls') ?? false);
+      if (!_cancelled && mounted) _resize();
+    } catch (_) {
+      if (mounted && !_cancelled) setState(() => _failed = true);
+    }
+  }
+  void _resize() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _cancelled || _player == null) return;
+      final box = _video.currentContext?.findRenderObject();
+      if (box is! RenderBox || !box.hasSize) return;
+      final pos = box.localToGlobal(Offset.zero), dpr = MediaQuery.devicePixelRatioOf(context);
+      final channel = MethodChannel(_player is PlayerAndroid ? 'com.plezy/exo_player' : 'com.plezy/mpv_player');
+      unawaited(channel.invokeMethod<void>('setIptvBounds', {'left':(pos.dx*dpr).round(),'top':(pos.dy*dpr).round(),'width':(box.size.width*dpr).round(),'height':(box.size.height*dpr).round()}).catchError((Object _) {}));
+    });
+  }
+  @override
+  void dispose() {
+    _cancelled = true;
+    _delay?.cancel();
+    _queue = _queue.then((_) async {
+      await _frames?.cancel();
+      final player = _player;
+      _player = null;
+      if (player != null) { try { await player.dispose(); } catch (_) {} }
+    }).catchError((Object _) {});
+    super.dispose();
+  }
+  @override
+  Widget build(BuildContext context) {
+    _resize();
+    return Stack(fit: StackFit.expand, children: [
+      if (_ready && !_failed) const CustomPaint(painter: _DiscoverVideoHole()),
+      if (_player != null) SizedBox(key: _video, child: Video(player: _player!)),
+      if (!_ready || _failed) ColoredBox(color: const Color(0xFF242A36), child: Center(child: _failed
+        ? const Text('Vista previa no disponible', style: TextStyle(color: Colors.white70))
+        : const CircularProgressIndicator())),
+    ]);
+  }
+}
+class _DiscoverVideoHole extends CustomPainter {
+  const _DiscoverVideoHole();
+  @override
+  void paint(Canvas canvas, Size size) => canvas.drawRect(Offset.zero & size, Paint()..blendMode = BlendMode.clear);
+  @override
+  bool shouldRepaint(covariant _DiscoverVideoHole oldDelegate) => false;
+}
+Future<void> waitVisionDiscoverPreviewClosed() => _VisionDiscoverPreviewState.settled;
+
 class VisionIptvScreen extends StatefulWidget {
-  const VisionIptvScreen({super.key, this.settingsOnly = false, this.onExit});
+  const VisionIptvScreen({super.key, this.settingsOnly = false, this.onExit, this.discoverChannel});
+  final VisionDiscoverChannel? discoverChannel;
   final VoidCallback? onExit;
   final bool settingsOnly;
   @override
@@ -627,6 +866,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
         if (mounted) setState(() {});
       });
     }
+    if (widget.discoverChannel != null) _openWhenLoaded = true;
     unawaited(_restore());
   }
 
@@ -639,8 +879,8 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
     _lists = _iptvLists(prefs);
     setState(() {
       _lastChannel = prefs.getString('vision_iptv_last_fullscreen');
-      _resumeChannel = _Channel.fromResumeJson(prefs.getString('vision_iptv_resume_channel'));
-      _quickStart = prefs.getBool('vision_iptv_quick_start') ?? true;
+      _resumeChannel = widget.discoverChannel?._channel ?? _Channel.fromResumeJson(prefs.getString('vision_iptv_resume_channel'));
+      _quickStart = widget.discoverChannel != null || (prefs.getBool('vision_iptv_quick_start') ?? true);
       _resumeInvalid = false;
       _recent = prefs.getStringList('vision_iptv_recent') ?? [];
       _bannerSeconds = prefs.getInt('vision_iptv_banner_seconds') ?? 4;
@@ -738,7 +978,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
           listStatuses: _listStatuses, listGroups: _listGroups, isHidden: _hidden, listError: () => _error,
           custom: custom, customKey: _customKey, epgLogos: () => _epgLogos, logoSource: prefs.getString('vision_iptv_logo_source') ?? 'epg', useEpgNames: prefs.getBool('vision_iptv_use_epg_names') ?? false, passthrough: _passthrough, afr: _afr,
           onFavorite: _toggleFavorite, isFavorite: (c) => _favorites.contains(c.favoriteId), onFullscreen: _rememberChannel,
-          recent: () => List.unmodifiable(_recent), onTuned: (c) async { await _rememberChannel(c); _recent = [c.favoriteId, ..._recent.where((id) => id != c.favoriteId)].take(30).toList(); final prefs = await SharedPreferences.getInstance(); await prefs.setStringList('vision_iptv_recent', _recent); },
+          recent: () => List.unmodifiable(_recent), onTuned: (c) async { await _rememberChannel(c); _recent = [c.favoriteId, ..._recent.where((id) => id != c.favoriteId)].take(30).toList(); final prefs = await SharedPreferences.getInstance(); await prefs.setStringList('vision_iptv_recent', _recent); visionDiscoverIptvChanged.value++; },
           onRefreshGuide: () => _loadGuide(force: true), guideStatus: () => _epgStatus, onGuidePage: _requestGuidePage,
           bannerSeconds: _bannerSeconds, epgNames: (c) => _epgCatalogues[c.epgSource] ?? {}, rawEpgId: _rawEpgId, epgId: _resolvedEpgId,
           onAssignEpg: (c, id) async { if (id == null) { _epgOverrides.remove(c.favoriteId); } else { _epgOverrides[c.favoriteId] = id; } final prefs = await SharedPreferences.getInstance(); await prefs.setString('vision_iptv_epg_overrides', jsonEncode(_epgOverrides)); await _reloadIndexedGuide(); },
@@ -1429,6 +1669,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   String _settingsUrl = '', _settingsEpg = '', _settingsBuffer = 'minimum';
   bool _settingsExo = true, _settingsHls = false, _settingsTunnel = false;
   bool _settingsPassthrough = false, _settingsAfr = false;
+  bool _discoverRow = true;
   late String _logoSource = widget.logoSource;
   late bool _useEpgNames = widget.useEpgNames;
   late bool _quickStartSetting = widget.quickStart;
@@ -1842,7 +2083,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
       case 'section_guide': return ['epg','epg_refresh_entry','epg_refresh_hours','epg_updated','refresh','back'];
       case 'section_appearance': return ['logos','epg_names','banner','loading_indicator','back'];
       case 'section_playback': return ['player',if (_settingsExo) ...['format','tunnel'] else 'buffer','passthrough','afr','back'];
-      case 'section_behavior': return ['quick_start','back'];
+      case 'section_behavior': return ['quick_start','discover_row','back'];
       case 'section_backup': return ['backup','restore','back'];
       default: return [..._settingsSections,'back'];
     }
@@ -2090,6 +2331,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     if (key == 'section_remote_help') { await _showIptvRemoteHelp(context); return; }
     if (_settingsSections.contains(key)) { setState(() { _settingsSection = key; _settingsIndex = 0; }); _resetSettingsScroll(); return; }
     if (key == 'back') { _closeSettings(); return; }
+    if (key == 'discover_row') { final prefs = await SharedPreferences.getInstance(); if (!mounted) return; setState(() => _discoverRow = !(prefs.getBool(_discoverIptvPref) ?? true)); await prefs.setBool(_discoverIptvPref, _discoverRow); visionDiscoverIptvChanged.value++; return; }
     if (key == 'lists') { await _manageLists(); return; }
     if (key == 'epg_updated') return;
     if (key == 'backup' || key == 'restore') { await _configurationBackup(key == 'restore'); return; }
@@ -2220,9 +2462,9 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   }
 
   Widget _iptvSettingsPanel() {
-    final labels = <String, String>{..._settingsSectionLabels, 'loading_indicator':'Mostrar indicador de carga', 'list_refresh_entry':'Actualizar al iniciar TV en vivo','epg_refresh_entry':'Actualizar al iniciar TV en vivo','list_refresh_hours':'Intervalo de actualización','epg_refresh_hours':'Intervalo de actualización','epg_updated':'Última actualización EPG', 'm3u': 'Lista M3U activa', 'epg': 'EPG predeterminada', 'lists': 'Listas IPTV', 'quick_start': 'Inicio rápido en último canal', 'banner': 'Duración barra de información', 'player': 'Reproductor IPTV', 'format': 'Formato', 'tunnel': 'Tunneling', 'buffer': 'Búfer MPV', 'passthrough': 'Audio passthrough', 'afr': 'AFR', 'logos': 'Origen de logotipos', 'epg_names': 'Renombrar canales según EPG', 'backup': 'Copia de seguridad', 'restore': 'Restaurar configuración', 'refresh': 'Actualizar programación', 'back': 'Volver al menú'};
-    final values = <String, String>{'section_lists':'Listas y grupos', 'section_guide':'EPG y actualización', 'section_appearance':'Aspecto e información', 'section_playback':'Motor y opciones de vídeo/audio', 'section_behavior':'Arranque', 'section_backup':'Guardar y restaurar', 'section_remote_help':'Tutorial', 'loading_indicator':_showLoadingIndicator ? 'Sí' : 'No', 'list_refresh_entry':_listRefreshEntry?'Sí':'No','epg_refresh_entry':_epgRefreshEntry?'Sí':'No','list_refresh_hours':_refreshLabel(_listRefreshHours),'epg_refresh_hours':_refreshLabel(_epgRefreshHours),'epg_updated':widget.epgUpdatedLabel(), 'm3u': _settingsUrl.isEmpty ? 'Sin configurar' : 'Configurada', 'epg': _settingsEpg.isEmpty ? 'Automática desde M3U' : 'Manual', 'lists': 'Gestionar', 'quick_start': _quickStartSetting ? 'Sí' : 'No', 'banner': _bannerSeconds == 0 ? 'Permanente' : '${_bannerSeconds} s', 'player': _settingsExo ? 'ExoPlayer' : 'MPV', 'format': _settingsHls ? 'HLS' : 'Auto', 'tunnel': _settingsTunnel ? 'Sí' : 'No', 'buffer': _settingsBuffer == 'minimum' ? 'Mínimo (0)' : _settingsBuffer == 'small' ? 'Pequeño' : 'Normal', 'passthrough': _settingsPassthrough ? 'Sí' : 'No', 'afr': _settingsAfr ? 'Sí' : 'No', 'logos': _logoSource == 'epg' ? 'EPG' : 'M3U', 'epg_names': _useEpgNames ? 'Sí' : 'No', 'backup': '', 'restore': '', 'refresh': widget.guideStatus(), 'back': ''};
-    final icons = <String, IconData>{'section_lists':Icons.list, 'section_guide':Icons.calendar_today, 'section_appearance':Icons.monitor, 'section_playback':Icons.play_circle_outline, 'section_behavior':Icons.flash_on, 'section_backup':Icons.save, 'section_remote_help':Icons.help_outline, 'loading_indicator':Icons.hourglass_empty, 'list_refresh_entry':Icons.flash_on,'epg_refresh_entry':Icons.flash_on,'list_refresh_hours':Icons.timer,'epg_refresh_hours':Icons.timer,'epg_updated':Icons.calendar_today, 'm3u': Icons.list, 'epg': Icons.calendar_today, 'lists': Icons.playlist_add, 'quick_start': Icons.flash_on, 'banner': Icons.timer, 'player': Icons.play_circle_outline, 'format': Icons.video_settings, 'tunnel': Icons.settings_ethernet, 'buffer': Icons.memory, 'passthrough': Icons.volume_up, 'afr': Icons.monitor, 'logos': Icons.image, 'epg_names': Icons.edit, 'backup': Icons.save, 'restore': Icons.folder_open, 'refresh': Icons.refresh, 'back': Icons.arrow_back};
+    final labels = <String, String>{..._settingsSectionLabels, 'discover_row':'Mostrar TV en vivo en Discover', 'loading_indicator':'Mostrar indicador de carga', 'list_refresh_entry':'Actualizar al iniciar TV en vivo','epg_refresh_entry':'Actualizar al iniciar TV en vivo','list_refresh_hours':'Intervalo de actualización','epg_refresh_hours':'Intervalo de actualización','epg_updated':'Última actualización EPG', 'm3u': 'Lista M3U activa', 'epg': 'EPG predeterminada', 'lists': 'Listas IPTV', 'quick_start': 'Inicio rápido en último canal', 'banner': 'Duración barra de información', 'player': 'Reproductor IPTV', 'format': 'Formato', 'tunnel': 'Tunneling', 'buffer': 'Búfer MPV', 'passthrough': 'Audio passthrough', 'afr': 'AFR', 'logos': 'Origen de logotipos', 'epg_names': 'Renombrar canales según EPG', 'backup': 'Copia de seguridad', 'restore': 'Restaurar configuración', 'refresh': 'Actualizar programación', 'back': 'Volver al menú'};
+    final values = <String, String>{'discover_row':_discoverRow ? 'Sí' : 'No', 'section_lists':'Listas y grupos', 'section_guide':'EPG y actualización', 'section_appearance':'Aspecto e información', 'section_playback':'Motor y opciones de vídeo/audio', 'section_behavior':'Arranque', 'section_backup':'Guardar y restaurar', 'section_remote_help':'Tutorial', 'loading_indicator':_showLoadingIndicator ? 'Sí' : 'No', 'list_refresh_entry':_listRefreshEntry?'Sí':'No','epg_refresh_entry':_epgRefreshEntry?'Sí':'No','list_refresh_hours':_refreshLabel(_listRefreshHours),'epg_refresh_hours':_refreshLabel(_epgRefreshHours),'epg_updated':widget.epgUpdatedLabel(), 'm3u': _settingsUrl.isEmpty ? 'Sin configurar' : 'Configurada', 'epg': _settingsEpg.isEmpty ? 'Automática desde M3U' : 'Manual', 'lists': 'Gestionar', 'quick_start': _quickStartSetting ? 'Sí' : 'No', 'banner': _bannerSeconds == 0 ? 'Permanente' : '${_bannerSeconds} s', 'player': _settingsExo ? 'ExoPlayer' : 'MPV', 'format': _settingsHls ? 'HLS' : 'Auto', 'tunnel': _settingsTunnel ? 'Sí' : 'No', 'buffer': _settingsBuffer == 'minimum' ? 'Mínimo (0)' : _settingsBuffer == 'small' ? 'Pequeño' : 'Normal', 'passthrough': _settingsPassthrough ? 'Sí' : 'No', 'afr': _settingsAfr ? 'Sí' : 'No', 'logos': _logoSource == 'epg' ? 'EPG' : 'M3U', 'epg_names': _useEpgNames ? 'Sí' : 'No', 'backup': '', 'restore': '', 'refresh': widget.guideStatus(), 'back': ''};
+    final icons = <String, IconData>{'discover_row':Icons.tv, 'section_lists':Icons.list, 'section_guide':Icons.calendar_today, 'section_appearance':Icons.monitor, 'section_playback':Icons.play_circle_outline, 'section_behavior':Icons.flash_on, 'section_backup':Icons.save, 'section_remote_help':Icons.help_outline, 'loading_indicator':Icons.hourglass_empty, 'list_refresh_entry':Icons.flash_on,'epg_refresh_entry':Icons.flash_on,'list_refresh_hours':Icons.timer,'epg_refresh_hours':Icons.timer,'epg_updated':Icons.calendar_today, 'm3u': Icons.list, 'epg': Icons.calendar_today, 'lists': Icons.playlist_add, 'quick_start': Icons.flash_on, 'banner': Icons.timer, 'player': Icons.play_circle_outline, 'format': Icons.video_settings, 'tunnel': Icons.settings_ethernet, 'buffer': Icons.memory, 'passthrough': Icons.volume_up, 'afr': Icons.monitor, 'logos': Icons.image, 'epg_names': Icons.edit, 'backup': Icons.save, 'restore': Icons.folder_open, 'refresh': Icons.refresh, 'back': Icons.arrow_back};
     final keys = _settingKeys;
     return Container(
       padding: const EdgeInsets.all(12),
@@ -2656,6 +2898,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     super.initState();
     FocusManager.instance.addEarlyKeyEventHandler(_iptvEarlyKey);
     _consultationIdle = Timer.periodic(const Duration(seconds: 1), (_) => _checkConsultationIdle());
+    unawaited(visionDiscoverIptvEnabled().then((enabled) { if (mounted) setState(() => _discoverRow = enabled); }));
     _rebuildChannelIndices();
     if (_preparingCatalog) _catalogFallback = Timer(const Duration(seconds: 4), _beginCatalog);
     _channelIndex = widget.channels.indexOf(widget.channel);
@@ -2739,49 +2982,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   Future<void> _openChannel(Player player) async {
       _afrGeneration++;
       debugPrint('[VisionIPTV] opening: ${_startup.elapsedMilliseconds} ms');
-      final path = Uri.parse(_channel.url).path.toLowerCase();
-      final isDash = path.endsWith('.mpd') || _channel.manifestType == 'mpd' || _channel.manifestType == 'dash';
-      // Media3 infers DASH from the manifest URI when no HLS MIME is forced.
-      final forceLiveHls = !widget.useExoPlayer ||
-          (!isDash && (widget.forceHls || path.endsWith('.m3u8')));
-      if (widget.useExoPlayer) {
-        final format = isDash ? 'DASH' : (forceLiveHls ? 'HLS' : 'Auto');
-        debugPrint('[VisionIPTV] Exo format: $format');
-      }
-      debugPrint('[VisionDRM] preparing playback');
-      final drmType = _channel.drmType;
-      final license = _channel.drmLicense;
-      final clearKey = drmType == 'clearkey' || drmType == 'org.w3.clearkey';
-      debugPrint('[VisionDRM] DASH=$isDash DRM recognized=$clearKey license present=${license != null && license.isNotEmpty}');
-      if (widget.useExoPlayer && player is PlayerAndroid && (isDash || clearKey)) {
-        String? localLicense;
-        String? licenseUrl;
-        if (clearKey) {
-          if (license == null || license.isEmpty) throw StateError('Missing ClearKey license');
-          final licenseUri = Uri.tryParse(license);
-          if (licenseUri != null && ['http', 'https'].contains(licenseUri.scheme) && licenseUri.host.isNotEmpty) {
-            licenseUrl = license;
-          } else if (license.startsWith('{')) {
-            final decoded = jsonDecode(license);
-            if (decoded is! Map || decoded['keys'] is! List) throw StateError('Invalid ClearKey license');
-            localLicense = jsonEncode(decoded);
-          } else {
-            String encodeHex(String hex) {
-              if (hex.length != 32 || RegExp(r'[^0-9a-fA-F]').hasMatch(hex)) throw StateError('Invalid ClearKey value');
-              return base64UrlEncode(List<int>.generate(16, (i) => int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16))).replaceAll('=', '');
-            }
-            final pair = license.split(':');
-            if (pair.length != 2) throw StateError('Unsupported ClearKey license');
-            localLicense = jsonEncode({'keys': [{'kty': 'oct', 'kid': encodeHex(pair[0].trim()), 'k': encodeHex(pair[1].trim())}], 'type': 'temporary'});
-          }
-        }
-        debugPrint('[VisionDRM] invoking native player');
-        await player.open(Media(_channel.url), isLive: false, dashManifest: true,
-          clearKeyLicense: localLicense, clearKeyLicenseUrl: licenseUrl);
-      } else {
-        await player.open(Media(_channel.url), isLive: forceLiveHls);
-      }
-      debugPrint('[VisionDRM] open returned');
+      await openVisionIptvMedia(player, _channel, widget.useExoPlayer, widget.forceHls);
       debugPrint('[VisionIPTV] open returned: ${_startup.elapsedMilliseconds} ms');
       if (mounted) { _scheduleResize(); if (!_preview && _ready) unawaited(widget.onFullscreen(_channel)); _hideLater(); }
   }
