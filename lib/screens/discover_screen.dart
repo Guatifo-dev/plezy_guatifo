@@ -60,6 +60,7 @@ import '../widgets/tv_browse_rail.dart';
 import '../widgets/tv_spotlight_scaffold.dart';
 import '../widgets/plex_trailer_preview.dart';
 import 'livetv/vision_iptv_screen.dart';
+import '../widgets/ambient_spotlight_tint.dart';
 import '../mixins/refreshable.dart';
 import '../mixins/tab_visibility_aware.dart';
 import '../i18n/strings.g.dart';
@@ -447,6 +448,8 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   List<MediaItem> _liveItems = [];
   VisionDiscoverChannel? _liveSelected;
   bool _liveTransition = false;
+  bool _liveAuto = true, _livePlaying = false;
+  final _livePreviewKey = GlobalKey<VisionDiscoverPreviewState>();
   bool _openingLive = false;
   int _liveLoadGeneration = 0;
   int _liveFocusGeneration = 0;
@@ -456,8 +459,10 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   Future<void> _loadLiveRow() async {
     final generation = ++_liveLoadGeneration;
     try {
+      final auto = await visionDiscoverAuto();
       final channels = await loadVisionDiscoverChannels();
       if (!mounted || _liveDisposed || generation != _liveLoadGeneration) return;
+      if (_liveAuto != auto) setState(() { _liveAuto = auto; _livePlaying = auto; });
       final old = _liveChannels;
       if (old.length == channels.length && List.generate(old.length, (i) => old[i].id == channels[i].id && old[i].name == channels[i].name && old[i].logo == channels[i].logo && old[i].programme == channels[i].programme && old[i].description == channels[i].description && old[i].schedule == channels[i].schedule && old[i].poster == channels[i].poster).every((v) => v)) return;
       if (_liveSelected != null && !channels.any((c) => c.id == _liveSelected!.id)) _leaveLiveRow();
@@ -473,7 +478,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   void _leaveLiveRow() {
     if (_liveDisposed || !mounted || (_liveSelected == null && !_liveTransition)) return;
     final generation = ++_liveFocusGeneration;
-    setState(() { _liveSelected = null; _liveTransition = true; });
+    setState(() { _liveSelected = null; _livePlaying = false; _liveTransition = true; });
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await waitVisionDiscoverPreviewClosed();
       if (mounted && !_liveDisposed && generation == _liveFocusGeneration) setState(() => _liveTransition = false);
@@ -486,7 +491,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     final channel = _liveChannels[index];
     if (_liveSelected?.id == channel.id) return;
     ++_liveFocusGeneration;
-    setState(() { _liveSelected = channel; _liveTransition = false; });
+    setState(() { _liveSelected = channel; _livePlaying = _liveAuto; _liveTransition = false; });
     unawaited(PlexTrailerPreview.stop());
   }
   Future<bool> _activateLiveItem(MediaItem item) async {
@@ -494,23 +499,29 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     if (index < 0) return false;
     if (_openingLive) return true;
     final channel = _liveChannels[index];
+    if (!_liveAuto && (!_livePlaying || _liveSelected?.id != channel.id)) {
+      setState(() { _liveSelected = channel; _livePlaying = true; });
+      return true;
+    }
     _openingLive = true;
+    final handoff = _livePreviewKey.currentState?.takeReadyPlayer();
     _leaveLiveRow();
     await WidgetsBinding.instance.endOfFrame;
     await waitVisionDiscoverPreviewClosed();
-    if (mounted) await openVisionDiscoverChannel(context, channel);
+    if (mounted) { await openVisionDiscoverChannel(context, channel, handoff: handoff); } else { await handoff?.dispose(); }
     _openingLive = false;
     if (mounted && !_liveDisposed) { await _loadLiveRow(); if (mounted) { _tvBrowseRailKey.currentState?.requestFocus(); WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted && !_liveDisposed) _tvBrowseRailKey.currentState?.requestFocus(); }); } }
     return true;
   }
   Widget _liveSpotlight(VisionDiscoverChannel channel) {
-    return LayoutBuilder(builder: (context, constraints) {
+    final artwork = channel.poster.isNotEmpty ? channel.poster : channel.logo;
+    return AmbientSpotlightTint(item: MediaItem.plex(id: 'iptv-art:${channel.id}:$artwork', kind: MediaKind.episode, thumbPath: artwork, artPath: artwork), client: null, allowNetwork: true, localArtworkPathResolver: null, childBuilder: (context) => LayoutBuilder(builder: (context, constraints) {
       final width = constraints.maxWidth, height = constraints.maxHeight;
       final videoWidth = math.min(width * .43, height * .38 * 16 / 9);
       final videoHeight = videoWidth * 9 / 16;
-      final top = height * .10;
+      final top = height * .055;
       return Stack(children: [
-        Positioned(top: top, left: width * .045, width: width * .43, height: height * .43,
+        Positioned(top: top, left: width * .045, width: width * .43, height: height * .36,
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             SizedBox(height: math.min(65.0, height * .12), child: channel.logo.startsWith('http')
               ? Image.network(channel.logo, fit: BoxFit.contain, errorBuilder: (_, __, ___) => Text(channel.name, style: const TextStyle(color: Colors.white, fontSize: 24)))
@@ -522,9 +533,9 @@ class _DiscoverScreenState extends State<DiscoverScreen>
             Expanded(child: Text(channel.description, maxLines: 5, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 14))),
           ])),
         Positioned(top: top, right: width * .025, width: videoWidth, height: videoHeight,
-          child: VisionDiscoverPreview(key: ValueKey(channel.id), channel: channel)),
+          child: _livePlaying ? KeyedSubtree(key: ValueKey(channel.id), child: VisionDiscoverPreview(key: _livePreviewKey, channel: channel)) : VisionDiscoverPoster(channel: channel)),
       ]);
-    });
+    }));
   }
 
   List<MediaHub>? _tvBrowseHubsCache;
@@ -538,7 +549,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       hubs.add(_continueWatchingHub);
     }
     hubs.addAll(_hubs.where((hub) => hub.items.isNotEmpty));
-    if (_liveItems.isNotEmpty) hubs.add(MediaHub(id: 'discover.iptv', title: 'TV en vivo (Canales Recientes)', type: 'episode', size: _liveItems.length, more: false, items: _liveItems));
+    if (_liveItems.isNotEmpty) hubs.add(MediaHub(id: 'discover.iptv', title: 'TV en vivo (Favoritos)', type: 'episode', size: _liveItems.length, more: false, items: _liveItems));
     _tvBrowseHubsCache = hubs;
     _tvBrowseHubsCacheKey = key;
     return hubs;
