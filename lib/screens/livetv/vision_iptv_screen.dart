@@ -350,7 +350,7 @@ Future<(List<_Channel>, String, int)> _decodePlaylist((String, String, bool) inp
 
 final _iptvSettingsChanged = ValueNotifier<int>(0);
 
-void notifyVisionIptvSettingsChanged() => _iptvSettingsChanged.value++;
+void notifyVisionIptvSettingsChanged() { _iptvSettingsChanged.value++; visionDiscoverIptvChanged.value++; }
 
 class _Programme {
   const _Programme(this.title, this.start, this.stop, this.description, {this.poster = ''});
@@ -670,13 +670,21 @@ Future<List<VisionDiscoverChannel>> loadVisionDiscoverChannels() async {
   return result;
 }
 
-Future<void> openVisionDiscoverChannel(BuildContext context, VisionDiscoverChannel channel) async {
+Future<void> openVisionDiscoverChannel(BuildContext context, VisionDiscoverChannel channel, {Player? handoff}) async {
   await PlexTrailerPreview.stop();
-  if (!context.mounted) return;
-  await Navigator.of(context).push(MaterialPageRoute<void>(builder: (routeContext) => VisionIptvScreen(
+  if (!context.mounted) { await handoff?.dispose(); return; }
+  final transfer = _DiscoverPlayerTransfer(handoff);
+  try { await Navigator.of(context).push(MaterialPageRoute<void>(builder: (routeContext) => VisionIptvScreen(
     discoverChannel: channel,
+    discoverTransfer: transfer,
     onExit: () { if (routeContext.mounted) Navigator.of(routeContext).pop(); },
-  )));
+  ))); } finally { await transfer.take()?.dispose(); }
+}
+
+class _DiscoverPlayerTransfer {
+  _DiscoverPlayerTransfer(this._player);
+  Player? _player;
+  Player? take() { final p = _player; _player = null; return p; }
 }
 
 Future<void> _openVisionIptvMedia(Player player, _Channel channel, bool useExo, bool forceHls) async {
@@ -729,9 +737,9 @@ class VisionDiscoverPreview extends StatefulWidget {
   const VisionDiscoverPreview({super.key, required this.channel});
   final VisionDiscoverChannel channel;
   @override
-  State<VisionDiscoverPreview> createState() => _VisionDiscoverPreviewState();
+  State<VisionDiscoverPreview> createState() => VisionDiscoverPreviewState();
 }
-class _VisionDiscoverPreviewState extends State<VisionDiscoverPreview> {
+class VisionDiscoverPreviewState extends State<VisionDiscoverPreview> {
   static Future<void> _queue = Future<void>.value();
   static Future<void> get settled => _queue;
   final _video = GlobalKey();
@@ -770,6 +778,16 @@ class _VisionDiscoverPreviewState extends State<VisionDiscoverPreview> {
     } catch (_) {
       if (mounted && !_cancelled) setState(() => _failed = true);
     }
+  }
+  Player? takeReadyPlayer() {
+    if (!_ready || _failed || _cancelled) return null;
+    final player = _player;
+    if (player == null) return null;
+    _cancelled = true;
+    _player = null;
+    unawaited(_frames?.cancel());
+    unawaited(_previewErrors?.cancel());
+    return player;
   }
   void _resize() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -831,10 +849,11 @@ class _DiscoverVideoHole extends CustomPainter {
   @override
   bool shouldRepaint(covariant _DiscoverVideoHole oldDelegate) => false;
 }
-Future<void> waitVisionDiscoverPreviewClosed() => _VisionDiscoverPreviewState.settled;
+Future<void> waitVisionDiscoverPreviewClosed() => VisionDiscoverPreviewState.settled;
 
 class VisionIptvScreen extends StatefulWidget {
-  const VisionIptvScreen({super.key, this.settingsOnly = false, this.onExit, this.discoverChannel});
+  const VisionIptvScreen({super.key, this.settingsOnly = false, this.onExit, this.discoverChannel, this.discoverTransfer});
+  final _DiscoverPlayerTransfer? discoverTransfer;
   final VisionDiscoverChannel? discoverChannel;
   final VoidCallback? onExit;
   final bool settingsOnly;
@@ -1006,7 +1025,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
       final first = ordered.indexWhere((c) => !_hidden(c) || _favorites.contains(c.favoriteId));
       final index = fast ? 0 : ordered.indexWhere((c) => c.favoriteId == _lastChannel && (!_hidden(c) || _favorites.contains(c.favoriteId)));
       await Navigator.of(context).push(MaterialPageRoute<void>(
-        builder: (_) => _IptvPlayer(startFullscreen: _quickStart && index >= 0, quickStart: _quickStart, showLoadingIndicator: prefs.getBool('vision_iptv_show_loading_indicator') ?? false, onAutomaticRefresh:_automaticRefresh, hasManualRefresh:()=>_hasManualRefresh, queueManualList:_queueManualList, queueManualGuide:_queueManualGuide, epgUpdatedLabel:()=>_epgUpdatedLabel, prepareCatalog: resume != null ? () => _prepareResumeCatalog(resume,custom) : null, channel: index >= 0 ? ordered[index] : ordered[first < 0 ? 0 : first], channels: ordered,
+        builder: (_) => _IptvPlayer(discoverTransfer: widget.discoverTransfer, startFullscreen: _quickStart && index >= 0, quickStart: _quickStart, showLoadingIndicator: prefs.getBool('vision_iptv_show_loading_indicator') ?? false, onAutomaticRefresh:_automaticRefresh, hasManualRefresh:()=>_hasManualRefresh, queueManualList:_queueManualList, queueManualGuide:_queueManualGuide, epgUpdatedLabel:()=>_epgUpdatedLabel, prepareCatalog: resume != null ? () => _prepareResumeCatalog(resume,custom) : null, channel: index >= 0 ? ordered[index] : ordered[first < 0 ? 0 : first], channels: ordered,
           guide: _guide, guideSource: _guideNotifier, allChannels: ordered,
           favoriteOrder: () => _favorites.toList(), onFavoriteOrder: _reorderFavorites, onReloadLists: _reloadListsInPlayer,
           listStatuses: _listStatuses, listGroups: _listGroups, isHidden: _hidden, listError: () => _error,
@@ -1506,7 +1525,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
       else if (!_loading && !_restoring && !_openWhenLoaded)
         FilledButton(focusNode: _entry, onPressed: () async {
           await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const VisionIptvScreen(settingsOnly: true)));
-          if (mounted) _iptvSettingsChanged.value++;
+          if (mounted) notifyVisionIptvSettingsChanged();
         }, child: const Text('Ajustes IPTV')),
       if (context.watch<MultiServerProvider>().hasLiveTv)
         TextButton(onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const Scaffold(body: LiveTvScreen()))), child: const Text('TV de Plex')),
@@ -1516,7 +1535,8 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
 }
 
 class _IptvPlayer extends StatefulWidget {
-  const _IptvPlayer({required this.startFullscreen, required this.quickStart, required this.showLoadingIndicator, required this.onAutomaticRefresh, required this.hasManualRefresh, required this.queueManualList, required this.queueManualGuide, required this.epgUpdatedLabel, this.prepareCatalog, required this.favoriteOrder, required this.onFavoriteOrder, required this.onReloadLists, required this.listStatuses, required this.listGroups, required this.isHidden, required this.listError, required this.onFullscreen, required this.bannerSeconds, required this.epgNames, required this.rawEpgId, required this.epgId, required this.onAssignEpg, required this.recent, required this.onTuned, required this.onRefreshGuide, required this.onGuidePage, required this.guideStatus, required this.channel, required this.channels, required this.guide, required this.guideSource, required this.allChannels, required this.onFavorite, required this.isFavorite, required this.useExoPlayer, required this.tunneling, required this.buffer, required this.forceHls, required this.custom, required this.customKey, required this.epgLogos, required this.logoSource, required this.useEpgNames, required this.passthrough, required this.afr});
+  const _IptvPlayer({this.discoverTransfer, required this.startFullscreen, required this.quickStart, required this.showLoadingIndicator, required this.onAutomaticRefresh, required this.hasManualRefresh, required this.queueManualList, required this.queueManualGuide, required this.epgUpdatedLabel, this.prepareCatalog, required this.favoriteOrder, required this.onFavoriteOrder, required this.onReloadLists, required this.listStatuses, required this.listGroups, required this.isHidden, required this.listError, required this.onFullscreen, required this.bannerSeconds, required this.epgNames, required this.rawEpgId, required this.epgId, required this.onAssignEpg, required this.recent, required this.onTuned, required this.onRefreshGuide, required this.onGuidePage, required this.guideStatus, required this.channel, required this.channels, required this.guide, required this.guideSource, required this.allChannels, required this.onFavorite, required this.isFavorite, required this.useExoPlayer, required this.tunneling, required this.buffer, required this.forceHls, required this.custom, required this.customKey, required this.epgLogos, required this.logoSource, required this.useEpgNames, required this.passthrough, required this.afr});
+  final _DiscoverPlayerTransfer? discoverTransfer;
   final Map<String, dynamic> custom;
   final String customKey, logoSource;
   final bool useEpgNames;
@@ -2954,7 +2974,8 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
       await PlaybackCoordinator.instance.claimVideo();
       debugPrint('[VisionIPTV] claim: ${_startup.elapsedMilliseconds} ms');
       if (!mounted || _closing != null) return;
-      final player = Player(useExoPlayer: widget.useExoPlayer, hardwareDecoding: true);
+      final transferred = widget.discoverTransfer?.take();
+      final player = transferred ?? Player(useExoPlayer: widget.useExoPlayer, hardwareDecoding: true);
       _player = player;
       _errors = player.streams.error.listen((_) {
         if (mounted) { setState(() => _failed = true); _beginCatalog(); }
@@ -2971,6 +2992,18 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
           unawaited(_readStats());
         }
       });
+      if (transferred != null) {
+        setState(() { _ready = true; _failed = false; });
+        _autoFirstReady ??= DateTime.now();
+        _lastInteraction = DateTime.now();
+        _beginCatalog();
+        unawaited(widget.onTuned(_channel));
+        _scheduleResize();
+        unawaited(_readStats());
+        if (widget.afr) unawaited(_matchIptvRate(player, _afrGeneration));
+        _hideLater();
+        return;
+      }
       setState(() {});
       try {
         if (widget.useExoPlayer) {
