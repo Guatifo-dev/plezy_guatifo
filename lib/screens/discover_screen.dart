@@ -463,12 +463,12 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       if (!mounted || _liveDisposed || generation != _liveLoadGeneration) return;
       if (_liveAuto != auto) setState(() { _liveAuto = auto; _livePlaying = auto; });
       final old = _liveChannels;
-      if (old.length == channels.length && List.generate(old.length, (i) => old[i].id == channels[i].id && old[i].name == channels[i].name && old[i].logo == channels[i].logo && old[i].programme == channels[i].programme && old[i].description == channels[i].description && old[i].schedule == channels[i].schedule && old[i].poster == channels[i].poster).every((v) => v)) return;
+      if (old.length == channels.length && List.generate(old.length, (i) => old[i].id == channels[i].id && old[i].name == channels[i].name && old[i].logo == channels[i].logo && old[i].programme == channels[i].programme && old[i].description == channels[i].description && old[i].schedule == channels[i].schedule && old[i].poster == channels[i].poster && old[i].subtitle == channels[i].subtitle).every((v) => v)) return;
       if (_liveSelected != null && !channels.any((c) => c.id == _liveSelected!.id)) _leaveLiveRow();
       setState(() {
         _liveChannels = channels;
         if (_liveSelected != null) { for (final c in channels) { if (c.id == _liveSelected!.id) { _liveSelected = c; break; } } }
-        _liveItems = [for (final c in channels) MediaItem.plex(id: 'iptv:${c.id}', kind: MediaKind.episode, title: c.name, thumbPath: c.logo, summary: c.description)];
+        _liveItems = [for (final c in channels) MediaItem.plex(id: 'iptv:${c.id}', kind: MediaKind.episode, title: c.name, thumbPath: c.logo, summary: epgPlainText(c.description))];
         _tvBrowseHubsCache = null;
       });
     } catch (_) {}
@@ -530,12 +530,13 @@ class _DiscoverScreenState extends State<DiscoverScreen>
               ? Image.network(channel.logo, fit: BoxFit.contain, errorBuilder: (_, __, ___) => Text(channel.name, style: const TextStyle(color: Colors.white, fontSize: 24)))
               : Text(channel.name, style: const TextStyle(color: Colors.white, fontSize: 24))),
             const SizedBox(height: 8),
-            Text(channel.programme, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+            EpgColorText(channel.programme, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
             if (channel.schedule.isNotEmpty) Text(channel.schedule, style: const TextStyle(color: Color(0xFF90CAF9), fontSize: 13)),
+            if (channel.subtitle.isNotEmpty) EpgColorText(channel.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 12)),
             const SizedBox(height: 8),
             Flexible(child: LayoutBuilder(builder: (context, bounds) {
               final lines = (bounds.maxHeight / 19.0).floor().clamp(1, 5).toInt();
-              return Text(channel.description, maxLines: lines, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 14, height: 19 / 14));
+              return EpgColorText(channel.description, maxLines: lines, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 14, height: 19 / 14));
             })),
           ])),
         Positioned(top: videoTop, right: videoRight, width: videoWidth, height: videoHeight,
