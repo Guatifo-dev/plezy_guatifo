@@ -489,7 +489,7 @@ class _DiscoverIptvSettings extends StatefulWidget {
   State<_DiscoverIptvSettings> createState() => _DiscoverIptvSettingsState();
 }
 class _DiscoverIptvSettingsState extends State<_DiscoverIptvSettings> {
-  bool _available = false, _enabled = false, _auto = true;
+  bool _available = false, _enabled = false, _auto = true, _programme=true;
   int _generation = 0;
   @override
   void initState() { super.initState(); visionDiscoverIptvChanged.addListener(_reload); _reload(); }
@@ -498,7 +498,8 @@ class _DiscoverIptvSettingsState extends State<_DiscoverIptvSettings> {
     final available = await visionDiscoverAvailable();
     final enabled = await visionDiscoverIptvEnabled();
     final auto = await visionDiscoverAuto();
-    if (mounted && generation == _generation) setState(() { _available = available; _enabled = available && enabled; _auto = auto; });
+    final programme=await visionDiscoverProgramme();
+    if (mounted && generation == _generation) setState(() { _available = available; _enabled = available && enabled; _auto = auto; _programme=programme; });
   }
   @override
   void dispose() { visionDiscoverIptvChanged.removeListener(_reload); super.dispose(); }
@@ -518,5 +519,6 @@ class _DiscoverIptvSettingsState extends State<_DiscoverIptvSettings> {
       value: _auto,
       onChanged: _enabled ? (value) async { await setVisionDiscoverAuto(value); await _reload(); } : null,
     ),
+    FocusableSwitchListTile(secondary:const Icon(Icons.subtitles_outlined),title:const Text('Mostrar información del programa en las miniaturas'),subtitle:const Text('Título y barra de progreso de TV en vivo'),value:_programme,onChanged:_enabled?(value)async{await setVisionDiscoverProgramme(value);await _reload();}:null),
   ]);
 }

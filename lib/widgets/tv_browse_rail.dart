@@ -212,7 +212,7 @@ class TvBrowseRailLayout {
             (compactDetailRail && useWideLayout ? 3.5 : 0.0);
     // In the compact episode rail, reserve less unused space below
     // the caption so the artwork can grow within the same rail height.
-    final labelHeight = hub.id == 'discover.iptv' ? 24.0 * scale : fullCardLayout ? 0.0 : ((isPersonHub ? 52 : 36) * scale);
+    final labelHeight = hub.id == 'discover.iptv' ? (hub.items.any((i)=>i.tagline!=null)?24.0*scale:0.0) : fullCardLayout ? 0.0 : ((isPersonHub ? 52 : 36) * scale);
     final containerHeight = (posterHeight + labelHeight).ceilToDouble();
     final height = containerHeight + focusExtra + ((compactDetailRail ? 2 : 22) * scale);
 
@@ -2006,8 +2006,7 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
             Container(padding:const EdgeInsets.all(10),color:const Color(0xFF242A36),child:logo.startsWith('http')?Image.network(logo,cacheWidth:decodeWidth,fit:BoxFit.contain,errorBuilder:(_,__,___)=>const Icon(Icons.tv,color:Colors.white70)):const Icon(Icons.tv,color:Colors.white70)),
             if(item.durationMs!=null&&item.viewOffsetMs!=null) Positioned(bottom:0,left:0,right:0,child:_LiveProgrammeProgress(clock:_liveProgressClock,start:item.durationMs!,stop:item.viewOffsetMs!)),
           ]))),
-          SizedBox(height:3*scale),
-          Expanded(child:Text(item.tagline??item.title??'',maxLines:1,overflow:TextOverflow.ellipsis,style:TextStyle(color:Colors.white,fontSize:12*scale,height:1.1))),
+          if(item.tagline!=null)...[SizedBox(height:3*scale),Expanded(child:Text(item.tagline!,maxLines:1,overflow:TextOverflow.ellipsis,style:TextStyle(color:Colors.white,fontSize:12*scale,height:1.1)))],
         ]));
     }
     return metrics.isPersonHub

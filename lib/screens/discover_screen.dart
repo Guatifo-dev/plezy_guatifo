@@ -448,7 +448,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   List<MediaItem> _liveItems = [];
   VisionDiscoverChannel? _liveSelected;
   bool _liveTransition = false;
-  bool _liveAuto = true, _livePlaying = false;
+  bool _liveAuto = true, _livePlaying = false, _liveProgramme = true;
   bool _openingLive = false;
   int _liveLoadGeneration = 0;
   int _liveFocusGeneration = 0;
@@ -459,16 +459,18 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     final generation = ++_liveLoadGeneration;
     try {
       final auto = await visionDiscoverAuto();
+      final programme=await visionDiscoverProgramme();
       final channels = await loadVisionDiscoverChannels();
       if (!mounted || _liveDisposed || generation != _liveLoadGeneration) return;
       if (_liveAuto != auto) setState(() { _liveAuto = auto; _livePlaying = auto; });
       final old = _liveChannels;
-      if (old.length == channels.length && List.generate(old.length, (i) => old[i].id == channels[i].id && old[i].name == channels[i].name && old[i].logo == channels[i].logo && old[i].programme == channels[i].programme && old[i].description == channels[i].description && old[i].schedule == channels[i].schedule && old[i].poster == channels[i].poster && old[i].subtitle == channels[i].subtitle && old[i].start == channels[i].start && old[i].stop == channels[i].stop).every((v) => v)) return;
+      if (_liveProgramme==programme && old.length == channels.length && List.generate(old.length, (i) => old[i].id == channels[i].id && old[i].name == channels[i].name && old[i].logo == channels[i].logo && old[i].programme == channels[i].programme && old[i].description == channels[i].description && old[i].schedule == channels[i].schedule && old[i].poster == channels[i].poster && old[i].subtitle == channels[i].subtitle && old[i].start == channels[i].start && old[i].stop == channels[i].stop).every((v) => v)) return;
       if (_liveSelected != null && !channels.any((c) => c.id == _liveSelected!.id)) _leaveLiveRow();
       setState(() {
+        _liveProgramme=programme;
         _liveChannels = channels;
         if (_liveSelected != null) { for (final c in channels) { if (c.id == _liveSelected!.id) { _liveSelected = c; break; } } }
-        _liveItems = [for (final c in channels) MediaItem.plex(id: 'iptv:${c.id}', kind: MediaKind.episode, title: c.name, thumbPath: c.logo, summary: epgPlainText(c.description), tagline: epgPlainText(c.programme), durationMs: c.start?.millisecondsSinceEpoch, viewOffsetMs: c.stop?.millisecondsSinceEpoch)];
+        _liveItems = [for (final c in channels) MediaItem.plex(id: 'iptv:${c.id}', kind: MediaKind.episode, title: c.name, thumbPath: c.logo, summary: epgPlainText(c.description), tagline: programme?epgPlainText(c.programme):null, durationMs: programme?c.start?.millisecondsSinceEpoch:null, viewOffsetMs: programme?c.stop?.millisecondsSinceEpoch:null)];
         _tvBrowseHubsCache = null;
       });
     } catch (_) {}
