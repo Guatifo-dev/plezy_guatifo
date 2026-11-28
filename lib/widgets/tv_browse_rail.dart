@@ -2003,8 +2003,7 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
             if(item.durationMs!=null&&item.viewOffsetMs!=null) Positioned(bottom:0,left:0,right:0,child:_LiveProgrammeProgress(start:item.durationMs!,stop:item.viewOffsetMs!)),
           ]))),
           SizedBox(height:3*scale),
-          Expanded(child:ListenableSelector<bool>(listenable:_focusModel,selector:()=>_focusModel.railHasFocus&&_focusModel.position==(hubIndex,itemIndex),
-            builder:(_,focused,__)=>_LiveProgrammeLabel(text:item.tagline??item.title??'',focused:focused,scale:scale))),
+          Expanded(child:Text(item.tagline??item.title??'',maxLines:1,overflow:TextOverflow.ellipsis,style:TextStyle(color:Colors.white,fontSize:12*scale,height:1.1))),
         ]));
     }
     return metrics.isPersonHub
@@ -2530,20 +2529,4 @@ class _LiveProgrammeProgressState extends State<_LiveProgrammeProgress> {
   @override Widget build(BuildContext context)=>LinearProgressIndicator(
     value:((DateTime.now().millisecondsSinceEpoch-widget.start)/math.max(1,widget.stop-widget.start)).clamp(0.0,1.0).toDouble(),
     minHeight:3,backgroundColor:Colors.white24,color:const Color(0xFF90CAF9));
-}
-class _LiveProgrammeLabel extends StatelessWidget {
-  const _LiveProgrammeLabel({required this.text,required this.focused,required this.scale});
-  final String text; final bool focused; final double scale;
-  @override Widget build(BuildContext context){
-    final style=TextStyle(color:Colors.white,fontSize:12*scale,height:1.1);
-    return LayoutBuilder(builder:(context,c){
-      final tp=TextPainter(text:TextSpan(text:text,style:style),textDirection:Directionality.of(context),maxLines:1)..layout();
-      final width=tp.width;tp.dispose();
-      if(!focused||width<=c.maxWidth)return Text(text,maxLines:1,overflow:TextOverflow.ellipsis,style:style);
-      final distance=width-c.maxWidth;
-      return ClipRect(child:TweenAnimationBuilder<double>(key:ValueKey(text),tween:Tween(begin:0,end:distance),duration:Duration(milliseconds:1200+(distance*35).round()),curve:Curves.easeInOut,
-        builder:(_,offset,child)=>OverflowBox(alignment:Alignment.centerLeft,minWidth:width,maxWidth:width,child:Transform.translate(offset:Offset(-offset,0),child:child)),
-        child:Text(text,maxLines:1,softWrap:false,style:style)));
-    });
-  }
 }
