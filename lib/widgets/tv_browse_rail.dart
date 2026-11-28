@@ -756,6 +756,7 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
 
   @override
   void dispose() {
+    _liveProgressClock.dispose();
     _selectLongPress.dispose();
     _focusNode.removeListener(_handleFocusChange);
     _focusNode.dispose();
@@ -1982,6 +1983,8 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
     );
   }
 
+  final _liveProgressClock = _LiveProgressClock();
+
   Widget _buildHubCard(
     BuildContext context, {
     required MediaHub hub,
@@ -1996,11 +1999,12 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
     final artworkDim = _artworkDimForHub(context, hubIndex);
     if (hub.id == 'discover.iptv') {
       final logo = item.thumbPath ?? '';
+      final decodeWidth=(metrics.posterWidth * MediaQuery.devicePixelRatioOf(context)).round().clamp(128,512).toInt();
       return SizedBox(width: metrics.cardWidth, height: metrics.containerHeight,
         child: Column(children: [
           SizedBox(width:metrics.posterWidth,height:metrics.posterHeight,child:ClipRRect(borderRadius:BorderRadius.circular(8),child:Stack(fit:StackFit.expand,children:[
-            Container(padding:const EdgeInsets.all(10),color:const Color(0xFF242A36),child:logo.startsWith('http')?Image.network(logo,fit:BoxFit.contain,errorBuilder:(_,__,___)=>const Icon(Icons.tv,color:Colors.white70)):const Icon(Icons.tv,color:Colors.white70)),
-            if(item.durationMs!=null&&item.viewOffsetMs!=null) Positioned(bottom:0,left:0,right:0,child:_LiveProgrammeProgress(start:item.durationMs!,stop:item.viewOffsetMs!)),
+            Container(padding:const EdgeInsets.all(10),color:const Color(0xFF242A36),child:logo.startsWith('http')?Image.network(logo,cacheWidth:decodeWidth,fit:BoxFit.contain,errorBuilder:(_,__,___)=>const Icon(Icons.tv,color:Colors.white70)):const Icon(Icons.tv,color:Colors.white70)),
+            if(item.durationMs!=null&&item.viewOffsetMs!=null) Positioned(bottom:0,left:0,right:0,child:_LiveProgrammeProgress(clock:_liveProgressClock,start:item.durationMs!,stop:item.viewOffsetMs!)),
           ]))),
           SizedBox(height:3*scale),
           Expanded(child:Text(item.tagline??item.title??'',maxLines:1,overflow:TextOverflow.ellipsis,style:TextStyle(color:Colors.white,fontSize:12*scale,height:1.1))),
@@ -2517,16 +2521,45 @@ class _HubArtworkDim extends Animation<double> {
   }
 }
 
-class _LiveProgrammeProgress extends StatefulWidget {
-  const _LiveProgrammeProgress({required this.start,required this.stop});
-  final int start,stop;
-  @override State<_LiveProgrammeProgress> createState()=>_LiveProgrammeProgressState();
-}
-class _LiveProgrammeProgressState extends State<_LiveProgrammeProgress> {
+// One clock for the IPTV rail, idle when no progress bars are mounted.
+class _LiveProgressClock extends ChangeNotifier {
   Timer? _timer;
-  @override void initState(){super.initState();_timer=Timer.periodic(const Duration(seconds:30),(_){if(mounted)setState((){});});}
+  int _subscribers=0;
+  int now=DateTime.now().millisecondsSinceEpoch;
+  @override void addListener(VoidCallback listener) {
+    super.addListener(listener);
+    if (_subscribers++==0) {
+      now=DateTime.now().millisecondsSinceEpoch;
+      _timer=Timer.periodic(const Duration(seconds:30),(_){
+        now=DateTime.now().millisecondsSinceEpoch;
+        notifyListeners();
+      });
+    }
+  }
+  @override void removeListener(VoidCallback listener) {
+    super.removeListener(listener);
+    if (_subscribers>0 && --_subscribers==0) {_timer?.cancel();_timer=null;}
+  }
   @override void dispose(){_timer?.cancel();super.dispose();}
-  @override Widget build(BuildContext context)=>LinearProgressIndicator(
-    value:((DateTime.now().millisecondsSinceEpoch-widget.start)/math.max(1,widget.stop-widget.start)).clamp(0.0,1.0).toDouble(),
-    minHeight:3,backgroundColor:Colors.white24,color:const Color(0xFF90CAF9));
+}
+
+class _LiveProgrammeProgress extends StatelessWidget {
+  const _LiveProgrammeProgress({required this.clock,required this.start,required this.stop});
+  final _LiveProgressClock clock;
+  final int start,stop;
+  @override Widget build(BuildContext context)=>RepaintBoundary(
+    child:SizedBox(height:3,child:CustomPaint(painter:_LiveProgrammeProgressPainter(clock,start,stop))),
+  );
+}
+
+class _LiveProgrammeProgressPainter extends CustomPainter {
+  _LiveProgrammeProgressPainter(this.clock,this.start,this.stop):super(repaint:clock);
+  final _LiveProgressClock clock;
+  final int start,stop;
+  @override void paint(Canvas canvas,Size size) {
+    final progress=((clock.now-start)/math.max(1,stop-start)).clamp(0.0,1.0).toDouble();
+    canvas.drawRect(Offset.zero&size,Paint()..color=Colors.white24);
+    canvas.drawRect(Rect.fromLTWH(0,0,size.width*progress,size.height),Paint()..color=const Color(0xFF90CAF9));
+  }
+  @override bool shouldRepaint(covariant _LiveProgrammeProgressPainter oldDelegate)=>oldDelegate.clock!=clock||oldDelegate.start!=start||oldDelegate.stop!=stop;
 }
