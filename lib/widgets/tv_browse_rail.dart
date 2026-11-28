@@ -212,7 +212,7 @@ class TvBrowseRailLayout {
             (compactDetailRail && useWideLayout ? 3.5 : 0.0);
     // In the compact episode rail, reserve less unused space below
     // the caption so the artwork can grow within the same rail height.
-    final labelHeight = fullCardLayout || hub.id == 'discover.iptv' ? 0.0 : ((isPersonHub ? 52 : 36) * scale);
+    final labelHeight = hub.id == 'discover.iptv' ? 24.0 * scale : fullCardLayout ? 0.0 : ((isPersonHub ? 52 : 36) * scale);
     final containerHeight = (posterHeight + labelHeight).ceilToDouble();
     final height = containerHeight + focusExtra + ((compactDetailRail ? 2 : 22) * scale);
 
@@ -1998,10 +1998,13 @@ class TvBrowseRailState extends State<TvBrowseRail> with TickerProviderStateMixi
       final logo = item.thumbPath ?? '';
       return SizedBox(width: metrics.cardWidth, height: metrics.containerHeight,
         child: Column(children: [
-          Container(width: metrics.posterWidth, height: metrics.posterHeight,
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: const Color(0xFF242A36), borderRadius: BorderRadius.circular(8)),
-            child: logo.startsWith('http') ? Image.network(logo, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const Icon(Icons.tv, color: Colors.white70)) : const Icon(Icons.tv, color: Colors.white70)),
+          SizedBox(width:metrics.posterWidth,height:metrics.posterHeight,child:ClipRRect(borderRadius:BorderRadius.circular(8),child:Stack(fit:StackFit.expand,children:[
+            Container(padding:const EdgeInsets.all(10),color:const Color(0xFF242A36),child:logo.startsWith('http')?Image.network(logo,fit:BoxFit.contain,errorBuilder:(_,__,___)=>const Icon(Icons.tv,color:Colors.white70)):const Icon(Icons.tv,color:Colors.white70)),
+            if(item.durationMs!=null&&item.viewOffsetMs!=null) Positioned(bottom:0,left:0,right:0,child:_LiveProgrammeProgress(start:item.durationMs!,stop:item.viewOffsetMs!)),
+          ]))),
+          SizedBox(height:3*scale),
+          Expanded(child:ListenableSelector<bool>(listenable:_focusModel,selector:()=>_focusModel.railHasFocus&&_focusModel.position==(hubIndex,itemIndex),
+            builder:(_,focused,__)=>_LiveProgrammeLabel(text:item.tagline??item.title??'',focused:focused,scale:scale))),
         ]));
     }
     return metrics.isPersonHub
@@ -2512,5 +2515,35 @@ class _HubArtworkDim extends Animation<double> {
   void dispose() {
     _focusModel.removeListener(_handleFocusChange);
     _controller.dispose();
+  }
+}
+
+class _LiveProgrammeProgress extends StatefulWidget {
+  const _LiveProgrammeProgress({required this.start,required this.stop});
+  final int start,stop;
+  @override State<_LiveProgrammeProgress> createState()=>_LiveProgrammeProgressState();
+}
+class _LiveProgrammeProgressState extends State<_LiveProgrammeProgress> {
+  Timer? _timer;
+  @override void initState(){super.initState();_timer=Timer.periodic(const Duration(seconds:30),(_){if(mounted)setState((){});});}
+  @override void dispose(){_timer?.cancel();super.dispose();}
+  @override Widget build(BuildContext context)=>LinearProgressIndicator(
+    value:((DateTime.now().millisecondsSinceEpoch-widget.start)/math.max(1,widget.stop-widget.start)).clamp(0.0,1.0).toDouble(),
+    minHeight:3,backgroundColor:Colors.white24,color:const Color(0xFF90CAF9));
+}
+class _LiveProgrammeLabel extends StatelessWidget {
+  const _LiveProgrammeLabel({required this.text,required this.focused,required this.scale});
+  final String text; final bool focused; final double scale;
+  @override Widget build(BuildContext context){
+    final style=TextStyle(color:Colors.white,fontSize:12*scale,height:1.1);
+    return LayoutBuilder(builder:(context,c){
+      final tp=TextPainter(text:TextSpan(text:text,style:style),textDirection:Directionality.of(context),maxLines:1)..layout();
+      final width=tp.width;tp.dispose();
+      if(!focused||width<=c.maxWidth)return Text(text,maxLines:1,overflow:TextOverflow.ellipsis,style:style);
+      final distance=width-c.maxWidth;
+      return ClipRect(child:TweenAnimationBuilder<double>(key:ValueKey(text),tween:Tween(begin:0,end:distance),duration:Duration(milliseconds:1200+(distance*35).round()),curve:Curves.easeInOut,
+        builder:(_,offset,child)=>OverflowBox(alignment:Alignment.centerLeft,minWidth:width,maxWidth:width,child:Transform.translate(offset:Offset(-offset,0),child:child)),
+        child:Text(text,maxLines:1,softWrap:false,style:style)));
+    });
   }
 }
