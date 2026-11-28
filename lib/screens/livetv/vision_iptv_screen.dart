@@ -982,6 +982,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
   String? _loadedPlaylist;
   int _guideGeneration = 0;
   bool _restoring = false;
+  SharedPreferences? _settingsPrefs;
   Set<String> _favorites = {};
   List<String> _recent = [];
   Map<String, String> _epgNames = {}, _epgOverrides = {}, _epgLogos = {};
@@ -1037,6 +1038,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
       if (effective.isNotEmpty && effective != resume.epgSource) _resumeChannel = resume.withSource(resume.source, resume.sourceName, effective);
     }
     _restoring = false;
+    if (widget.settingsOnly) { if (mounted) setState(() => _settingsPrefs = prefs); return; }
     if (!widget.settingsOnly && _openWhenLoaded && !_guideOpen) { _scheduleEntry(); return; }
     if (!widget.settingsOnly) {
       if (_quickStart && _resumeChannel != null && _channels.isEmpty && !_guideOpen) {
@@ -1122,7 +1124,16 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
       final first = ordered.indexWhere((c) => !_hidden(c) || _favorites.contains(c.favoriteId));
       final index = fast ? 0 : ordered.indexWhere((c) => c.favoriteId == _lastChannel && (!_hidden(c) || _favorites.contains(c.favoriteId)));
       await Navigator.of(context).push(MaterialPageRoute<void>(
-        builder: (_) => _IptvPlayer(startFullscreen: _quickStart && index >= 0, quickStart: _quickStart, showLoadingIndicator: prefs.getBool('vision_iptv_show_loading_indicator') ?? false, onAutomaticRefresh:_automaticRefresh, hasManualRefresh:()=>_hasManualRefresh, queueManualList:_queueManualList, queueManualGuide:_queueManualGuide, epgUpdatedLabel:()=>_epgUpdatedLabel, prepareCatalog: resume != null ? () => _prepareResumeCatalog(resume,custom) : null, channel: index >= 0 ? ordered[index] : ordered[first < 0 ? 0 : first], channels: ordered,
+        builder: (_) => _configuredPlayer(prefs, custom, ordered, index, first, resume: resume)));
+    } finally {
+      _guideOpen = false;
+      if (mounted) unawaited(_restore());
+      if (mounted) { if (widget.onExit != null && _lists.any((l) => l['active'] == 'true')) { widget.onExit!(); } else { _entry.requestFocus(); } }
+    }
+  }
+
+  _IptvPlayer _configuredPlayer(SharedPreferences prefs, Map<String,dynamic> custom, List<_Channel> ordered, int index, int first, {_Channel? resume, bool settingsOnly = false}) =>
+      _IptvPlayer(settingsOnly: settingsOnly, startFullscreen: !settingsOnly && _quickStart && index >= 0, quickStart: _quickStart, showLoadingIndicator: prefs.getBool('vision_iptv_show_loading_indicator') ?? false, onAutomaticRefresh:_automaticRefresh, hasManualRefresh:()=>_hasManualRefresh, queueManualList:_queueManualList, queueManualGuide:_queueManualGuide, epgUpdatedLabel:()=>_epgUpdatedLabel, prepareCatalog: !settingsOnly && resume != null ? () => _prepareResumeCatalog(resume,custom) : null, channel: settingsOnly || ordered.isEmpty ? null : index >= 0 ? ordered[index] : ordered[first < 0 ? 0 : first], channels: ordered,
           guide: _guide, guideSource: _guideNotifier, allChannels: ordered,
           favoriteOrder: () => _favorites.toList(), onFavoriteOrder: _reorderFavorites, onReloadLists: _reloadListsInPlayer,
           listStatuses: _listStatuses, listGroups: _listGroups, isHidden: _hidden, listError: () => _error,
@@ -1132,13 +1143,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
           onRefreshGuide: () => _loadGuide(force: true), guideStatus: () => _epgStatus, onGuidePage: _requestGuidePage,
           bannerSeconds: _bannerSeconds, epgNames: (c) => _epgCatalogues[c.epgSource] ?? {}, rawEpgId: _rawEpgId, epgId: _resolvedEpgId,
           onAssignEpg: (c, id) async { if (id == null) { _epgOverrides.remove(c.favoriteId); } else { _epgOverrides[c.favoriteId] = id; } final prefs = await SharedPreferences.getInstance(); await prefs.setString('vision_iptv_epg_overrides', jsonEncode(_epgOverrides)); await _reloadIndexedGuide(); },
-          useExoPlayer: _useExoPlayer, tunneling: _tunneling, buffer: _buffer, forceHls: _forceHls)));
-    } finally {
-      _guideOpen = false;
-      if (mounted) unawaited(_restore());
-      if (mounted) { if (widget.onExit != null && _lists.any((l) => l['active'] == 'true')) { widget.onExit!(); } else { _entry.requestFocus(); } }
-    }
-  }
+          useExoPlayer: _useExoPlayer, tunneling: _tunneling, buffer: _buffer, forceHls: _forceHls );
 
   List<_Channel> _orderedChannels(Map<String,dynamic> custom) {
       final ordered = List<_Channel>.of(_channels);
@@ -1622,21 +1627,11 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
 
   @override
   Widget build(BuildContext context) {
-    if (widget.settingsOnly) return Scaffold(
-      appBar: AppBar(title: const Text('Ajustes IPTV')),
-      body: SafeArea(child: ListView(children: [
-        ListTile(autofocus: true, title: const Text('Lista M3U'), subtitle: Text(_url.text.isEmpty ? 'Sin configurar' : 'Configurada'), onTap: _configure),
-        ListTile(title: const Text('URL EPG'), subtitle: Text(_epgUrl.isEmpty ? 'Automática desde M3U' : 'Configuración manual'), onTap: _configureEpg),
-        ListTile(title: const Text('Reproductor IPTV'), subtitle: Text(_useExoPlayer ? 'ExoPlayer' : 'MPV'), onTap: _selectPlayer),
-        if (!_useExoPlayer) ListTile(title: const Text('Búfer'), subtitle: Text(_bufferLabel), onTap: _selectBuffer),
-        if (_useExoPlayer) ListTile(title: const Text('Formato'), subtitle: Text(_forceHls ? 'HLS' : 'Auto'), onTap: _toggleFormat),
-        if (_useExoPlayer) ListTile(title: const Text('Tunneling'), subtitle: Text(_tunneling ? 'Sí' : 'No'), onTap: _toggleTunneling),
-        ListTile(title: const Text('Guía de uso del mando'), leading: const Icon(Icons.help_outline), onTap: () => _showIptvRemoteHelp(context)),
-        ListTile(title: const Text('Actualizar lista y guía'), subtitle: Text(_epgStatus), onTap: () async { await _load(); if (mounted) await _loadGuide(force: true); }),
-        if (_loading) const LinearProgressIndicator(),
-        if (_error != null) ListTile(title: Text(_error!)),
-      ])),
-    );
+    if (widget.settingsOnly) {
+      final prefs = _settingsPrefs;
+      if (prefs == null) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return _configuredPlayer(prefs, _readIptvMap(prefs.getString(_customKey)), <_Channel>[], -1, -1, settingsOnly: true);
+    }
     return Scaffold(body: SafeArea(child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
       if (_channels.isEmpty && !_restoring && !_openWhenLoaded && !_loading && _error != null) Text('TV en directo · IPTV', style: Theme.of(context).textTheme.headlineSmall),
       const SizedBox(height: 14),
@@ -1647,7 +1642,12 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
       else if (!_loading && !_restoring && !_openWhenLoaded)
         FilledButton(focusNode: _entry, onPressed: () async {
           await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const VisionIptvScreen(settingsOnly: true)));
-          if (mounted) notifyVisionIptvSettingsChanged();
+          if (mounted) {
+            final prefs = await SharedPreferences.getInstance();
+            if (!mounted) return;
+            _openWhenLoaded = _iptvLists(prefs).any((l) => l['active'] == 'true');
+            notifyVisionIptvSettingsChanged();
+          }
         }, child: const Text('Ajustes IPTV')),
       if (context.watch<MultiServerProvider>().hasLiveTv)
         TextButton(onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const Scaffold(body: LiveTvScreen()))), child: const Text('TV de Plex')),
@@ -1657,13 +1657,13 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
 }
 
 class _IptvPlayer extends StatefulWidget {
-  const _IptvPlayer({required this.startFullscreen, required this.quickStart, required this.showLoadingIndicator, required this.onAutomaticRefresh, required this.hasManualRefresh, required this.queueManualList, required this.queueManualGuide, required this.epgUpdatedLabel, this.prepareCatalog, required this.favoriteOrder, required this.onFavoriteOrder, required this.onReloadLists, required this.listStatuses, required this.listGroups, required this.isHidden, required this.listError, required this.onFullscreen, required this.bannerSeconds, required this.epgNames, required this.rawEpgId, required this.epgId, required this.onAssignEpg, required this.recent, required this.onTuned, required this.onRefreshGuide, required this.onGuidePage, required this.guideStatus, required this.channel, required this.channels, required this.guide, required this.guideSource, required this.allChannels, required this.onFavorite, required this.isFavorite, required this.useExoPlayer, required this.tunneling, required this.buffer, required this.forceHls, required this.custom, required this.customKey, required this.epgLogos, required this.logoSource, required this.useEpgNames, required this.passthrough, required this.afr});
+  const _IptvPlayer({this.settingsOnly = false, required this.startFullscreen, required this.quickStart, required this.showLoadingIndicator, required this.onAutomaticRefresh, required this.hasManualRefresh, required this.queueManualList, required this.queueManualGuide, required this.epgUpdatedLabel, this.prepareCatalog, required this.favoriteOrder, required this.onFavoriteOrder, required this.onReloadLists, required this.listStatuses, required this.listGroups, required this.isHidden, required this.listError, required this.onFullscreen, required this.bannerSeconds, required this.epgNames, required this.rawEpgId, required this.epgId, required this.onAssignEpg, required this.recent, required this.onTuned, required this.onRefreshGuide, required this.onGuidePage, required this.guideStatus, required this.channel, required this.channels, required this.guide, required this.guideSource, required this.allChannels, required this.onFavorite, required this.isFavorite, required this.useExoPlayer, required this.tunneling, required this.buffer, required this.forceHls, required this.custom, required this.customKey, required this.epgLogos, required this.logoSource, required this.useEpgNames, required this.passthrough, required this.afr});
   final Map<String, dynamic> custom;
   final String customKey, logoSource;
   final bool useEpgNames;
   final Map<String, String> Function() epgLogos;
   final bool passthrough, afr;
-  final bool startFullscreen, quickStart, showLoadingIndicator;
+  final bool settingsOnly, startFullscreen, quickStart, showLoadingIndicator;
   final Future<List<_Channel>> Function()? prepareCatalog;
   final Future<List<_Channel>?> Function(bool,bool,bool Function()) onAutomaticRefresh;
   final bool Function() hasManualRefresh;
@@ -1692,7 +1692,7 @@ class _IptvPlayer extends StatefulWidget {
   final String buffer;
   final bool tunneling;
   final bool useExoPlayer;
-  final _Channel channel;
+  final _Channel? channel;
   final List<_Channel> channels;
   final Map<String, List<_Programme>> guide;
   final ValueNotifier<Map<String, List<_Programme>>> guideSource;
@@ -2044,7 +2044,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   Future<void> _exitIptv() async {
     if (_exiting || !mounted) return;
     setState(() => _exiting = true);
-    await _close();
+    if (!widget.settingsOnly) await _close();
     if (mounted) Navigator.of(context).pop();
   }
   void _stepProgramme(int delta) {
@@ -2181,7 +2181,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
 
   Future<void> _openSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    if (!mounted || (!_menuOpen && !(_verticalGuide && _verticalColumn==-2)) || _exiting) return;
+    if (!mounted || (!widget.settingsOnly && !_menuOpen && !(_verticalGuide && _verticalColumn==-2)) || _exiting) return;
     setState(() {
       _settingsUrl = prefs.getString('vision_iptv_url') ?? '';
       _settingsEpg = _defaultEpgUrl(prefs);
@@ -2206,6 +2206,10 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   void _closeSettings() {
     if (_applyingLists) return;
     if (_settingsSection != null) { _leaveSettingsSection(); return; }
+    if (widget.settingsOnly) {
+      if (_listsDirty) { unawaited(_applyListChanges()); } else { unawaited(_exitIptv()); }
+      return;
+    }
     if (_listsDirty) { unawaited(_applyListChanges()); return; }
     setState(() { _settingsOpen = false; if (_settingsDirty) _menuStatus = 'Ajustes guardados'; });
     _playerFocus.requestFocus();
@@ -2216,6 +2220,14 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     _pendingAutoChannels = null;
     setState(() { _applyingLists = true; _menuStatus = 'Aplicando listas…'; });
     try {
+      if (widget.settingsOnly) {
+        final next = await widget.onReloadLists(Set.of(_refreshListIds));
+        if (!mounted || _exiting) return;
+        if (next == null) { setState(() => _menuStatus = widget.listError() ?? 'No se pudieron aplicar las listas'); return; }
+        setState(() { _listsDirty = false; _refreshListIds.clear(); _menuStatus = widget.listError() ?? 'Listas actualizadas'; });
+        if (!keepSettings) await _exitIptv();
+        return;
+      }
       final playing = _channel;
       final selected = widget.channels[_highlightIndex];
       final group = _selectedGroup;
@@ -2402,8 +2414,8 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
               node('groups').requestFocus();
             },icon:Icons.folder_open),
             if(original['active']=='true')field('refresh','Actualizar lista','En segundo plano',(){
-              widget.queueManualList(original['id']!);
-              update(()=>error='Actualización en segundo plano solicitada.');
+              if (widget.settingsOnly) { unawaited(_refreshListNow(original)); }
+              else { widget.queueManualList(original['id']!); update(()=>error='Actualización en segundo plano solicitada.'); }
             },icon:Icons.refresh),
             field('delete','Eliminar lista','',()async{
               final yes=await showDialog<bool>(context:ctx,builder:(confirm)=>AlertDialog(title:const Text('Eliminar lista IPTV'),content:Text('¿Eliminar ${original['name']??'esta lista'}?'),actions:[
@@ -2519,6 +2531,12 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     if (key == 'm3u' || key == 'epg') { await _editSettingsUrl(key == 'epg'); return; }
     if (key == 'refresh') {
       if (_listsDirty) { await _applyListChanges(keepSettings: true); if (!mounted || _listsDirty) return; }
+      if (widget.settingsOnly) {
+        await widget.onReloadLists(<String>{});
+        await widget.onRefreshGuide();
+        if (mounted) setState(() => _menuStatus = widget.guideStatus());
+        return;
+      }
       widget.queueManualGuide();
       setState(() => _menuStatus = 'Actualización EPG en segundo plano solicitada');
       return;
@@ -2628,6 +2646,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
         else if (v is List) { await prefs.setStringList(e.key, v.cast<String>()); }
       }
       await prefs.setString('vision_iptv_backup_path', backup.path);
+      visionDiscoverIptvChanged.value++;
       if (mounted) await _exitIptv();
     } catch (_) { if (mounted) setState(() => _menuStatus = 'No se pudo completar la copia o restauración'); }
     finally { _externalPicker = false; }
@@ -2640,6 +2659,38 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
       final p = _settingsScroll.position;
       _settingsScroll.jumpTo((_settingsIndex * 44.0 - p.viewportDimension / 2 + 22).clamp(0.0, p.maxScrollExtent).toDouble());
     });
+  }
+
+  Widget _standaloneSettings() {
+    return PopScope(
+      canPop: _exiting,
+      onPopInvokedWithResult: (didPop, _) { if (!didPop && !_exiting && !_dialogBusy) _closeSettings(); },
+      child: Scaffold(backgroundColor: const Color(0xFF10151D), body: SafeArea(
+        child: Focus(focusNode: _playerFocus, autofocus: true, onKeyEvent: (_, event) {
+          if (_dialogBusy) return KeyEventResult.ignored;
+          if (_applyingLists || !_settingsOpen) return KeyEventResult.handled;
+          final key = event.logicalKey;
+          if (key == LogicalKeyboardKey.goBack || key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.browserBack) {
+            if (event is KeyUpEvent) _closeSettings();
+            return KeyEventResult.handled;
+          }
+          if (key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter) {
+            if (event is KeyDownEvent) _settingsSelectDown = true;
+            if (event is KeyUpEvent && _settingsSelectDown) { _settingsSelectDown = false; unawaited(_withDialog(_activateSetting)); }
+            return KeyEventResult.handled;
+          }
+          if (event is KeyDownEvent || event is KeyRepeatEvent) {
+            if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown) {
+              _moveSetting(key == LogicalKeyboardKey.arrowDown ? 1 : -1);
+              return KeyEventResult.handled;
+            }
+            if (key == LogicalKeyboardKey.arrowLeft) { _closeSettings(); return KeyEventResult.handled; }
+          }
+          return KeyEventResult.ignored;
+        }, child: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 820),
+          child: Padding(padding: const EdgeInsets.all(20), child: _settingsOpen ? _iptvSettingsPanel() : const Center(child: CircularProgressIndicator()))))),
+      )),
+    );
   }
 
   Widget _iptvSettingsPanel() {
@@ -2661,7 +2712,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
             child: Row(children: [
               Icon(icons[key], size: 19, color: fg),
               const SizedBox(width: 10),
-              Expanded(child: Text(key == 'back' && _settingsSection != null ? 'Volver a ajustes IPTV' : labels[key]!, maxLines:1,overflow:TextOverflow.ellipsis, style: TextStyle(color: fg, fontSize: 14))),
+              Expanded(child: Text(key == 'back' ? (_settingsSection != null ? 'Volver a ajustes IPTV' : widget.settingsOnly ? 'Salir de ajustes' : labels[key]!) : labels[key]!, maxLines:1,overflow:TextOverflow.ellipsis, style: TextStyle(color: fg, fontSize: 14))),
               Text(values[key]!, style: TextStyle(color: focused ? Colors.black87 : Colors.white70, fontSize: 13)),
               const SizedBox(width: 8),
               Icon(Icons.chevron_right, color: fg, size: 18),
@@ -3078,11 +3129,17 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    if (widget.settingsOnly) {
+      _channelIndex = 0; _highlightIndex = 0;
+      _preview = false; _showName = false;
+      unawaited(_openSettings());
+      return;
+    }
     FocusManager.instance.addEarlyKeyEventHandler(_iptvEarlyKey);
     _consultationIdle = Timer.periodic(const Duration(seconds: 1), (_) => _checkConsultationIdle());
     _rebuildChannelIndices();
     if (_preparingCatalog) _catalogFallback = Timer(const Duration(seconds: 4), _beginCatalog);
-    _channelIndex = widget.channels.indexOf(widget.channel);
+    _channelIndex = widget.channels.indexOf(widget.channel!);
     if (_channelIndex < 0) _channelIndex = 0;
     _highlightIndex = _channelIndex;
     _preview = !widget.startFullscreen;
@@ -3318,10 +3375,12 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
 
   @override
   void dispose() {
-    FocusManager.instance.removeEarlyKeyEventHandler(_iptvEarlyKey);
+    if (!widget.settingsOnly) {
+      FocusManager.instance.removeEarlyKeyEventHandler(_iptvEarlyKey);
+      widget.guideSource.removeListener(_guideChanged);
+      WidgetsBinding.instance.removeObserver(this);
+    }
     _consultationIdle?.cancel();
-    widget.guideSource.removeListener(_guideChanged);
-    WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
     _channelScroll.dispose();
     _leftHold?.cancel(); _backHold?.cancel(); _favoriteHold?.cancel(); _statusTimer?.cancel();
@@ -3331,7 +3390,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     _settingsScroll.dispose();
     _previewScroll.dispose();
     _playerFocus.dispose();
-    unawaited(_close());
+    if (!widget.settingsOnly) unawaited(_close());
     super.dispose();
   }
 
@@ -3874,6 +3933,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.settingsOnly) return _standaloneSettings();
     final verticalVideo = _verticalVideoRect(MediaQuery.sizeOf(context));
     return PopScope(
     canPop: _exiting,
