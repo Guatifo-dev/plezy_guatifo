@@ -1028,7 +1028,9 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
       _afr = prefs.getBool('vision_iptv_afr') ?? false;
     });
     final resume = _resumeChannel;
-    if (resume != null) {
+    if (resume != null && !_lists.any((l) => l['id'] == resume.source && l['active'] == 'true')) {
+      await _clearResume(prefs);
+    } else if (resume != null) {
       final list = _lists.where((l) => l['id'] == resume.source).firstOrNull;
       final individual = list?['epg'] ?? '';
       final effective = individual.isNotEmpty ? individual : _epgUrl;
@@ -1066,12 +1068,20 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
     _catalogTask = task;
     return task.whenComplete(() { if (identical(_catalogTask,task)) _catalogTask = null; });
   }
+  Future<void> _clearResume(SharedPreferences prefs) async {
+    _lastChannel = null; _resumeChannel = null; _resumeInvalid = true;
+    await prefs.remove('vision_iptv_resume_channel');
+    await prefs.remove('vision_iptv_last_fullscreen');
+  }
+  bool _activeChannelSource(SharedPreferences prefs, _Channel c) =>
+      _iptvLists(prefs).any((l) => l['id'] == c.source && l['active'] == 'true');
   Future<void> _rememberChannel(_Channel c) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!_activeChannelSource(prefs, c)) return;
     if (_resumeInvalid && c.favoriteId == _resumeChannel?.favoriteId) return;
     _resumeInvalid = false;
     _lastChannel = c.favoriteId;
     _resumeChannel = c;
-    final prefs = await SharedPreferences.getInstance();
     await prefs.setString('vision_iptv_last_fullscreen',c.favoriteId);
     await prefs.setString('vision_iptv_resume_channel',jsonEncode(c.toResumeJson()));
   }
@@ -1118,7 +1128,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
           listStatuses: _listStatuses, listGroups: _listGroups, isHidden: _hidden, listError: () => _error,
           custom: custom, customKey: _customKey, epgLogos: () => _epgLogos, logoSource: prefs.getString('vision_iptv_logo_source') ?? 'epg', useEpgNames: prefs.getBool('vision_iptv_use_epg_names') ?? false, passthrough: _passthrough, afr: _afr,
           onFavorite: _toggleFavorite, isFavorite: (c) => _favorites.contains(c.favoriteId), onFullscreen: _rememberChannel,
-          recent: () => List.unmodifiable(_recent), onTuned: (c) async { await _rememberChannel(c); _recent = [c.favoriteId, ..._recent.where((id) => id != c.favoriteId)].take(30).toList(); final prefs = await SharedPreferences.getInstance(); await prefs.setStringList('vision_iptv_recent', _recent); visionDiscoverIptvChanged.value++; },
+          recent: () => List.unmodifiable(_recent), onTuned: (c) async { await _rememberChannel(c); final prefs = await SharedPreferences.getInstance(); if (!_activeChannelSource(prefs, c)) return; _recent = [c.favoriteId, ..._recent.where((id) => id != c.favoriteId)].take(30).toList(); await prefs.setStringList('vision_iptv_recent', _recent); visionDiscoverIptvChanged.value++; },
           onRefreshGuide: () => _loadGuide(force: true), guideStatus: () => _epgStatus, onGuidePage: _requestGuidePage,
           bannerSeconds: _bannerSeconds, epgNames: (c) => _epgCatalogues[c.epgSource] ?? {}, rawEpgId: _rawEpgId, epgId: _resolvedEpgId,
           onAssignEpg: (c, id) async { if (id == null) { _epgOverrides.remove(c.favoriteId); } else { _epgOverrides[c.favoriteId] = id; } final prefs = await SharedPreferences.getInstance(); await prefs.setString('vision_iptv_epg_overrides', jsonEncode(_epgOverrides)); await _reloadIndexedGuide(); },
@@ -1126,7 +1136,7 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
     } finally {
       _guideOpen = false;
       if (mounted) unawaited(_restore());
-      if (mounted) { if (widget.onExit != null) { widget.onExit!(); } else { _entry.requestFocus(); } }
+      if (mounted) { if (widget.onExit != null && _lists.any((l) => l['active'] == 'true')) { widget.onExit!(); } else { _entry.requestFocus(); } }
     }
   }
 
@@ -1148,8 +1158,23 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
   }
 
   Future<List<_Channel>?> _reloadListsInPlayer(Set<String> refreshIds) async {
-    if (_loading || _autoRefreshing || !mounted) return null;
+    if (!mounted) return null;
     final prefs = await SharedPreferences.getInstance();
+    final configured = _iptvLists(prefs);
+    if (!configured.any((l) => l['active'] == 'true')) {
+      _lists = configured;
+      _url.text = prefs.getString('vision_iptv_url') ?? '';
+      await _clearResume(prefs);
+      await prefs.remove('vision_iptv_recent');
+      if (!mounted) return null;
+      setState(() { _channels = []; _recent = []; _guide = {}; _error = 'Activa una lista IPTV en Ajustes.'; });
+      _loadedPlaylist = _listSignature; _hiddenBySource = {}; _guidePaths.clear(); _guideGeneration++;
+      _guideNotifier.value = {};
+      _manualRefreshQueue.clear(); _manualGuideQueued = false;
+      visionDiscoverIptvChanged.value++;
+      return <_Channel>[];
+    }
+    if (_loading || _autoRefreshing) return null;
     _url.text = prefs.getString('vision_iptv_url') ?? '';
     _lists = _iptvLists(prefs);
     final previousEpg = _epgUrl;
@@ -1450,7 +1475,13 @@ class _VisionIptvScreenState extends State<VisionIptvScreen> implements Focusabl
     final signature = _listSignature;
     final hidden = {for (final list in active) list['id']!: _hiddenGroups(list)};
     if (active.isEmpty) {
-      setState(() { _channels = []; _guide = {}; _error = 'Activa una lista IPTV en Ajustes.'; });
+      final prefs = await SharedPreferences.getInstance();
+      await _clearResume(prefs);
+      await prefs.remove('vision_iptv_recent');
+      if (!mounted) return;
+      setState(() { _channels = []; _recent = []; _guide = {}; _error = 'Activa una lista IPTV en Ajustes.'; });
+      _manualRefreshQueue.clear(); _manualGuideQueued = false;
+      visionDiscoverIptvChanged.value++;
       _loadedPlaylist = signature; _hiddenBySource = {}; _guidePaths.clear(); _guideGeneration++;
       _guideNotifier.value = {};
       return;
@@ -2191,7 +2222,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
       final next = await widget.onReloadLists(Set.of(_refreshListIds));
       if (!mounted || _exiting) return;
       if (next == null) { setState(() => _menuStatus = 'No se pudieron aplicar las listas'); return; }
-      if (next.isEmpty) { await _exitIptv(); return; }
+      if (next.isEmpty) { _listsDirty = false; _refreshListIds.clear(); await _exitIptv(); return; }
       final playingIndex = next.indexWhere((c) => c.favoriteId == playing.favoriteId && c.url == playing.url && (!widget.isHidden(c) || widget.isFavorite(c)));
       final firstVisible = next.indexWhere((c) => !widget.isHidden(c) || widget.isFavorite(c));
       final retainedIndex = next.indexWhere((c) => c.favoriteId == playing.favoriteId && c.url == playing.url);
@@ -2438,10 +2469,17 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   }
 
   Future<void> _saveLists(SharedPreferences prefs, List<Map<String,String>> lists) async {
-    await prefs.setString('vision_iptv_lists', jsonEncode(lists));
     final active = lists.where((l) => l['active'] == 'true').toList();
     final m3u = active.where((l) => !_isXtream(l)).toList();
+    // Clear the legacy URL first so the removed last list cannot be resurrected.
     await prefs.setString('vision_iptv_url', m3u.isEmpty ? '' : m3u.first['url'] ?? '');
+    await prefs.setString('vision_iptv_lists', jsonEncode(lists));
+    if (active.isEmpty) {
+      await prefs.remove('vision_iptv_resume_channel');
+      await prefs.remove('vision_iptv_last_fullscreen');
+      await prefs.remove('vision_iptv_recent');
+      visionDiscoverIptvChanged.value++;
+    }
     if (mounted) setState(() { _settingsUrl = active.isEmpty ? '' : active.first['url'] ?? ''; _listsDirty = true; _menuStatus = '${active.length} listas activas'; });
   }
 
@@ -2939,8 +2977,9 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
   }
 
   bool get _programmeHasFocus => _verticalGuide ? _verticalColumn==1 && _verticalProgramme!=null : _preview && !_groupFocus && _inProgrammes && _selectedProgramme!=null;
-  Future<void> _programmeContext() async {
-    if (!_programmeHasFocus) return;
+  Future<void> _programmeContext({bool direct = false}) async {
+    final synopsis = direct && _verticalGuide && _verticalColumn == 2;
+    if (!_programmeHasFocus && !synopsis) return;
     final vertical = _verticalGuide;
     final c = widget.channels[vertical?_verticalSelected:_highlightIndex];
     final p = vertical?_verticalProgramme:_selectedProgramme;
@@ -2948,7 +2987,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     final entries = List<_Programme>.of(_guide[widget.epgId(c)] ?? const <_Programme>[]);
     final initial=entries.indexWhere((e)=>e.start==p.start&&e.stop==p.stop);
     if(initial<0)return;
-    final action=await _consultationDialog<String>(barrierColor:Colors.black26,builder:(ctx)=>AlertDialog(
+    final action=direct ? 'info' : await _consultationDialog<String>(barrierColor:Colors.black26,builder:(ctx)=>AlertDialog(
       backgroundColor:const Color(0xFF1B202A),title:EpgColorText(p.title,maxLines:2,overflow:TextOverflow.ellipsis),
       content:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.stretch,children:[
         Text('${_name(c)} · ${_clock(p.start)} – ${_clock(p.stop)}',style:const TextStyle(color:Colors.white70,fontSize:13)),
@@ -2966,7 +3005,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     if(index==null)return;
     setState((){
       if(vertical){
-        _verticalChannelIndex=index;_verticalColumn=1;_verticalProgrammeStart=target.start;_syncVerticalProgramme();
+        _verticalChannelIndex=index;_verticalColumn=synopsis?2:1;_verticalProgrammeStart=target.start;_syncVerticalProgramme();
       }else{
         _highlightIndex=index;_groupFocus=false;_inProgrammes=true;
         final now=DateTime.now(),base=DateTime(now.year,now.month,now.day,now.hour,now.minute<30?0:30);
@@ -3047,6 +3086,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     if (_channelIndex < 0) _channelIndex = 0;
     _highlightIndex = _channelIndex;
     _preview = !widget.startFullscreen;
+    _showName = false;
     _tuned = widget.startFullscreen;
     _switching = _tuned;
     widget.guideSource.addListener(_guideChanged);
@@ -3355,7 +3395,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     setState(() {
       _verticalGuide = true; _showName = false; _showChannels = false;
       _verticalColumn = 0; _verticalChannelIndex = _channelIndex;
-      _verticalGroupKey = _selectedGroup == 'Favoritos' && widget.isFavorite(_channel) ? 'Favoritos' : _groupKey(_channel.source,_channel.group);
+      _verticalGroupKey = _selectedGroup == 'Favoritos' && !_recentOnly && widget.isFavorite(_channel) ? 'Favoritos' : _groupKey(_channel.source,_channel.group);
       _verticalProgrammeStart = null; _syncVerticalProgramme(reset:true);
     });
     if (_preparingCatalog) _beginCatalog();
@@ -3365,7 +3405,14 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     if (!_verticalGuide) return;
     _pendingChannelWrap = null; _fastScroll = false;
     final showTune = _pendingTuneBanner; _pendingTuneBanner = false;
-    setState(() { _verticalGuide = false; _showName = showTune; _bannerProgramme = null; _verticalChannelIndex = null; _verticalGroupKey = null; });
+    setState(() {
+      if (_verticalGroupKey == 'Favoritos' && widget.isFavorite(_channel)) {
+        _recentOnly = false; _groupIndex = _groups.indexOf('Favoritos');
+      } else if (_selectedGroup == 'Favoritos' && (!widget.isFavorite(_channel) || _verticalGroupKey != 'Favoritos')) {
+        _recentOnly = false; _groupIndex = 0;
+      }
+      _verticalGuide = false; _showName = showTune; _bannerProgramme = null; _verticalChannelIndex = null; _verticalGroupKey = null;
+    });
     if (showTune) _hideLater();
     _scheduleResize(); _scheduleGuidePage(); _playerFocus.requestFocus();
   }
@@ -3400,6 +3447,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
     if (_preparingCatalog || _switching) return;
     if (_verticalColumn == -2) { await _activateVerticalMenu(); return; }
     if (_verticalColumn == -1) { _chooseVerticalGroup(); return; }
+    if (_verticalColumn == 2) { if (_verticalProgramme != null) await _withDialog(() => _programmeContext(direct: true)); return; }
     if (_verticalColumn == 0 || _verticalColumn == 1) {
       if (_verticalRows.isEmpty) return;
       if (_verticalColumn==1) { final p=_verticalProgramme; if(p==null)return; if(!_isOnAir(p)){await _withDialog(_programmeContext);return;} }
@@ -3846,6 +3894,11 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
         if (_verticalGuide && !_settingsOpen) {
           if (key == LogicalKeyboardKey.contextMenu) { if (event is KeyDownEvent) _contextSelectDown = (_verticalColumn==0 && _verticalRows.isNotEmpty)||_programmeHasFocus; if (event is KeyUpEvent && _contextSelectDown) { _contextSelectDown=false; unawaited(_withDialog(_programmeHasFocus?_programmeContext:_channelContext)); } return KeyEventResult.handled; }
           if ((_verticalColumn==0||_verticalColumn==1) && (key==LogicalKeyboardKey.select||key==LogicalKeyboardKey.enter)) return _guideOk(event,vertical:true);
+          if (_verticalColumn == 2 && (key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter)) {
+            if (event is KeyDownEvent) _guideSelectDown = true;
+            if (event is KeyUpEvent && _guideSelectDown) { _guideSelectDown = false; unawaited(_confirmVertical()); }
+            return KeyEventResult.handled;
+          }
           if (_verticalColumn == 0 && (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown)) { _guideChannelArrow(event,vertical:true); return KeyEventResult.handled; }
           if (event is KeyUpEvent) { if (_fastScroll) setState(() => _fastScroll = false); return KeyEventResult.handled; }
           if (event is KeyDownEvent || event is KeyRepeatEvent) {
