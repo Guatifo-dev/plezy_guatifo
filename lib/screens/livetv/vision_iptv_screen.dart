@@ -4247,7 +4247,7 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
         if (key == LogicalKeyboardKey.arrowLeft) { if (_showName) { _stepBanner(-1); } else { _openVerticalGuide(); } return KeyEventResult.handled; }
         if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown) {
           final delta = key == LogicalKeyboardKey.arrowUp ? 1 : -1;
-          if(_showName&&!_showChannels){_stepBannerChannel(-delta);return KeyEventResult.handled;}
+          if(_showName&&!_showChannels){_stepBannerChannel(delta);return KeyEventResult.handled;}
           if (_showChannels) {
             final rows = _popupIndices;
             if (rows.isNotEmpty) setState(() => _highlightIndex = rows[(rows.indexOf(_highlightIndex) - delta).clamp(0, rows.length - 1).toInt()]);
