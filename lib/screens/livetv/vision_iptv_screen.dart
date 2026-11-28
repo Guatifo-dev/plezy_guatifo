@@ -4259,6 +4259,11 @@ class _IptvPlayerState extends State<_IptvPlayer> with WidgetsBindingObserver {
           return KeyEventResult.handled;
         }
         if (key == LogicalKeyboardKey.select || key == LogicalKeyboardKey.enter) {
+          if (_showName && !_showChannels) {
+            final target = _bannerIndex;
+            if (target != _channelIndex) unawaited(_switchChannel(target));
+            return KeyEventResult.handled;
+          }
           setState(() { _technicalVisible = false; if (_bannerSeconds == 0 && _showName && _bannerProgramme == null) { _showName = false; } else { _showName = true; } _bannerProgramme = null; _bannerChannelId=null; });
           _hideLater();
           return KeyEventResult.handled;
